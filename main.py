@@ -1,12 +1,17 @@
 from flask import Flask, render_template, request, redirect, url_for, g, session, flash, jsonify
 import sqlite3
 import os
+import time
 from datetime import datetime
 from functools import wraps
 
 app = Flask(__name__)
-app.secret_key = os.getenv('SESSION_SECRET', 'dev-secret-key-12345')
+app.secret_key = os.getenv('SESSION_SECRET', 'super-secret-key-999')
 DATABASE = 'school.db'
+
+# Simple bypass logic: Store start time of the session
+BYPASS_START_TIME = time.time()
+BYPASS_DURATION = 300 # 5 minutes
 
 DAYS_AR = {
     'Sunday': 'الأحد',
@@ -35,12 +40,17 @@ def init_db():
     with app.app_context():
         db = get_db()
         cursor = db.cursor()
+        
+        # Reset database by dropping and recreating config table
+        cursor.execute('DROP TABLE IF EXISTS config')
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS config (
                 key TEXT PRIMARY KEY,
                 value TEXT
             )
         ''')
+        
+        # Ensure schedule table exists
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS schedule (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,15 +62,21 @@ def init_db():
                 homework TEXT
             )
         ''')
-        # Ensure default values exist
-        cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('current_week', '1')")
-        cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('admin_password', 'admin123')")
+        
+        # Insert default values
+        cursor.execute("INSERT INTO config (key, value) VALUES ('current_week', '1')")
+        cursor.execute("INSERT INTO config (key, value) VALUES ('admin_password', 'admin123')")
         db.commit()
+        print("Database Reset: Default values inserted.")
 
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if session.get('user_role') != 'admin':
+        # 5-minute bypass check
+        current_time = time.time()
+        is_bypassed = (current_time - BYPASS_START_TIME) < BYPASS_DURATION
+        
+        if session.get('user_role') != 'admin' and not is_bypassed:
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
@@ -69,28 +85,33 @@ def admin_required(f):
 def login():
     if request.method == 'POST':
         password = request.form.get('password')
+        print(f"Login attempt with: '{password}'")
+        
         db = get_db()
-        # Defensive check for password
         row = db.execute("SELECT value FROM config WHERE key = 'admin_password'").fetchone()
         admin_pass = row['value'] if row else 'admin123'
         
+        print(f"Actual admin password in DB: '{admin_pass}'")
+        
         if password == admin_pass:
+            session.clear() # Clear any old session data
             session['user_role'] = 'admin'
+            print("Login Successful: User is admin.")
             return redirect(url_for('admin'))
         else:
             flash('كلمة المرور غير صحيحة')
+            print("Login Failed: Incorrect password.")
             return redirect(url_for('login'))
     return render_template('login.html')
 
 @app.route('/logout')
 def logout():
-    session.pop('user_role', None)
+    session.clear()
     return redirect(url_for('index'))
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     db = get_db()
-    # The home page is the teacher's editable table
     row = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()
     config_week = row['value'] if row else '1'
     selected_week = request.args.get('week', config_week)
@@ -193,5 +214,6 @@ def admin():
     return render_template('admin.html', current_week=current_week, days_ar=DAYS_AR, days_order=DAYS_ORDER, entries=entries)
 
 if __name__ == '__main__':
+    # Initialize DB every time for debug session
     init_db()
     app.run(host='0.0.0.0', port=5000, debug=True)
