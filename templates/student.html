@@ -9,9 +9,16 @@
     <style>
         body { font-family: 'Cairo', sans-serif; margin: 0; padding: 20px; background: #f8fafc; color: #1e293b; }
         .container { max-width: 1200px; margin: 0 auto; }
-        .header { background: white; padding: 30px; border-radius: 16px; text-align: center; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); position: relative; border-bottom: 5px solid #3b82f6; display: flex; flex-direction: column; align-items: center; }
-        .school-info { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; margin-bottom: 15px; width: 100%; }
-        .logo { width: 180px; height: auto; margin-bottom: 15px; }
+        .header { background: white; padding: 25px; border-radius: 16px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); border-bottom: 5px solid #3b82f6; display: flex; align-items: center; justify-content: space-between; }
+        .school-info { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 20px; }
+        .logo { width: 150px; height: auto; flex-shrink: 0; }
+        .header-text { text-align: center; flex-grow: 1; margin-left: -150px; }
+        
+        @media (max-width: 768px) {
+            .header { flex-direction: column; padding: 20px; gap: 15px; }
+            .school-info { flex-direction: column; }
+            .header-text { margin-left: 0; }
+        }
         .timers { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px; }
         .timer { background: #1e293b; color: white; padding: 15px; border-radius: 12px; text-align: center; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); }
         .timer h4 { margin: 0 0 5px 0; font-size: 0.9em; color: #94a3b8; }
@@ -43,10 +50,10 @@
                     {% if settings.school_logo %}
                     <img src="/static/uploads/{{ settings.school_logo }}" class="logo">
                     {% endif %}
-                    <div>
-                        <h1 style="margin:0; color:#1e3a8a;">الخطة الدراسية الأسبوعية</h1>
-                        <h2 style="margin:5px 0; color:#3b82f6;">{{ grade_name }} - {{ class_name }}</h2>
-                        <span style="background: #eff6ff; color: #1e40af; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 0.9em;">الأسبوع الدراسي: {{ week }}</span>
+                    <div class="header-text">
+                        <h1 style="margin:0; color:#1e3a8a; font-size: 1.8em;">الخطة الدراسية الأسبوعية</h1>
+                        <h2 style="margin:5px 0; color:#3b82f6; font-size: 1.4em;">{{ grade_name }} - {{ class_name }}</h2>
+                        <span style="background: #eff6ff; color: #1e40af; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 0.9em; display: inline-block; margin-top: 5px;">الأسبوع الدراسي: {{ week }}</span>
                     </div>
                 </div>
             </div>
