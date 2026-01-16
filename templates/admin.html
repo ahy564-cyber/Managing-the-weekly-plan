@@ -1,10 +1,79 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Admin Portal</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin/Teacher View - Manage Study Plan</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background: #f4f4f9; }
+        .card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        h1, h2 { margin-top: 0; color: #333; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
+        input, select, textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        button { background: #5c67f2; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #4a54d1; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+        .nav { margin-top: 20px; }
+        a { color: #5c67f2; text-decoration: none; }
+    </style>
 </head>
 <body>
-    <h1>Admin Portal</h1>
-    <p>Welcome, Admin!</p>
+    <div class="card">
+        <h1>Admin Controls</h1>
+        <form method="POST">
+            <div class="form-group">
+                <label for="current_week">Set Current Week (1-19):</label>
+                <div style="display: flex; gap: 10px;">
+                    <input type="number" id="current_week" name="current_week" value="{{ current_week }}" min="1" max="19" style="width: 100px;">
+                    <button type="submit" name="update_week">Update Week</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>Add/Edit Schedule Entry</h2>
+        <form method="POST">
+            <input type="hidden" name="add_entry" value="1">
+            <div class="grid">
+                <div class="form-group">
+                    <label for="week">Week:</label>
+                    <input type="number" id="week" name="week" value="{{ current_week }}" min="1" max="19" required>
+                </div>
+                <div class="form-group">
+                    <label for="day">Day:</label>
+                    <select id="day" name="day" required>
+                        <option value="Monday">Monday</option>
+                        <option value="Tuesday">Tuesday</option>
+                        <option value="Wednesday">Wednesday</option>
+                        <option value="Thursday">Thursday</option>
+                        <option value="Friday">Friday</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="period">Period (1-8):</label>
+                    <input type="number" id="period" name="period" min="1" max="8" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="subject">Subject:</label>
+                <input type="text" id="subject" name="subject" required placeholder="e.g. Mathematics">
+            </div>
+            <div class="form-group">
+                <label for="topic">Topic:</label>
+                <input type="text" id="topic" name="topic" required placeholder="e.g. Algebra Fundamentals">
+            </div>
+            <div class="form-group">
+                <label for="homework">Homework:</label>
+                <textarea id="homework" name="homework" rows="2" placeholder="e.g. Exercises 1-5 on page 42"></textarea>
+            </div>
+            <button type="submit">Save Entry</button>
+        </form>
+    </div>
+
+    <div class="nav">
+        <a href="/">← Back to Menu</a>
+    </div>
 </body>
 </html>

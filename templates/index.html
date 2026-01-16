@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>School Weekly Study Plan</title>
+    <style>
+        body { font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f0f2f5; }
+        .container { background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 100%; }
+        h1 { color: #333; margin-bottom: 10px; }
+        p { color: #666; margin-bottom: 30px; }
+        .links { display: flex; flex-direction: column; gap: 15px; }
+        .btn { padding: 15px; border-radius: 8px; text-decoration: none; font-weight: bold; transition: all 0.2s; }
+        .btn-student { background: #5c67f2; color: white; }
+        .btn-student:hover { background: #4a54d1; }
+        .btn-admin { background: #fff; color: #5c67f2; border: 2px solid #5c67f2; }
+        .btn-admin:hover { background: #f0f1ff; }
+        .status { margin-top: 20px; font-size: 0.9em; color: #888; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Study Plan System</h1>
+        <p>Manage and view weekly schedules</p>
+        
+        <div class="links">
+            <a href="/student" class="btn btn-student">Student View</a>
+            <a href="/admin" class="btn btn-admin">Admin/Teacher View</a>
+        </div>
+        
+        <div class="status">
+            Current Week: <strong>{{ current_week }}</strong>
+        </div>
+    </div>
+</body>
+</html>
