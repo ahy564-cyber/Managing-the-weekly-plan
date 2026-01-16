@@ -69,9 +69,9 @@ def login():
     if request.method == 'POST':
         password = request.form.get('password')
         db = get_db()
-        admin_pass = db.execute("SELECT value FROM config WHERE key = 'admin_password'").fetchone()['value']
+        row = db.execute("SELECT value FROM config WHERE key = 'admin_password'").fetchone()
         
-        if password == admin_pass:
+        if row and password == row['value']:
             session['user_role'] = 'admin'
             return redirect(url_for('admin'))
         else:
@@ -88,7 +88,8 @@ def logout():
 def index():
     db = get_db()
     # The home page is now the teacher's editable table
-    config_week = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()['value']
+    row = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()
+    config_week = row['value'] if row else '1'
     selected_week = request.args.get('week', config_week)
     
     if request.method == 'POST':
@@ -183,7 +184,8 @@ def admin():
             
         return redirect(url_for('admin'))
 
-    current_week = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()['value']
+    row = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()
+    current_week = row['value'] if row else '1'
     entries = db.execute("SELECT * FROM schedule WHERE week_number = ? ORDER BY day, period", (current_week,)).fetchall()
     return render_template('admin.html', current_week=current_week, days_ar=DAYS_AR, days_order=DAYS_ORDER, entries=entries)
 
