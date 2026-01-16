@@ -129,6 +129,22 @@ def admin():
                 db.execute("UPDATE settings SET value = ? WHERE key = 'school_logo'", (filename,))
                 db.commit()
                 flash('تم رفع الشعار بنجاح')
+        elif action == 'save_override':
+            class_id = request.form.get('class_id')
+            week = request.form.get('week')
+            day = request.form.get('day')
+            period = request.form.get('period')
+            subject_name = request.form.get('subject_name')
+            
+            exists = db.execute("SELECT id FROM weekly_data WHERE class_id = ? AND week_number = ? AND day = ? AND period = ?",
+                               (class_id, week, day, period)).fetchone()
+            if exists:
+                db.execute("UPDATE weekly_data SET subject_name = ? WHERE id = ?", (subject_name, exists['id']))
+            else:
+                db.execute("""INSERT INTO weekly_data (class_id, week_number, day, period, topic, homework, subject_name) 
+                              VALUES (?, ?, ?, ?, '', '', ?)""", (class_id, week, day, period, subject_name))
+            db.commit()
+            flash('تم حفظ التعديل الأسبوعي بنجاح')
         db.commit()
         return redirect(url_for('admin'))
 
@@ -137,7 +153,25 @@ def admin():
     settings = {row['key']: row['value'] for row in db.execute("SELECT * FROM settings").fetchall()}
     subjects = db.execute("SELECT subjects.*, classes.name as class_name FROM subjects JOIN classes ON subjects.class_id = classes.id").fetchall()
     
-    return render_template('admin.html', grades=grades, classes=classes, settings=settings, subjects=subjects, days_ar=DAYS_AR, days_order=DAYS_ORDER)
+    # Selection for override in admin
+    sel_class_id = request.args.get('class_id')
+    sel_week = request.args.get('week', settings.get('current_week', '1'))
+    
+    schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
+    if sel_class_id:
+        fixed = db.execute("SELECT * FROM subjects WHERE class_id = ?", (sel_class_id,)).fetchall()
+        for f in fixed: schedule[f['day']][f['period']]['subject_name'] = f['name']
+        
+        weekly = db.execute("SELECT * FROM weekly_data WHERE class_id = ? AND week_number = ?", (sel_class_id, sel_week)).fetchall()
+        for w in weekly:
+            day_data = schedule[w['day']][w['period']]
+            day_data.update({'topic': w['topic'], 'homework': w['homework']})
+            if w['subject_name']:
+                day_data['subject_name'] = w['subject_name']
+    
+    return render_template('admin.html', grades=grades, classes=classes, settings=settings, subjects=subjects, 
+                         days_ar=DAYS_AR, days_order=DAYS_ORDER, schedule=schedule, 
+                         selected_class_id=sel_class_id, selected_week=sel_week)
 
 @app.route('/admin/delete_date/<date_type>', methods=['POST'])
 @admin_required
@@ -165,7 +199,7 @@ def teacher():
     
     if request.method == 'POST':
         data = request.json
-        if data.get('action') == 'reset_week':
+        if data.get('action') == 'reset_week' and session.get('user_role') == 'admin':
             db.execute("DELETE FROM weekly_data WHERE class_id = ? AND week_number = ?", (class_id, week))
             db.commit()
             return jsonify({'status': 'success'})
@@ -174,12 +208,12 @@ def teacher():
             exists = db.execute("SELECT id FROM weekly_data WHERE class_id = ? AND week_number = ? AND day = ? AND period = ?",
                                (class_id, week, entry['day'], entry['period'])).fetchone()
             if exists:
-                db.execute("UPDATE weekly_data SET topic = ?, homework = ?, subject_name = ? WHERE id = ?",
-                           (entry['topic'], entry['homework'], entry['subject_name'], exists['id']))
+                db.execute("UPDATE weekly_data SET topic = ?, homework = ? WHERE id = ?",
+                           (entry['topic'], entry['homework'], exists['id']))
             else:
                 db.execute("""INSERT INTO weekly_data (class_id, week_number, day, period, topic, homework, subject_name) 
-                              VALUES (?, ?, ?, ?, ?, ?, ?)""", 
-                           (class_id, week, entry['day'], entry['period'], entry['topic'], entry['homework'], entry['subject_name']))
+                              VALUES (?, ?, ?, ?, ?, ?, '')""", 
+                           (class_id, week, entry['day'], entry['period'], entry['topic'], entry['homework']))
         db.commit()
         return jsonify({'status': 'success'})
 

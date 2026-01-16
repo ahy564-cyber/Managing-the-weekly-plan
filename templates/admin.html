@@ -67,6 +67,52 @@
     </div>
 
     <div class="card">
+        <h2>إدارة التجاوز الأسبوعي (Weekly Overrides)</h2>
+        <div class="flex mb-2">
+            <div style="flex:1">
+                <label>اختر الفصل:</label>
+                <select onchange="const w = document.getElementById('ovr-week').value; location.href='/admin?class_id='+this.value+'&week='+w">
+                    <option value="">-- اختر --</option>
+                    {% for c in classes %}<option value="{{ c.id }}" {% if selected_class_id == c.id|string %}selected{% endif %}>{{ c.grade_name }} - {{ c.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div style="flex:1">
+                <label>اختر الأسبوع:</label>
+                <select id="ovr-week" onchange="const c = '{{ selected_class_id }}'; if(c) location.href='/admin?class_id='+c+'&week='+this.value">
+                    {% for w in range(1, 20) %}<option value="{{ w }}" {% if selected_week == w|string %}selected{% endif %}>أسبوع {{ w }}</option>{% endfor %}
+                </select>
+            </div>
+        </div>
+        {% if selected_class_id %}
+        <table>
+            <thead>
+                <tr><th>اليوم</th>{% for p in range(1, 9) %}<th>ح {{ p }}</th>{% endfor %}</tr>
+            </thead>
+            <tbody>
+                {% for d in days_order %}
+                <tr>
+                    <td>{{ days_ar[d] }}</td>
+                    {% for p in range(1, 9) %}
+                    <td>
+                        <form method="POST">
+                            <input type="hidden" name="action" value="save_override">
+                            <input type="hidden" name="class_id" value="{{ selected_class_id }}">
+                            <input type="hidden" name="week" value="{{ selected_week }}">
+                            <input type="hidden" name="day" value="{{ d }}">
+                            <input type="hidden" name="period" value="{{ p }}">
+                            <input type="text" name="subject_name" value="{{ schedule[d][p].subject_name }}" style="padding:5px; border-radius:4px; border:1px solid #ccc; width:80px; font-size:0.8em;">
+                            <button type="submit" style="padding:2px 5px; font-size:0.7em; background:#10b981; margin-top:2px;">حفظ</button>
+                        </form>
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    </div>
+
+    <div class="card">
         <h2>الإعدادات العامة وشعار المدرسة</h2>
         <form method="POST" enctype="multipart/form-data" class="flex mb-2">
             <input type="hidden" name="action" value="upload_logo">
@@ -84,21 +130,18 @@
                     <label>الأسبوع الدراسي الحالي:</label>
                     <input type="number" name="current_week" value="{{ settings.current_week }}">
                 </div>
-                
                 <div class="form-group">
                     <label>تاريخ اختبارات الفترة الأولى:</label>
                     <div class="flex">
                         <input type="date" name="period1_date" value="{{ settings.period1_date }}">
                     </div>
                 </div>
-
                 <div class="form-group">
                     <label>تاريخ اختبارات الفترة الثانية:</label>
                     <div class="flex">
                         <input type="date" name="period2_date" value="{{ settings.period2_date }}">
                     </div>
                 </div>
-
                 <div class="form-group">
                     <label>تاريخ الاختبار النهائي:</label>
                     <div class="flex">
