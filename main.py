@@ -1,7 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, g, session, flash, jsonify
 import sqlite3
 import os
-import time
 from datetime import datetime
 from functools import wraps
 
@@ -37,7 +36,6 @@ def init_db():
         db = get_db()
         cursor = db.cursor()
         
-        # Ensure config table exists
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS config (
                 key TEXT PRIMARY KEY,
@@ -45,7 +43,6 @@ def init_db():
             )
         ''')
         
-        # Ensure subjects table exists
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS subjects (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,7 +52,6 @@ def init_db():
             )
         ''')
         
-        # Ensure tasks table exists
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS tasks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,16 +63,14 @@ def init_db():
             )
         ''')
         
-        # Insert default values if they don't exist
         cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('current_week', '1')")
         cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('admin_password', 'admin123')")
         db.commit()
-        print("Database Initialized/Verified: Subjects and Tasks tables ready.")
 
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # Temporarily removed password protection as requested
+        # Admin access is currently direct as requested
         return f(*args, **kwargs)
     return decorated_function
 
@@ -118,7 +112,6 @@ def index():
                 topic = entry.get('topic')
                 homework = entry.get('homework')
                 
-                # Check if task exists for this subject/week
                 existing = db.execute("SELECT id FROM tasks WHERE subject_id = ? AND week_number = ?", 
                                     (subject_id, week)).fetchone()
                 if existing:
@@ -130,26 +123,25 @@ def index():
             return jsonify({'status': 'success'})
         return jsonify({'status': 'error'}), 400
 
-    # Get all subjects
     subjects_rows = db.execute("SELECT * FROM subjects").fetchall()
-    
-    # Get tasks for selected week
     tasks_rows = db.execute("SELECT * FROM tasks WHERE week_number = ?", (selected_week,)).fetchall()
-    tasks_map = {row['subject_id']: row for row in tasks_rows}
+    
+    # Convert tasks to a dict for easy lookup
+    tasks_map = {row['subject_id']: {'topic': row['topic'], 'homework': row['homework']} for row in tasks_rows}
     
     schedule_data = {day: {p: {} for p in range(1, 9)} for day in DAYS_ORDER}
     for sub in subjects_rows:
         day = sub['day']
         period = sub['period']
         sub_id = sub['id']
-        task = tasks_map.get(sub_id, {})
+        task = tasks_map.get(sub_id, {'topic': '', 'homework': ''})
         
         if day in schedule_data and 1 <= period <= 8:
             schedule_data[day][period] = {
                 'subject_id': sub_id,
                 'subject': sub['subject_name'],
-                'topic': task.get('topic', ''),
-                'homework': task.get('homework', '')
+                'topic': task['topic'],
+                'homework': task['homework']
             }
             
     return render_template('teacher.html', 
@@ -166,20 +158,20 @@ def student():
     
     subjects_rows = db.execute("SELECT * FROM subjects").fetchall()
     tasks_rows = db.execute("SELECT * FROM tasks WHERE week_number = ?", (current_week,)).fetchall()
-    tasks_map = {row['subject_id']: row for row in tasks_rows}
+    tasks_map = {row['subject_id']: {'topic': row['topic'], 'homework': row['homework']} for row in tasks_rows}
     
     schedule_data = {day: {p: {} for p in range(1, 9)} for day in DAYS_ORDER}
     for sub in subjects_rows:
         day = sub['day']
         period = sub['period']
         sub_id = sub['id']
-        task = tasks_map.get(sub_id, {})
+        task = tasks_map.get(sub_id, {'topic': '', 'homework': ''})
         
         if day in schedule_data and 1 <= period <= 8:
             schedule_data[day][period] = {
                 'subject': sub['subject_name'],
-                'topic': task.get('topic', ''),
-                'homework': task.get('homework', '')
+                'topic': task['topic'],
+                'homework': task['homework']
             }
             
     today = datetime.now()
@@ -187,8 +179,7 @@ def student():
         'Sunday': 'الأحد', 'Monday': 'الاثنين', 'Tuesday': 'الثلاثاء',
         'Wednesday': 'الأربعاء', 'Thursday': 'الخميس', 'Friday': 'الجمعة', 'Saturday': 'السبت'
     }
-    day_str_en = today.strftime("%A")
-    day_str_ar = days_map_full.get(day_str_en, day_str_en)
+    day_str_ar = days_map_full.get(today.strftime("%A"), "")
     date_str = today.strftime("%Y-%m-%d")
     
     return render_template('student.html', 
