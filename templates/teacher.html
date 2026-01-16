@@ -1,10 +1,66 @@
 <!DOCTYPE html>
-<html>
+<html lang="ar" dir="rtl">
 <head>
-    <title>Teacher Portal</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة المعلم - إدارة الدروس والواجبات</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background: #f4f4f9; color: #333; }
+        .card { background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 25px; }
+        h1 { color: #2c3e50; border-bottom: 2px solid #27ae60; padding-bottom: 10px; margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #34495e; }
+        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 1em; }
+        button { background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #219150; }
+        .entry-list { display: grid; gap: 15px; }
+        .entry-item { border: 1px solid #e0e0e0; padding: 15px; border-radius: 6px; background: #fafafa; }
+        .entry-header { display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .subject-tag { font-weight: bold; color: #2980b9; }
+        .nav { margin-top: 30px; text-align: center; display: flex; justify-content: center; gap: 20px; }
+        .btn-link { color: #3498db; text-decoration: none; font-weight: bold; }
+    </style>
 </head>
 <body>
-    <h1>Teacher Portal</h1>
-    <p>Welcome, Teacher!</p>
+    <div class="card">
+        <h1>لوحة المعلم - الأسبوع {{ selected_week }}</h1>
+        <form method="GET" style="margin-bottom: 20px; display: flex; gap: 10px; align-items: flex-end;">
+            <div style="flex: 1;">
+                <label>اختر الأسبوع:</label>
+                <input type="number" name="week" value="{{ selected_week }}" min="1" max="19">
+            </div>
+            <button type="submit" style="background: #3498db;">عرض</button>
+        </form>
+
+        <div class="entry-list">
+            {% for entry in entries %}
+            <div class="entry-item">
+                <form method="POST">
+                    <input type="hidden" name="entry_id" value="{{ entry.id }}">
+                    <div class="entry-header">
+                        <span class="subject-tag">{{ entry.subject }}</span>
+                        <span>{{ days_ar[entry.day] }} - الحصة {{ entry.period }}</span>
+                    </div>
+                    <div class="form-group">
+                        <label>الموضوع:</label>
+                        <input type="text" name="topic" value="{{ entry.topic or '' }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>الواجب:</label>
+                        <textarea name="homework" rows="2">{{ entry.homework or '' }}</textarea>
+                    </div>
+                    <button type="submit">تحديث</button>
+                </form>
+            </div>
+            {% else %}
+            <p style="text-align: center; color: #95a5a6;">لا توجد مواد مضافة لهذا الأسبوع من قبل المسؤول بعد.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="nav">
+        <a href="/" class="btn-link">← القائمة الرئيسية</a>
+        <a href="/logout" class="btn-link" style="color: #e74c3c;">تسجيل الخروج</a>
+    </div>
 </body>
 </html>

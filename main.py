@@ -1,12 +1,14 @@
-from flask import Flask, render_template, request, redirect, url_for, g
+from flask import Flask, render_template, request, redirect, url_for, g, session, flash
 import sqlite3
 import os
 from datetime import datetime
+from functools import wraps
 
 app = Flask(__name__)
+app.secret_key = os.getenv('SESSION_SECRET', 'dev-secret-key')
 DATABASE = 'school.db'
 
-# Mapping of English days to Arabic for backend/frontend consistency
+# Mapping of English days to Arabic
 DAYS_AR = {
     'Sunday': 'الأحد',
     'Monday': 'الاثنين',
@@ -15,7 +17,6 @@ DAYS_AR = {
     'Thursday': 'الخميس'
 }
 
-# The user requested Sunday to Thursday (الأحد to الخميس)
 DAYS_ORDER = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday']
 
 def get_db():
@@ -52,8 +53,48 @@ def init_db():
                 homework TEXT
             )
         ''')
+        # Default current week if not set
         cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('current_week', '1')")
+        # Default passwords for roles (Admin/Teacher)
+        cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('admin_password', 'admin123')")
+        cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('teacher_password', 'teacher123')")
         db.commit()
+
+def login_required(role=None):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if 'user_role' not in session:
+                return redirect(url_for('login'))
+            if role and session['user_role'] != role:
+                return redirect(url_for('index'))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        password = request.form.get('password')
+        db = get_db()
+        admin_pass = db.execute("SELECT value FROM config WHERE key = 'admin_password'").fetchone()['value']
+        teacher_pass = db.execute("SELECT value FROM config WHERE key = 'teacher_password'").fetchone()['value']
+        
+        if password == admin_pass:
+            session['user_role'] = 'admin'
+            return redirect(url_for('admin'))
+        elif password == teacher_pass:
+            session['user_role'] = 'teacher'
+            return redirect(url_for('teacher_portal'))
+        else:
+            flash('كلمة المرور غير صحيحة')
+            return redirect(url_for('login'))
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.pop('user_role', None)
+    return redirect(url_for('login'))
 
 @app.route('/')
 def index():
@@ -69,7 +110,6 @@ def student():
     
     rows = db.execute("SELECT * FROM schedule WHERE week_number = ?", (current_week,)).fetchall()
     
-    # Organize data: schedule[day_eng][period]
     schedule_data = {day: {p: {} for p in range(1, 9)} for day in DAYS_ORDER}
     for row in rows:
         if row['day'] in schedule_data and 1 <= row['period'] <= 8:
@@ -80,7 +120,6 @@ def student():
             }
             
     today = datetime.now()
-    # Basic Arabic translation for the current day display
     days_map_full = {
         'Sunday': 'الأحد', 'Monday': 'الاثنين', 'Tuesday': 'الثلاثاء',
         'Wednesday': 'الأربعاء', 'Thursday': 'الخميس', 'Friday': 'الجمعة', 'Saturday': 'السبت'
@@ -98,6 +137,7 @@ def student():
                          day=day_str_ar)
 
 @app.route('/admin', methods=['GET', 'POST'])
+@login_required(role='admin')
 def admin():
     db = get_db()
     if request.method == 'POST':
@@ -110,25 +150,47 @@ def admin():
             day = request.form.get('day')
             period = request.form.get('period')
             subject = request.form.get('subject')
-            topic = request.form.get('topic')
-            homework = request.form.get('homework')
             
+            # Admin only sets/updates the basic subject
             existing = db.execute("SELECT id FROM schedule WHERE week_number = ? AND day = ? AND period = ?", 
                                 (week, day, period)).fetchone()
             if existing:
-                db.execute('''UPDATE schedule SET subject=?, topic=?, homework=? 
-                             WHERE week_number=? AND day=? AND period=?''',
-                          (subject, topic, homework, week, day, period))
+                db.execute("UPDATE schedule SET subject=? WHERE id=?", (subject, existing['id']))
             else:
-                db.execute('''INSERT INTO schedule (week_number, day, period, subject, topic, homework)
-                             VALUES (?, ?, ?, ?, ?, ?)''',
-                          (week, day, period, subject, topic, homework))
+                db.execute("INSERT INTO schedule (week_number, day, period, subject) VALUES (?, ?, ?, ?)",
+                          (week, day, period, subject))
             db.commit()
+        elif 'delete_entry' in request.form:
+            entry_id = request.form.get('entry_id')
+            db.execute("DELETE FROM schedule WHERE id = ?", (entry_id,))
+            db.commit()
+            
         return redirect(url_for('admin'))
 
-    current_week_row = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()
-    current_week = current_week_row['value'] if current_week_row else '1'
-    return render_template('admin.html', current_week=current_week, days_ar=DAYS_AR, days_order=DAYS_ORDER)
+    current_week = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()['value']
+    # Fetch all entries for the current week to show in list/skeleton
+    entries = db.execute("SELECT * FROM schedule WHERE week_number = ? ORDER BY day, period", (current_week,)).fetchall()
+    return render_template('admin.html', current_week=current_week, days_ar=DAYS_AR, days_order=DAYS_ORDER, entries=entries)
+
+@app.route('/teacher', methods=['GET', 'POST'])
+@login_required(role='teacher')
+def teacher_portal():
+    db = get_db()
+    current_week = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()['value']
+    selected_week = request.args.get('week', current_week)
+    
+    if request.method == 'POST':
+        entry_id = request.form.get('entry_id')
+        topic = request.form.get('topic')
+        homework = request.form.get('homework')
+        
+        # Teacher only updates topic and homework for existing subjects
+        db.execute("UPDATE schedule SET topic=?, homework=? WHERE id=?", (topic, homework, entry_id))
+        db.commit()
+        return redirect(url_for('teacher_portal', week=selected_week))
+
+    entries = db.execute("SELECT * FROM schedule WHERE week_number = ? ORDER BY day, period", (selected_week,)).fetchall()
+    return render_template('teacher.html', selected_week=selected_week, entries=entries, days_ar=DAYS_AR)
 
 if __name__ == '__main__':
     if not os.path.exists(DATABASE):
