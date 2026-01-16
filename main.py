@@ -119,17 +119,15 @@ def admin():
                 val = request.form.get(key)
                 if val is not None:
                     db.execute("UPDATE settings SET value = ? WHERE key = ?", (val, key))
+            db.commit()
             flash('تم تحديث الإعدادات بنجاح')
-        elif action == 'delete_exam_date':
-            exam_key = request.form.get('exam_key')
-            db.execute("UPDATE settings SET value = '' WHERE key = ?", (exam_key,))
-            flash('تم حذف التاريخ بنجاح')
         elif action == 'upload_logo':
             file = request.files.get('logo')
             if file:
                 filename = secure_filename(file.filename)
                 file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
                 db.execute("UPDATE settings SET value = ? WHERE key = 'school_logo'", (filename,))
+                db.commit()
                 flash('تم رفع الشعار بنجاح')
         db.commit()
         return redirect(url_for('admin'))
@@ -140,6 +138,21 @@ def admin():
     subjects = db.execute("SELECT subjects.*, classes.name as class_name FROM subjects JOIN classes ON subjects.class_id = classes.id").fetchall()
     
     return render_template('admin.html', grades=grades, classes=classes, settings=settings, subjects=subjects, days_ar=DAYS_AR, days_order=DAYS_ORDER)
+
+@app.route('/admin/delete_date/<date_type>', methods=['POST'])
+@admin_required
+def delete_date(date_type):
+    if date_type in ['period1_date', 'period2_date', 'final_date']:
+        db = get_db()
+        db.execute("UPDATE settings SET value = '' WHERE key = ?", (date_type,))
+        db.commit()
+        # Verify it's empty
+        check = db.execute("SELECT value FROM settings WHERE key = ?", (date_type,)).fetchone()
+        if check and check['value'] == '':
+            flash('تم حذف التاريخ بنجاح')
+        else:
+            flash('حدث خطأ أثناء حذف التاريخ')
+    return redirect(url_for('admin'))
 
 @app.route('/')
 def index():
