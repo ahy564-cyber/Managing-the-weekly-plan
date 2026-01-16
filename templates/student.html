@@ -14,7 +14,7 @@
         th, td { border: 1px solid #e0e0e0; padding: 10px; text-align: center; }
         th { background: #34495e; color: #fff; }
         .countdowns { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; }
-        .countdown-item { background: #34495e; color: #fff; padding: 10px; border-radius: 5px; flex: 1; text-align: center; font-size: 0.9em; }
+        .countdown-item { background: #34495e; color: #fff; padding: 10px; border-radius: 5px; flex: 1; text-align: center; font-size: 0.9em; display: none; }
         .logo { max-width: 100px; margin-bottom: 10px; }
     </style>
 </head>
@@ -70,8 +70,19 @@
     <script>
         function update() {
             document.querySelectorAll('.countdown-item').forEach(i => {
-                const t = new Date(i.dataset.date).getTime() - new Date().getTime();
-                i.querySelector('.timer').textContent = t > 0 ? Math.floor(t / 86400000) + ' يوم' : 'انتهى';
+                const targetStr = i.dataset.date;
+                if (!targetStr) {
+                    i.style.display = 'none';
+                    return;
+                }
+                const t = new Date(targetStr).getTime() - new Date().getTime();
+                if (t > 0) {
+                    i.querySelector('.timer').textContent = Math.floor(t / 86400000) + ' يوم';
+                    i.style.display = 'block';
+                } else {
+                    i.querySelector('.timer').textContent = 'انتهى';
+                    i.style.display = 'block';
+                }
             });
         }
         setInterval(update, 1000); update();

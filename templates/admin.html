@@ -15,6 +15,8 @@
         input, select { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 1em; }
         button { background: #3498db; color: white; border: none; padding: 12px 25px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background 0.3s; }
         button:hover { background: #2980b9; }
+        .btn-clear { background: #e67e22; margin-top: 5px; padding: 8px 15px; font-size: 0.9em; }
+        .btn-clear:hover { background: #d35400; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px; }
         .entries-table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #fff; }
         .entries-table th, .entries-table td { border: 1px solid #e0e0e0; padding: 12px; text-align: center; }
@@ -26,9 +28,18 @@
         .logo-preview { max-width: 100px; max-height: 100px; display: block; margin-bottom: 10px; }
         .countdowns { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
         .countdown-item { background: #34495e; color: #fff; padding: 15px; border-radius: 8px; flex: 1; min-width: 200px; text-align: center; }
+        .alert { background: #d4edda; color: #155724; padding: 10px; border-radius: 4px; margin-bottom: 20px; text-align: center; }
     </style>
 </head>
 <body>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
     <div id="capture-area">
         {% if config.school_logo %}
         <div style="text-align: center; margin-bottom: 20px;">
@@ -70,15 +81,19 @@
                     <div class="form-group">
                         <label>الفترية الأولى:</label>
                         <input type="date" name="exam_date_1" value="{{ config.exam_date_1 }}">
+                        <button type="submit" name="clear_exam" value="1" class="btn-clear" onclick="this.form.exam_key.value='exam_date_1'">مسح التاريخ</button>
                     </div>
                     <div class="form-group">
                         <label>الفترية الثانية:</label>
                         <input type="date" name="exam_date_2" value="{{ config.exam_date_2 }}">
+                        <button type="submit" name="clear_exam" value="1" class="btn-clear" onclick="this.form.exam_key.value='exam_date_2'">مسح التاريخ</button>
                     </div>
                     <div class="form-group">
                         <label>النهائية:</label>
                         <input type="date" name="exam_date_final" value="{{ config.exam_date_final }}">
+                        <button type="submit" name="clear_exam" value="1" class="btn-clear" onclick="this.form.exam_key.value='exam_date_final'">مسح التاريخ</button>
                     </div>
+                    <input type="hidden" name="exam_key" value="">
                 </div>
                 <button type="submit" name="update_exams">حفظ المواعيد</button>
             </form>
@@ -146,14 +161,21 @@
     <script>
         function updateTimers() {
             document.querySelectorAll('.countdown-item').forEach(item => {
-                const target = new Date(item.dataset.date).getTime();
+                const targetStr = item.dataset.date;
+                if (!targetStr) {
+                    item.style.display = 'none';
+                    return;
+                }
+                const target = new Date(targetStr).getTime();
                 const now = new Date().getTime();
                 const dist = target - now;
                 if (dist > 0) {
                     const days = Math.floor(dist / (1000 * 60 * 60 * 24));
                     item.querySelector('.timer').textContent = days + ' يوم';
+                    item.style.display = 'block';
                 } else {
                     item.querySelector('.timer').textContent = 'بدأت أو انتهت';
+                    item.style.display = 'block';
                 }
             });
         }

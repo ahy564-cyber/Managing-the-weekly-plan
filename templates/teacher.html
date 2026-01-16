@@ -17,7 +17,7 @@
         .input-field { width: 100%; border: 1px solid #eee; border-radius: 4px; padding: 6px; box-sizing: border-box; }
         .btn-save { background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; }
         .countdowns { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; }
-        .countdown-item { background: #34495e; color: #fff; padding: 10px; border-radius: 5px; font-size: 0.85em; flex: 1; text-align: center; }
+        .countdown-item { background: #34495e; color: #fff; padding: 10px; border-radius: 5px; font-size: 0.85em; flex: 1; text-align: center; display: none; }
         .logo { max-width: 80px; margin-bottom: 10px; }
     </style>
 </head>
@@ -86,13 +86,20 @@
     <script>
         function updateTimers() {
             document.querySelectorAll('.countdown-item').forEach(item => {
-                const target = new Date(item.dataset.date).getTime();
+                const targetStr = item.dataset.date;
+                if (!targetStr) {
+                    item.style.display = 'none';
+                    return;
+                }
+                const target = new Date(targetStr).getTime();
                 const now = new Date().getTime();
                 const dist = target - now;
                 if (dist > 0) {
                     item.querySelector('.timer').textContent = Math.floor(dist / (1000 * 60 * 60 * 24)) + ' يوم';
+                    item.style.display = 'block';
                 } else {
                     item.querySelector('.timer').textContent = 'انتهى';
+                    item.style.display = 'block';
                 }
             });
         }

@@ -220,16 +220,23 @@ def admin():
         if 'update_week' in request.form:
             new_week = request.form.get('current_week')
             db.execute("UPDATE config SET value = ? WHERE key = 'current_week'", (new_week,))
+            flash('تم تحديث الأسبوع بنجاح')
         elif 'update_exams' in request.form:
             db.execute("UPDATE config SET value = ? WHERE key = 'exam_date_1'", (request.form.get('exam_date_1'),))
             db.execute("UPDATE config SET value = ? WHERE key = 'exam_date_2'", (request.form.get('exam_date_2'),))
             db.execute("UPDATE config SET value = ? WHERE key = 'exam_date_final'", (request.form.get('exam_date_final'),))
+            flash('تم تحديث مواعيد الاختبارات بنجاح')
+        elif 'clear_exam' in request.form:
+            exam_key = request.form.get('exam_key')
+            db.execute("UPDATE config SET value = '' WHERE key = ?", (exam_key,))
+            flash('تم مسح تاريخ الاختبار بنجاح')
         elif 'upload_logo' in request.form:
             file = request.files.get('logo')
             if file and file.filename != '':
                 filename = secure_filename(file.filename)
                 file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
                 db.execute("UPDATE config SET value = ? WHERE key = 'school_logo'", (filename,))
+                flash('تم رفع الشعار بنجاح')
         elif 'add_subject' in request.form:
             day = request.form.get('day')
             period = request.form.get('period')
@@ -239,10 +246,12 @@ def admin():
                 db.execute("UPDATE subjects SET subject_name=? WHERE id=?", (subject_name, existing['id']))
             else:
                 db.execute("INSERT INTO subjects (day, period, subject_name) VALUES (?, ?, ?)", (day, period, subject_name))
+            flash('تم حفظ المادة بنجاح')
         elif 'delete_subject' in request.form:
             sub_id = request.form.get('subject_id')
             db.execute("DELETE FROM subjects WHERE id = ?", (sub_id,))
             db.execute("DELETE FROM tasks WHERE subject_id = ?", (sub_id,))
+            flash('تم حذف المادة بنجاح')
         
         db.commit()
         return redirect(url_for('admin'))
