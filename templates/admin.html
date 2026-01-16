@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>لوحة المدير - إدارة الجدول</title>
+    <title>لوحة المدير - إدارة الجدول الثابت</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background: #f4f4f9; color: #333; }
         .card { background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 25px; }
@@ -38,14 +38,10 @@
     </div>
 
     <div class="card">
-        <h2>إضافة مادة للجدول (الهيكل الأسبوعي)</h2>
+        <h2>توزيع المواد الثابت (يظهر في كل الأسابيع)</h2>
         <form method="POST">
-            <input type="hidden" name="add_entry" value="1">
+            <input type="hidden" name="add_subject" value="1">
             <div class="grid">
-                <div class="form-group">
-                    <label>الأسبوع:</label>
-                    <input type="number" name="week" value="{{ current_week }}" min="1" max="19" required>
-                </div>
                 <div class="form-group">
                     <label>اليوم:</label>
                     <select name="day" required>
@@ -58,17 +54,17 @@
                     <label>الحصة (1-8):</label>
                     <input type="number" name="period" min="1" max="8" required>
                 </div>
-            </div>
-            <div class="form-group">
-                <label>اسم المادة:</label>
-                <input type="text" name="subject" required placeholder="مثلاً: لغة عربية">
+                <div class="form-group">
+                    <label>اسم المادة:</label>
+                    <input type="text" name="subject_name" required placeholder="مثلاً: لغة عربية">
+                </div>
             </div>
             <button type="submit">حفظ المادة في الجدول</button>
         </form>
     </div>
 
     <div class="card">
-        <h2>هيكل الجدول للأسبوع {{ current_week }}</h2>
+        <h2>هيكل الجدول الثابت</h2>
         <table class="entries-table">
             <thead>
                 <tr>
@@ -83,17 +79,17 @@
                 <tr>
                     <td>{{ days_ar[entry.day] }}</td>
                     <td>{{ entry.period }}</td>
-                    <td>{{ entry.subject }}</td>
+                    <td>{{ entry.subject_name }}</td>
                     <td>
                         <form method="POST" style="display:inline;">
-                            <input type="hidden" name="entry_id" value="{{ entry.id }}">
-                            <button type="submit" name="delete_entry" class="btn-delete">حذف</button>
+                            <input type="hidden" name="subject_id" value="{{ entry.id }}">
+                            <button type="submit" name="delete_subject" class="btn-delete">حذف</button>
                         </form>
                     </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="4">لا توجد مواد مضافة بعد لهذا الأسبوع.</td>
+                    <td colspan="4">لا توجد مواد مضافة بعد.</td>
                 </tr>
                 {% endfor %}
             </tbody>

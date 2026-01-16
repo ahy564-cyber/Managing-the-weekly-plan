@@ -74,8 +74,8 @@
 </head>
 <body>
     <div class="header">
-        <a href="/login" class="admin-link"><span>⚙️</span> دخول المسؤول</a>
-        <h1>لوحة المعلم - الخطة الدراسية</h1>
+        <a href="/admin" class="admin-link"><span>⚙️</span> لوحة التحكم</a>
+        <h1>لوحة المعلم - الأسبوع {{ selected_week }}</h1>
     </div>
 
     <div class="controls-bar">
@@ -110,8 +110,8 @@
                     {% for p in range(1, 9) %}
                     <td>
                         {% set cell = schedule[day_eng][p] %}
-                        {% if cell.id %}
-                        <div class="entry-editor" data-id="{{ cell.id }}">
+                        {% if cell.subject_id %}
+                        <div class="entry-editor" data-subject-id="{{ cell.subject_id }}" data-week="{{ selected_week }}">
                             <div class="subject-label">{{ cell.subject }}</div>
                             <input type="text" class="input-field edit-topic" placeholder="الموضوع..." value="{{ cell.topic or '' }}">
                             <textarea class="input-field textarea-field edit-hw" placeholder="الواجب المنزلي...">{{ cell.homework or '' }}</textarea>
@@ -147,7 +147,8 @@
             const entries = [];
             document.querySelectorAll('.entry-editor').forEach(box => {
                 entries.push({
-                    id: box.getAttribute('data-id'),
+                    subject_id: box.getAttribute('data-subject-id'),
+                    week: box.getAttribute('data-week'),
                     topic: box.querySelector('.edit-topic').value,
                     homework: box.querySelector('.edit-hw').value
                 });

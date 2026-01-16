@@ -9,10 +9,6 @@ app = Flask(__name__)
 app.secret_key = os.getenv('SESSION_SECRET', 'super-secret-key-999')
 DATABASE = 'school.db'
 
-# Simple bypass logic: Store start time of the session
-BYPASS_START_TIME = time.time()
-BYPASS_DURATION = 300 # 5 minutes
-
 DAYS_AR = {
     'Sunday': 'الأحد',
     'Monday': 'الاثنين',
@@ -41,7 +37,7 @@ def init_db():
         db = get_db()
         cursor = db.cursor()
         
-        # Reset database by dropping and recreating config table
+        # Reset and create tables
         cursor.execute('DROP TABLE IF EXISTS config')
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS config (
@@ -50,16 +46,25 @@ def init_db():
             )
         ''')
         
-        # Ensure schedule table exists
+        cursor.execute('DROP TABLE IF EXISTS subjects')
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS schedule (
+            CREATE TABLE IF NOT EXISTS subjects (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                week_number INTEGER,
                 day TEXT,
                 period INTEGER,
-                subject TEXT,
+                subject_name TEXT
+            )
+        ''')
+        
+        cursor.execute('DROP TABLE IF EXISTS tasks')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject_id INTEGER,
+                week_number INTEGER,
                 topic TEXT,
-                homework TEXT
+                homework TEXT,
+                FOREIGN KEY (subject_id) REFERENCES subjects(id)
             )
         ''')
         
@@ -67,17 +72,12 @@ def init_db():
         cursor.execute("INSERT INTO config (key, value) VALUES ('current_week', '1')")
         cursor.execute("INSERT INTO config (key, value) VALUES ('admin_password', 'admin123')")
         db.commit()
-        print("Database Reset: Default values inserted.")
+        print("Database Restructured: Subjects and Tasks tables created.")
 
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # 5-minute bypass check
-        current_time = time.time()
-        is_bypassed = (current_time - BYPASS_START_TIME) < BYPASS_DURATION
-        
-        if session.get('user_role') != 'admin' and not is_bypassed:
-            return redirect(url_for('login'))
+        # Temporarily removed password protection as requested
         return f(*args, **kwargs)
     return decorated_function
 
@@ -85,22 +85,16 @@ def admin_required(f):
 def login():
     if request.method == 'POST':
         password = request.form.get('password')
-        print(f"Login attempt with: '{password}'")
-        
         db = get_db()
         row = db.execute("SELECT value FROM config WHERE key = 'admin_password'").fetchone()
         admin_pass = row['value'] if row else 'admin123'
         
-        print(f"Actual admin password in DB: '{admin_pass}'")
-        
         if password == admin_pass:
-            session.clear() # Clear any old session data
+            session.clear()
             session['user_role'] = 'admin'
-            print("Login Successful: User is admin.")
             return redirect(url_for('admin'))
         else:
             flash('كلمة المرور غير صحيحة')
-            print("Login Failed: Incorrect password.")
             return redirect(url_for('login'))
     return render_template('login.html')
 
@@ -114,32 +108,53 @@ def index():
     db = get_db()
     row = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()
     config_week = row['value'] if row else '1'
-    selected_week = request.args.get('week', config_week)
+    selected_week = int(request.args.get('week', config_week))
     
     if request.method == 'POST':
         data = request.json
         if data and 'entries' in data:
             for entry in data['entries']:
-                db.execute("UPDATE schedule SET topic=?, homework=? WHERE id=?", 
-                          (entry.get('topic'), entry.get('homework'), entry.get('id')))
+                subject_id = entry.get('subject_id')
+                week = entry.get('week')
+                topic = entry.get('topic')
+                homework = entry.get('homework')
+                
+                # Check if task exists for this subject/week
+                existing = db.execute("SELECT id FROM tasks WHERE subject_id = ? AND week_number = ?", 
+                                    (subject_id, week)).fetchone()
+                if existing:
+                    db.execute("UPDATE tasks SET topic=?, homework=? WHERE id=?", (topic, homework, existing['id']))
+                else:
+                    db.execute("INSERT INTO tasks (subject_id, week_number, topic, homework) VALUES (?, ?, ?, ?)",
+                              (subject_id, week, topic, homework))
             db.commit()
             return jsonify({'status': 'success'})
         return jsonify({'status': 'error'}), 400
 
-    rows = db.execute("SELECT * FROM schedule WHERE week_number = ?", (selected_week,)).fetchall()
+    # Get all subjects
+    subjects_rows = db.execute("SELECT * FROM subjects").fetchall()
+    
+    # Get tasks for selected week
+    tasks_rows = db.execute("SELECT * FROM tasks WHERE week_number = ?", (selected_week,)).fetchall()
+    tasks_map = {row['subject_id']: row for row in tasks_rows}
     
     schedule_data = {day: {p: {} for p in range(1, 9)} for day in DAYS_ORDER}
-    for row in rows:
-        if row['day'] in schedule_data and 1 <= row['period'] <= 8:
-            schedule_data[row['day']][row['period']] = {
-                'id': row['id'],
-                'subject': row['subject'],
-                'topic': row['topic'],
-                'homework': row['homework']
+    for sub in subjects_rows:
+        day = sub['day']
+        period = sub['period']
+        sub_id = sub['id']
+        task = tasks_map.get(sub_id, {})
+        
+        if day in schedule_data and 1 <= period <= 8:
+            schedule_data[day][period] = {
+                'subject_id': sub_id,
+                'subject': sub['subject_name'],
+                'topic': task.get('topic', ''),
+                'homework': task.get('homework', '')
             }
             
     return render_template('teacher.html', 
-                         selected_week=int(selected_week), 
+                         selected_week=selected_week, 
                          schedule=schedule_data, 
                          days_order=DAYS_ORDER,
                          days_ar=DAYS_AR)
@@ -150,15 +165,22 @@ def student():
     row = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()
     current_week = int(row['value']) if row else 1
     
-    rows = db.execute("SELECT * FROM schedule WHERE week_number = ?", (current_week,)).fetchall()
+    subjects_rows = db.execute("SELECT * FROM subjects").fetchall()
+    tasks_rows = db.execute("SELECT * FROM tasks WHERE week_number = ?", (current_week,)).fetchall()
+    tasks_map = {row['subject_id']: row for row in tasks_rows}
     
     schedule_data = {day: {p: {} for p in range(1, 9)} for day in DAYS_ORDER}
-    for row in rows:
-        if row['day'] in schedule_data and 1 <= row['period'] <= 8:
-            schedule_data[row['day']][row['period']] = {
-                'subject': row['subject'],
-                'topic': row['topic'],
-                'homework': row['homework']
+    for sub in subjects_rows:
+        day = sub['day']
+        period = sub['period']
+        sub_id = sub['id']
+        task = tasks_map.get(sub_id, {})
+        
+        if day in schedule_data and 1 <= period <= 8:
+            schedule_data[day][period] = {
+                'subject': sub['subject_name'],
+                'topic': task.get('topic', ''),
+                'homework': task.get('homework', '')
             }
             
     today = datetime.now()
@@ -187,33 +209,31 @@ def admin():
             new_week = request.form.get('current_week')
             db.execute("UPDATE config SET value = ? WHERE key = 'current_week'", (new_week,))
             db.commit()
-        elif 'add_entry' in request.form:
-            week = request.form.get('week')
+        elif 'add_subject' in request.form:
             day = request.form.get('day')
             period = request.form.get('period')
-            subject = request.form.get('subject')
+            subject_name = request.form.get('subject_name')
             
-            existing = db.execute("SELECT id FROM schedule WHERE week_number = ? AND day = ? AND period = ?", 
-                                (week, day, period)).fetchone()
+            existing = db.execute("SELECT id FROM subjects WHERE day = ? AND period = ?", (day, period)).fetchone()
             if existing:
-                db.execute("UPDATE schedule SET subject=? WHERE id=?", (subject, existing['id']))
+                db.execute("UPDATE subjects SET subject_name=? WHERE id=?", (subject_name, existing['id']))
             else:
-                db.execute("INSERT INTO schedule (week_number, day, period, subject) VALUES (?, ?, ?, ?)",
-                          (week, day, period, subject))
+                db.execute("INSERT INTO subjects (day, period, subject_name) VALUES (?, ?, ?)", (day, period, subject_name))
             db.commit()
-        elif 'delete_entry' in request.form:
-            entry_id = request.form.get('entry_id')
-            db.execute("DELETE FROM schedule WHERE id = ?", (entry_id,))
+        elif 'delete_subject' in request.form:
+            sub_id = request.form.get('subject_id')
+            db.execute("DELETE FROM subjects WHERE id = ?", (sub_id,))
+            db.execute("DELETE FROM tasks WHERE subject_id = ?", (sub_id,))
             db.commit()
             
         return redirect(url_for('admin'))
 
     row = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()
     current_week = row['value'] if row else '1'
-    entries = db.execute("SELECT * FROM schedule WHERE week_number = ? ORDER BY day, period", (current_week,)).fetchall()
-    return render_template('admin.html', current_week=current_week, days_ar=DAYS_AR, days_order=DAYS_ORDER, entries=entries)
+    subjects = db.execute("SELECT * FROM subjects ORDER BY day, period").fetchall()
+    return render_template('admin.html', current_week=current_week, days_ar=DAYS_AR, days_order=DAYS_ORDER, entries=subjects)
 
 if __name__ == '__main__':
-    # Initialize DB every time for debug session
-    init_db()
+    if not os.path.exists(DATABASE):
+        init_db()
     app.run(host='0.0.0.0', port=5000, debug=True)
