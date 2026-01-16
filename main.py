@@ -69,7 +69,7 @@ def init_db():
             )
         ''')
         
-        # New tables/columns check
+        # Ensure default values
         cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('current_week', '1')")
         cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('admin_password', 'admin123')")
         cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('exam_date_1', '')")
@@ -81,25 +81,30 @@ def init_db():
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if session.get('user_role') != 'admin':
-            return redirect(url_for('login'))
+        # TEMPORARY BYPASS: Access granted to everyone for now
         return f(*args, **kwargs)
     return decorated_function
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        password = request.form.get('password')
+        entered_password = request.form.get('password')
         db = get_db()
         row = db.execute("SELECT value FROM config WHERE key = 'admin_password'").fetchone()
-        admin_pass = row['value'] if row else 'admin123'
+        stored_password = row['value'] if row else 'admin123'
         
-        if password == admin_pass:
+        # Debugging logs in console
+        print(f"DEBUG: Entered password: '{entered_password}'")
+        print(f"DEBUG: Stored password: '{stored_password}'")
+        
+        if entered_password == stored_password:
             session.clear()
             session['user_role'] = 'admin'
+            print("DEBUG: Login SUCCESS")
             return redirect(url_for('admin'))
         else:
             flash('كلمة المرور غير صحيحة')
+            print("DEBUG: Login FAILED")
             return redirect(url_for('login'))
     return render_template('login.html')
 
