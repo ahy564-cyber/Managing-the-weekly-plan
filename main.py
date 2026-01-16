@@ -53,7 +53,8 @@ def init_db():
         cursor.execute('CREATE TABLE IF NOT EXISTS weekly_data (id INTEGER PRIMARY KEY AUTOINCREMENT, class_id INTEGER, week_number INTEGER, day TEXT, period INTEGER, topic TEXT, homework TEXT, subject_name TEXT, FOREIGN KEY(class_id) REFERENCES classes(id))')
         cursor.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)')
         
-        cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('admin_password', 'admin123')")
+        cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('admin_password', 'fast490')")
+        cursor.execute("UPDATE settings SET value = 'fast490' WHERE key = 'admin_password'")
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('school_logo', '')")
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('period1_date', '')")
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('period2_date', '')")
