@@ -56,6 +56,7 @@ def init_db():
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('admin_password', 'fast490')")
         cursor.execute("UPDATE settings SET value = 'fast490' WHERE key = 'admin_password'")
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('school_logo', '')")
+        cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('school_name', 'مدرستي')")
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('period1_date', '')")
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('period2_date', '')")
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('final_date', '')")
@@ -76,7 +77,8 @@ def login():
         password = request.form.get('password')
         db = get_db()
         stored = db.execute("SELECT value FROM settings WHERE key = 'admin_password'").fetchone()
-        if password == (stored['value'] if stored else 'admin123'):
+        if password == (stored['value'] if stored else 'fast490'):
+            session.clear()
             session['user_role'] = 'admin'
             return redirect(url_for('admin'))
         flash('كلمة المرور غير صحيحة')
@@ -116,7 +118,7 @@ def admin():
             db.execute("DELETE FROM subjects WHERE id = ?", (sid,))
             flash('تم حذف المادة بنجاح')
         elif action == 'update_settings':
-            for key in ['period1_date', 'period2_date', 'final_date', 'current_week']:
+            for key in ['period1_date', 'period2_date', 'final_date', 'current_week', 'school_name']:
                 val = request.form.get(key)
                 if val is not None:
                     db.execute("UPDATE settings SET value = ? WHERE key = ?", (val, key))
@@ -154,7 +156,6 @@ def admin():
     settings = {row['key']: row['value'] for row in db.execute("SELECT * FROM settings").fetchall()}
     subjects = db.execute("SELECT subjects.*, classes.name as class_name FROM subjects JOIN classes ON subjects.class_id = classes.id").fetchall()
     
-    # Selection for override in admin
     sel_class_id = request.args.get('class_id')
     sel_week = request.args.get('week', settings.get('current_week', '1'))
     
@@ -200,11 +201,6 @@ def teacher():
     
     if request.method == 'POST':
         data = request.json
-        if data.get('action') == 'reset_week' and session.get('user_role') == 'admin':
-            db.execute("DELETE FROM weekly_data WHERE class_id = ? AND week_number = ?", (class_id, week))
-            db.commit()
-            return jsonify({'status': 'success'})
-            
         for entry in data.get('entries', []):
             exists = db.execute("SELECT id FROM weekly_data WHERE class_id = ? AND week_number = ? AND day = ? AND period = ?",
                                (class_id, week, entry['day'], entry['period'])).fetchone()
