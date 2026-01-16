@@ -50,11 +50,30 @@ def init_db():
         ''')
         
         cursor.execute('''
+            CREATE TABLE IF NOT EXISTS grades (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS classes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                grade_id INTEGER,
+                name TEXT,
+                FOREIGN KEY (grade_id) REFERENCES grades(id),
+                UNIQUE(grade_id, name)
+            )
+        ''')
+
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS subjects (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                class_id INTEGER,
                 day TEXT,
                 period INTEGER,
-                subject_name TEXT
+                subject_name TEXT,
+                FOREIGN KEY (class_id) REFERENCES classes(id)
             )
         ''')
         
@@ -65,6 +84,7 @@ def init_db():
                 week_number INTEGER,
                 topic TEXT,
                 homework TEXT,
+                override_subject TEXT,
                 FOREIGN KEY (subject_id) REFERENCES subjects(id)
             )
         ''')
@@ -93,18 +113,12 @@ def login():
         row = db.execute("SELECT value FROM config WHERE key = 'admin_password'").fetchone()
         stored_password = row['value'] if row else 'admin123'
         
-        # Debugging logs in console
-        print(f"DEBUG: Entered password: '{entered_password}'")
-        print(f"DEBUG: Stored password: '{stored_password}'")
-        
         if entered_password == stored_password:
             session.clear()
             session['user_role'] = 'admin'
-            print("DEBUG: Login SUCCESS")
             return redirect(url_for('admin'))
         else:
             flash('كلمة المرور غير صحيحة')
-            print("DEBUG: Login FAILED")
             return redirect(url_for('login'))
     return render_template('login.html')
 
@@ -123,142 +137,159 @@ def get_common_data():
 def index():
     db = get_db()
     config = get_common_data()
-    selected_week = int(request.args.get('week', config.get('current_week', 1)))
     
+    # Selection logic
+    grade_id = request.args.get('grade_id', type=int)
+    class_id = request.args.get('class_id', type=int)
+    week = request.args.get('week', config.get('current_week', 1), type=int)
+
     if request.method == 'POST':
         data = request.json
         if data and 'entries' in data:
             for entry in data['entries']:
-                subject_id = entry.get('subject_id')
-                week = entry.get('week')
+                sid = entry.get('subject_id')
+                w = entry.get('week')
                 topic = entry.get('topic')
-                homework = entry.get('homework')
+                hw = entry.get('homework')
+                ovr = entry.get('override_subject')
                 
                 existing = db.execute("SELECT id FROM tasks WHERE subject_id = ? AND week_number = ?", 
-                                    (subject_id, week)).fetchone()
+                                    (sid, w)).fetchone()
                 if existing:
-                    db.execute("UPDATE tasks SET topic=?, homework=? WHERE id=?", (topic, homework, existing['id']))
+                    db.execute("UPDATE tasks SET topic=?, homework=?, override_subject=? WHERE id=?", (topic, hw, ovr, existing['id']))
                 else:
-                    db.execute("INSERT INTO tasks (subject_id, week_number, topic, homework) VALUES (?, ?, ?, ?)",
-                              (subject_id, week, topic, homework))
+                    db.execute("INSERT INTO tasks (subject_id, week_number, topic, homework, override_subject) VALUES (?, ?, ?, ?, ?)",
+                              (sid, w, topic, hw, ovr))
             db.commit()
             return jsonify({'status': 'success'})
         return jsonify({'status': 'error'}), 400
 
-    subjects_rows = db.execute("SELECT * FROM subjects").fetchall()
-    tasks_rows = db.execute("SELECT * FROM tasks WHERE week_number = ?", (selected_week,)).fetchall()
-    tasks_map = {row['subject_id']: {'topic': row['topic'], 'homework': row['homework']} for row in tasks_rows}
+    grades = db.execute("SELECT * FROM grades").fetchall()
+    classes = db.execute("SELECT * FROM classes WHERE grade_id = ?", (grade_id,)).fetchall() if grade_id else []
     
     schedule_data = {day: {p: {} for p in range(1, 9)} for day in DAYS_ORDER}
-    for sub in subjects_rows:
-        day = sub['day']
-        period = sub['period']
-        sub_id = sub['id']
-        task = tasks_map.get(sub_id, {'topic': '', 'homework': ''})
+    if class_id:
+        subjects_rows = db.execute("SELECT * FROM subjects WHERE class_id = ?", (class_id,)).fetchall()
+        tasks_rows = db.execute("SELECT * FROM tasks WHERE week_number = ?", (week,)).fetchall()
+        tasks_map = {row['subject_id']: row for row in tasks_rows}
         
-        if day in schedule_data and 1 <= period <= 8:
-            schedule_data[day][period] = {
-                'subject_id': sub_id,
-                'subject': sub['subject_name'],
-                'topic': task['topic'],
-                'homework': task['homework']
-            }
+        for sub in subjects_rows:
+            day = sub['day']
+            period = sub['period']
+            sub_id = sub['id']
+            task = tasks_map.get(sub_id, {})
             
-    return render_template('teacher.html', 
-                         selected_week=selected_week, 
-                         schedule=schedule_data, 
-                         days_order=DAYS_ORDER,
-                         days_ar=DAYS_AR,
-                         config=config)
+            if day in schedule_data and 1 <= period <= 8:
+                schedule_data[day][period] = {
+                    'subject_id': sub_id,
+                    'subject': task.get('override_subject') or sub['subject_name'],
+                    'original_subject': sub['subject_name'],
+                    'topic': task.get('topic', ''),
+                    'homework': task.get('homework', ''),
+                    'is_overridden': bool(task.get('override_subject'))
+                }
 
-@app.route('/student')
-def student():
+    return render_template('teacher.html', 
+                         grades=grades, classes=classes,
+                         selected_grade=grade_id, selected_class=class_id, selected_week=week,
+                         schedule=schedule_data, days_order=DAYS_ORDER, days_ar=DAYS_AR, config=config)
+
+@app.route('/student/<int:grade_id>/<int:class_id>')
+def student_view(grade_id, class_id):
     db = get_db()
     config = get_common_data()
     current_week = int(config.get('current_week', 1))
     
-    subjects_rows = db.execute("SELECT * FROM subjects").fetchall()
+    grade = db.execute("SELECT name FROM grades WHERE id = ?", (grade_id,)).fetchone()
+    cls = db.execute("SELECT name FROM classes WHERE id = ?", (class_id,)).fetchone()
+    
+    if not grade or not cls:
+        return "الصف أو الفصل غير موجود", 404
+
+    subjects_rows = db.execute("SELECT * FROM subjects WHERE class_id = ?", (class_id,)).fetchall()
     tasks_rows = db.execute("SELECT * FROM tasks WHERE week_number = ?", (current_week,)).fetchall()
-    tasks_map = {row['subject_id']: {'topic': row['topic'], 'homework': row['homework']} for row in tasks_rows}
+    tasks_map = {row['subject_id']: row for row in tasks_rows}
     
     schedule_data = {day: {p: {} for p in range(1, 9)} for day in DAYS_ORDER}
     for sub in subjects_rows:
         day = sub['day']
         period = sub['period']
         sub_id = sub['id']
-        task = tasks_map.get(sub_id, {'topic': '', 'homework': ''})
+        task = tasks_map.get(sub_id, {})
         
         if day in schedule_data and 1 <= period <= 8:
             schedule_data[day][period] = {
-                'subject': sub['subject_name'],
-                'topic': task['topic'],
-                'homework': task['homework']
+                'subject': task.get('override_subject') or sub['subject_name'],
+                'topic': task.get('topic', ''),
+                'homework': task.get('homework', '')
             }
             
     today = datetime.now()
-    days_map_full = {
-        'Sunday': 'الأحد', 'Monday': 'الاثنين', 'Tuesday': 'الثلاثاء',
-        'Wednesday': 'الأربعاء', 'Thursday': 'الخميس', 'Friday': 'الجمعة', 'Saturday': 'السبت'
-    }
+    days_map_full = {'Sunday':'الأحد','Monday':'الاثنين','Tuesday':'الثلاثاء','Wednesday':'الأربعاء','Thursday':'الخميس'}
     day_str_ar = days_map_full.get(today.strftime("%A"), "")
-    date_str = today.strftime("%Y-%m-%d")
     
     return render_template('student.html', 
-                         week=current_week, 
-                         schedule=schedule_data, 
-                         days_order=DAYS_ORDER,
-                         days_ar=DAYS_AR,
-                         date=date_str, 
-                         day=day_str_ar,
-                         config=config)
+                         grade_name=grade['name'], class_name=cls['name'],
+                         week=current_week, schedule=schedule_data, 
+                         days_order=DAYS_ORDER, days_ar=DAYS_AR,
+                         date=today.strftime("%Y-%m-%d"), day=day_str_ar, config=config)
 
 @app.route('/admin', methods=['GET', 'POST'])
 @admin_required
 def admin():
     db = get_db()
     if request.method == 'POST':
-        if 'update_week' in request.form:
-            new_week = request.form.get('current_week')
-            db.execute("UPDATE config SET value = ? WHERE key = 'current_week'", (new_week,))
-            flash('تم تحديث الأسبوع بنجاح')
+        if 'add_grade' in request.form:
+            db.execute("INSERT OR IGNORE INTO grades (name) VALUES (?)", (request.form.get('grade_name'),))
+        elif 'add_class' in request.form:
+            db.execute("INSERT OR IGNORE INTO classes (grade_id, name) VALUES (?, ?)", 
+                      (request.form.get('grade_id'), request.form.get('class_name')))
+        elif 'copy_class' in request.form:
+            from_id = request.form.get('from_class_id')
+            to_id = request.form.get('to_class_id')
+            if from_id and to_id and from_id != to_id:
+                # Clear target first
+                db.execute("DELETE FROM subjects WHERE class_id = ?", (to_id,))
+                # Copy subjects
+                db.execute('''INSERT INTO subjects (class_id, day, period, subject_name)
+                              SELECT ?, day, period, subject_name FROM subjects WHERE class_id = ?''', (to_id, from_id))
+        elif 'update_week' in request.form:
+            db.execute("UPDATE config SET value = ? WHERE key = 'current_week'", (request.form.get('current_week'),))
         elif 'update_exams' in request.form:
-            db.execute("UPDATE config SET value = ? WHERE key = 'exam_date_1'", (request.form.get('exam_date_1'),))
-            db.execute("UPDATE config SET value = ? WHERE key = 'exam_date_2'", (request.form.get('exam_date_2'),))
-            db.execute("UPDATE config SET value = ? WHERE key = 'exam_date_final'", (request.form.get('exam_date_final'),))
-            flash('تم تحديث مواعيد الاختبارات بنجاح')
+            for k in ['exam_date_1', 'exam_date_2', 'exam_date_final']:
+                db.execute("UPDATE config SET value = ? WHERE key = ?", (request.form.get(k), k))
         elif 'clear_exam' in request.form:
-            exam_key = request.form.get('exam_key')
-            db.execute("UPDATE config SET value = '' WHERE key = ?", (exam_key,))
-            flash('تم مسح تاريخ الاختبار بنجاح')
+            db.execute("UPDATE config SET value = '' WHERE key = ?", (request.form.get('exam_key'),))
         elif 'upload_logo' in request.form:
             file = request.files.get('logo')
-            if file and file.filename != '':
+            if file and file.filename:
                 filename = secure_filename(file.filename)
                 file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
                 db.execute("UPDATE config SET value = ? WHERE key = 'school_logo'", (filename,))
-                flash('تم رفع الشعار بنجاح')
         elif 'add_subject' in request.form:
-            day = request.form.get('day')
-            period = request.form.get('period')
-            subject_name = request.form.get('subject_name')
-            existing = db.execute("SELECT id FROM subjects WHERE day = ? AND period = ?", (day, period)).fetchone()
-            if existing:
-                db.execute("UPDATE subjects SET subject_name=? WHERE id=?", (subject_name, existing['id']))
-            else:
-                db.execute("INSERT INTO subjects (day, period, subject_name) VALUES (?, ?, ?)", (day, period, subject_name))
-            flash('تم حفظ المادة بنجاح')
+            cid, day, p, name = request.form.get('class_id'), request.form.get('day'), request.form.get('period'), request.form.get('subject_name')
+            existing = db.execute("SELECT id FROM subjects WHERE class_id=? AND day=? AND period=?", (cid, day, p)).fetchone()
+            if existing: db.execute("UPDATE subjects SET subject_name=? WHERE id=?", (name, existing['id']))
+            else: db.execute("INSERT INTO subjects (class_id, day, period, subject_name) VALUES (?, ?, ?, ?)", (cid, day, p, name))
         elif 'delete_subject' in request.form:
-            sub_id = request.form.get('subject_id')
-            db.execute("DELETE FROM subjects WHERE id = ?", (sub_id,))
-            db.execute("DELETE FROM tasks WHERE subject_id = ?", (sub_id,))
-            flash('تم حذف المادة بنجاح')
+            sid = request.form.get('subject_id')
+            db.execute("DELETE FROM subjects WHERE id=?", (sid,))
+            db.execute("DELETE FROM tasks WHERE subject_id=?", (sid,))
         
         db.commit()
-        return redirect(url_for('admin'))
+        return redirect(url_for('admin', grade_id=request.form.get('grade_id'), class_id=request.form.get('class_id')))
 
     config = get_common_data()
-    subjects = db.execute("SELECT * FROM subjects ORDER BY day, period").fetchall()
-    return render_template('admin.html', config=config, days_ar=DAYS_AR, days_order=DAYS_ORDER, entries=subjects)
+    grades = db.execute("SELECT * FROM grades").fetchall()
+    selected_grade = request.args.get('grade_id', type=int)
+    classes = db.execute("SELECT * FROM classes WHERE grade_id = ?", (selected_grade,)).fetchall() if selected_grade else []
+    selected_class = request.args.get('class_id', type=int)
+    subjects = db.execute("SELECT * FROM subjects WHERE class_id = ?", (selected_class,)).fetchall() if selected_class else []
+    all_classes = db.execute("SELECT c.*, g.name as gname FROM classes c JOIN grades g ON c.grade_id = g.id").fetchall()
+    
+    return render_template('admin.html', config=config, grades=grades, classes=classes, all_classes=all_classes,
+                         selected_grade=selected_grade, selected_class=selected_class,
+                         entries=subjects, days_ar=DAYS_AR, days_order=DAYS_ORDER)
 
 if __name__ == '__main__':
     init_db()

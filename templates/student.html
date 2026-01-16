@@ -1,88 +1,62 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>عرض الطالب - نظام الخطة الدراسية</title>
+    <meta charset="UTF-8"><title>عرض الطالب</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background: #f4f4f9; color: #333; }
-        .header { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; text-align: center; }
-        .table-container { background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; min-width: 800px; }
-        th, td { border: 1px solid #e0e0e0; padding: 10px; text-align: center; }
+        body { font-family: sans-serif; margin: 20px; background: #f4f4f9; }
+        .header { background: #fff; padding: 20px; border-radius: 8px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; }
+        .timer-bar { display: flex; gap: 10px; margin-bottom: 15px; }
+        .timer-item { background: #34495e; color: #fff; padding: 10px; border-radius: 4px; flex: 1; text-align: center; display: none; }
+        table { width: 100%; border-collapse: collapse; background: #fff; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
         th { background: #34495e; color: #fff; }
-        .countdowns { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; }
-        .countdown-item { background: #34495e; color: #fff; padding: 10px; border-radius: 5px; flex: 1; text-align: center; font-size: 0.9em; display: none; }
         .logo { max-width: 100px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
     <div id="capture">
         <div class="header">
-            {% if config.school_logo %}<img src="/static/uploads/{{ config.school_logo }}" class="logo">{% endif %}
-            <h1>خطة الدراسة الأسبوعية - الأسبوع {{ week }}</h1>
-            <p>{{ day }}، {{ date }}</p>
+            {% if config.school_logo %}<img src="/static/uploads/{{config.school_logo}}" class="logo">{% endif %}
+            <h1>{{grade_name}} - فصل {{class_name}}</h1>
+            <h3>الأسبوع {{week}}</h3>
+            <p>{{day}}، {{date}}</p>
         </div>
-
-        <div class="countdowns">
-            {% if config.exam_date_1 %}<div class="countdown-item" data-date="{{ config.exam_date_1 }}">الفترية الأولى بعد: <span class="timer">--</span></div>{% endif %}
-            {% if config.exam_date_2 %}<div class="countdown-item" data-date="{{ config.exam_date_2 }}">الفترية الثانية بعد: <span class="timer">--</span></div>{% endif %}
-            {% if config.exam_date_final %}<div class="countdown-item" data-date="{{ config.exam_date_final }}">النهائية بعد: <span class="timer">--</span></div>{% endif %}
+        <div class="timer-bar">
+            {% if config.exam_date_1 %}<div class="timer-item" data-date="{{config.exam_date_1}}">الفترية الأولى: <span class="t"></span></div>{% endif %}
+            {% if config.exam_date_2 %}<div class="timer-item" data-date="{{config.exam_date_2}}">الفترية الثانية: <span class="t"></span></div>{% endif %}
+            {% if config.exam_date_final %}<div class="timer-item" data-date="{{config.exam_date_final}}">النهائية: <span class="t"></span></div>{% endif %}
         </div>
-
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>اليوم</th>
-                        {% for p in range(1, 9) %}<th>الحصة {{ p }}</th>{% endfor %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for d in days_order %}
-                    <tr>
-                        <td style="background:#ecf0f1; font-weight:bold;">{{ days_ar[d] }}</td>
-                        {% for p in range(1, 9) %}
-                        <td>
-                            {% set cell = schedule[d][p] %}
-                            {% if cell.subject %}
-                            <div style="font-weight:bold; color:#2980b9;">{{ cell.subject }}</div>
-                            <div style="font-size:0.9em;">{{ cell.topic }}</div>
-                            {% if cell.homework %}<div style="font-size:0.8em; color:#c0392b;">الواجب: {{ cell.homework }}</div>{% endif %}
-                            {% else %}-{% endif %}
-                        </td>
-                        {% endfor %}
-                    </tr>
+        <table>
+            <thead><tr><th>اليوم</th>{% for p in range(1, 9) %}<th>ح {{p}}</th>{% endfor %}</tr></thead>
+            <tbody>
+                {% for d in days_order %}
+                <tr>
+                    <td style="background:#ecf0f1; font-weight:bold;">{{days_ar[d]}}</td>
+                    {% for p in range(1, 9) %}
+                    <td>
+                        {% set c = schedule[d][p] %}
+                        {% if c.subject %}
+                        <div style="font-weight:bold; color:#2980b9;">{{c.subject}}</div>
+                        <div style="font-size:0.9em;">{{c.topic}}</div>
+                        {% if c.homework %}<div style="color:red; font-size:0.8em;">{{c.homework}}</div>{% endif %}
+                        {% else %}-{% endif %}
+                    </td>
                     {% endfor %}
-                </tbody>
-            </table>
-        </div>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
-
     <div style="text-align:center; margin-top:20px;">
-        <button onclick="html2pdf().from(document.getElementById('capture')).save('schedule.pdf')">PDF</button>
-        <button onclick="html2canvas(document.getElementById('capture')).then(c=>{const l=document.createElement('a');l.download='schedule.png';l.href=c.toDataURL();l.click();})">صورة</button>
-        <a href="/" style="margin-left:15px; text-decoration:none; color:#3498db;">العودة</a>
+        <button onclick="html2pdf().from(document.getElementById('capture')).save('schedule.pdf')">تحميل PDF</button>
+        <a href="/">العودة</a>
     </div>
-
     <script>
         function update() {
-            document.querySelectorAll('.countdown-item').forEach(i => {
-                const targetStr = i.dataset.date;
-                if (!targetStr) {
-                    i.style.display = 'none';
-                    return;
-                }
-                const t = new Date(targetStr).getTime() - new Date().getTime();
-                if (t > 0) {
-                    i.querySelector('.timer').textContent = Math.floor(t / 86400000) + ' يوم';
-                    i.style.display = 'block';
-                } else {
-                    i.querySelector('.timer').textContent = 'انتهى';
-                    i.style.display = 'block';
-                }
+            document.querySelectorAll('.timer-item').forEach(i => {
+                const t = new Date(i.dataset.date).getTime() - new Date().getTime();
+                if (t > 0) { i.querySelector('.t').textContent = Math.floor(t/86400000) + ' يوم'; i.style.display = 'block'; }
             });
         }
         setInterval(update, 1000); update();
