@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, g, session, flash
+from flask import Flask, render_template, request, redirect, url_for, g, session, flash, jsonify
 import sqlite3
 import os
 from datetime import datetime
@@ -8,7 +8,6 @@ app = Flask(__name__)
 app.secret_key = os.getenv('SESSION_SECRET', 'dev-secret-key')
 DATABASE = 'school.db'
 
-# Mapping of English days to Arabic
 DAYS_AR = {
     'Sunday': 'الأحد',
     'Monday': 'الاثنين',
@@ -53,9 +52,7 @@ def init_db():
                 homework TEXT
             )
         ''')
-        # Default current week if not set
         cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('current_week', '1')")
-        # Default passwords for roles (Admin/Teacher)
         cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('admin_password', 'admin123')")
         cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('teacher_password', 'teacher123')")
         db.commit()
@@ -151,7 +148,6 @@ def admin():
             period = request.form.get('period')
             subject = request.form.get('subject')
             
-            # Admin only sets/updates the basic subject
             existing = db.execute("SELECT id FROM schedule WHERE week_number = ? AND day = ? AND period = ?", 
                                 (week, day, period)).fetchone()
             if existing:
@@ -168,7 +164,6 @@ def admin():
         return redirect(url_for('admin'))
 
     current_week = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()['value']
-    # Fetch all entries for the current week to show in list/skeleton
     entries = db.execute("SELECT * FROM schedule WHERE week_number = ? ORDER BY day, period", (current_week,)).fetchall()
     return render_template('admin.html', current_week=current_week, days_ar=DAYS_AR, days_order=DAYS_ORDER, entries=entries)
 
@@ -176,21 +171,37 @@ def admin():
 @login_required(role='teacher')
 def teacher_portal():
     db = get_db()
-    current_week = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()['value']
-    selected_week = request.args.get('week', current_week)
+    config_week = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()['value']
+    selected_week = request.args.get('week', config_week)
     
     if request.method == 'POST':
-        entry_id = request.form.get('entry_id')
-        topic = request.form.get('topic')
-        homework = request.form.get('homework')
-        
-        # Teacher only updates topic and homework for existing subjects
-        db.execute("UPDATE schedule SET topic=?, homework=? WHERE id=?", (topic, homework, entry_id))
-        db.commit()
-        return redirect(url_for('teacher_portal', week=selected_week))
+        # Bulk save logic
+        data = request.json
+        if data and 'entries' in data:
+            for entry in data['entries']:
+                db.execute("UPDATE schedule SET topic=?, homework=? WHERE id=?", 
+                          (entry.get('topic'), entry.get('homework'), entry.get('id')))
+            db.commit()
+            return jsonify({'status': 'success'})
+        return jsonify({'status': 'error'}), 400
 
-    entries = db.execute("SELECT * FROM schedule WHERE week_number = ? ORDER BY day, period", (selected_week,)).fetchall()
-    return render_template('teacher.html', selected_week=selected_week, entries=entries, days_ar=DAYS_AR)
+    rows = db.execute("SELECT * FROM schedule WHERE week_number = ?", (selected_week,)).fetchall()
+    
+    schedule_data = {day: {p: {} for p in range(1, 9)} for day in DAYS_ORDER}
+    for row in rows:
+        if row['day'] in schedule_data and 1 <= row['period'] <= 8:
+            schedule_data[row['day']][row['period']] = {
+                'id': row['id'],
+                'subject': row['subject'],
+                'topic': row['topic'],
+                'homework': row['homework']
+            }
+            
+    return render_template('teacher.html', 
+                         selected_week=int(selected_week), 
+                         schedule=schedule_data, 
+                         days_order=DAYS_ORDER,
+                         days_ar=DAYS_AR)
 
 if __name__ == '__main__':
     if not os.path.exists(DATABASE):

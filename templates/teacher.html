@@ -3,64 +3,135 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>لوحة المعلم - إدارة الدروس والواجبات</title>
+    <title>لوحة المعلم - تعديل الخطة</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background: #f4f4f9; color: #333; }
-        .card { background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 25px; }
-        h1 { color: #2c3e50; border-bottom: 2px solid #27ae60; padding-bottom: 10px; margin-bottom: 20px; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 8px; font-weight: bold; color: #34495e; }
-        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 1em; }
-        button { background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        button:hover { background: #219150; }
-        .entry-list { display: grid; gap: 15px; }
-        .entry-item { border: 1px solid #e0e0e0; padding: 15px; border-radius: 6px; background: #fafafa; }
-        .entry-header { display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-        .subject-tag { font-weight: bold; color: #2980b9; }
-        .nav { margin-top: 30px; text-align: center; display: flex; justify-content: center; gap: 20px; }
-        .btn-link { color: #3498db; text-decoration: none; font-weight: bold; }
+        .header { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .flex-header { display: flex; justify-content: space-between; align-items: center; }
+        h1 { margin: 0; color: #2c3e50; font-size: 1.5em; }
+        
+        .controls { background: #fff; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; gap: 20px; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 1em; }
+        .btn-save { background: #27ae60; color: white; border: none; padding: 10px 25px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: background 0.3s; }
+        .btn-save:hover { background: #219150; }
+        
+        .table-container { background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; min-width: 800px; }
+        th, td { border: 1px solid #e0e0e0; padding: 8px; text-align: center; vertical-align: top; }
+        th { background: #34495e; color: #fff; }
+        .day-col { background: #ecf0f1; font-weight: bold; width: 100px; vertical-align: middle; }
+        
+        .entry-box { display: flex; flex-direction: column; gap: 5px; text-align: right; }
+        .subject-display { font-weight: bold; color: #2980b9; margin-bottom: 5px; text-align: center; border-bottom: 1px solid #eee; padding-bottom: 3px; }
+        
+        input.edit-topic, textarea.edit-hw { width: 100%; border: 1px solid #eee; border-radius: 3px; padding: 5px; font-size: 0.85em; box-sizing: border-box; font-family: inherit; }
+        input.edit-topic:focus, textarea.edit-hw:focus { border-color: #3498db; outline: none; background: #fffef0; }
+        textarea.edit-hw { resize: vertical; min-height: 40px; }
+        
+        .empty-cell { color: #ccc; font-style: italic; display: flex; align-items: center; justify-content: center; height: 60px; }
+        
+        .nav-footer { margin-top: 25px; display: flex; justify-content: center; gap: 20px; }
+        .btn-secondary { padding: 8px 15px; color: #7f8c8d; text-decoration: none; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9em; }
+        .btn-secondary:hover { background: #eee; }
+        .btn-admin-link { background: #34495e; color: #fff; border: none; padding: 8px 15px; border-radius: 4px; text-decoration: none; font-size: 0.9em; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h1>لوحة المعلم - الأسبوع {{ selected_week }}</h1>
-        <form method="GET" style="margin-bottom: 20px; display: flex; gap: 10px; align-items: flex-end;">
-            <div style="flex: 1;">
-                <label>اختر الأسبوع:</label>
-                <input type="number" name="week" value="{{ selected_week }}" min="1" max="19">
-            </div>
-            <button type="submit" style="background: #3498db;">عرض</button>
-        </form>
-
-        <div class="entry-list">
-            {% for entry in entries %}
-            <div class="entry-item">
-                <form method="POST">
-                    <input type="hidden" name="entry_id" value="{{ entry.id }}">
-                    <div class="entry-header">
-                        <span class="subject-tag">{{ entry.subject }}</span>
-                        <span>{{ days_ar[entry.day] }} - الحصة {{ entry.period }}</span>
-                    </div>
-                    <div class="form-group">
-                        <label>الموضوع:</label>
-                        <input type="text" name="topic" value="{{ entry.topic or '' }}" required>
-                    </div>
-                    <div class="form-group">
-                        <label>الواجب:</label>
-                        <textarea name="homework" rows="2">{{ entry.homework or '' }}</textarea>
-                    </div>
-                    <button type="submit">تحديث</button>
-                </form>
-            </div>
-            {% else %}
-            <p style="text-align: center; color: #95a5a6;">لا توجد مواد مضافة لهذا الأسبوع من قبل المسؤول بعد.</p>
-            {% endfor %}
+    <div class="header">
+        <div class="flex-header">
+            <h1>لوحة تعديل المعلم - الأسبوع الدراسي</h1>
+            <a href="/admin" class="btn-admin-link">لوحة المدير ⚙️</a>
         </div>
     </div>
 
-    <div class="nav">
-        <a href="/" class="btn-link">← القائمة الرئيسية</a>
-        <a href="/logout" class="btn-link" style="color: #e74c3c;">تسجيل الخروج</a>
+    <div class="controls">
+        <label>عرض وتعديل الأسبوع:</label>
+        <select id="week-selector" onchange="switchWeek(this.value)">
+            {% for w in range(1, 20) %}
+            <option value="{{ w }}" {% if w == selected_week %}selected{% endif %}>الأسبوع {{ w }}</option>
+            {% endfor %}
+        </select>
+        <button type="button" class="btn-save" onclick="saveAll()">حفظ جميع التغييرات</button>
+        <span id="save-status" style="margin-right: auto; font-weight: bold;"></span>
     </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>اليوم / الحصة</th>
+                    {% for p in range(1, 9) %}
+                    <th>الحصة {{ p }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for day_eng in days_order %}
+                <tr>
+                    <td class="day-col">{{ days_ar[day_eng] }}</td>
+                    {% for p in range(1, 9) %}
+                    <td>
+                        {% set cell = schedule[day_eng][p] %}
+                        {% if cell.id %}
+                        <div class="entry-box" data-id="{{ cell.id }}">
+                            <div class="subject-display">{{ cell.subject }}</div>
+                            <input type="text" class="edit-topic" placeholder="الموضوع..." value="{{ cell.topic or '' }}">
+                            <textarea class="edit-hw" placeholder="الواجب المنزلي...">{{ cell.homework or '' }}</textarea>
+                        </div>
+                        {% else %}
+                        <div class="empty-cell">غير محدد</div>
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="nav-footer">
+        <a href="/" class="btn-secondary">القائمة الرئيسية</a>
+        <a href="/logout" class="btn-secondary" style="color: #c0392b;">تسجيل الخروج</a>
+    </div>
+
+    <script>
+        function switchWeek(week) {
+            window.location.href = '/teacher?week=' + week;
+        }
+
+        async function saveAll() {
+            const status = document.getElementById('save-status');
+            status.textContent = 'جاري الحفظ...';
+            status.style.color = '#3498db';
+
+            const entries = [];
+            document.querySelectorAll('.entry-box').forEach(box => {
+                entries.push({
+                    id: box.getAttribute('data-id'),
+                    topic: box.querySelector('.edit-topic').value,
+                    homework: box.querySelector('.edit-hw').value
+                });
+            });
+
+            try {
+                const response = await fetch('/teacher?week={{ selected_week }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ entries: entries })
+                });
+
+                if (response.ok) {
+                    status.textContent = 'تم الحفظ بنجاح! ✓';
+                    status.style.color = '#27ae60';
+                    setTimeout(() => { status.textContent = ''; }, 3000);
+                } else {
+                    throw new Error();
+                }
+            } catch (e) {
+                status.textContent = 'حدث خطأ أثناء الحفظ! ✗';
+                status.style.color = '#c0392b';
+            }
+        }
+    </script>
 </body>
 </html>
