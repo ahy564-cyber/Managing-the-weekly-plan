@@ -1,131 +1,97 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8"><title>لوحة المدير</title>
+    <meta charset="UTF-8">
+    <title>لوحة المدير</title>
     <style>
-        body { font-family: sans-serif; margin: 20px; background: #f4f4f9; }
-        .card { background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; }
-        .form-group { margin-bottom: 10px; }
-        label { display: block; font-weight: bold; margin-bottom: 5px; }
-        input, select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
-        button { background: #3498db; color: #fff; border: none; padding: 10px; border-radius: 4px; cursor: pointer; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 20px; background: #f0f2f5; }
+        .card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h2 { border-bottom: 2px solid #007bff; padding-bottom: 10px; }
+        .form-group { margin-bottom: 15px; }
+        input, select { padding: 8px; width: 100%; box-sizing: border-box; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
-        .alert { background: #d4edda; padding: 10px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
-    {% with msgs = get_flashed_messages() %}{% for m in msgs %}<div class="alert">{{m}}</div>{% endfor %}{% endwith %}
-
     <div class="card">
-        <h2>إدارة الصفوف والفصول</h2>
-        <div class="grid">
-            <form method="POST">
-                <label>إضافة صف (Grade):</label>
-                <input type="text" name="grade_name" placeholder="مثال: الصف الأول" required>
-                <button type="submit" name="add_grade" style="margin-top:5px;">إضافة صف</button>
-            </form>
-            <form method="POST">
-                <label>إضافة فصل لصف محدد:</label>
-                <select name="grade_id" required>
-                    {% for g in grades %}<option value="{{g.id}}">{{g.name}}</option>{% endfor %}
-                </select>
-                <input type="text" name="class_name" placeholder="مثال: 101" required style="margin-top:5px;">
-                <button type="submit" name="add_class" style="margin-top:5px;">إضافة فصل</button>
-            </form>
-        </div>
-    </div>
-
-    <div class="card">
-        <h2>نسخ جدول من فصل لآخر</h2>
-        <form method="POST">
-            <div class="grid">
-                <div class="form-group">
-                    <label>من فصل:</label>
-                    <select name="from_class_id">
-                        {% for c in all_classes %}<option value="{{c.id}}">{{c.gname}} - {{c.name}}</option>{% endfor %}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>إلى فصل:</label>
-                    <select name="to_class_id">
-                        {% for c in all_classes %}<option value="{{c.id}}">{{c.gname}} - {{c.name}}</option>{% endfor %}
-                    </select>
-                </div>
-            </div>
-            <button type="submit" name="copy_class">نسخ الجدول كاملاً</button>
-        </form>
-    </div>
-
-    <div class="card">
-        <h2>إدارة المواد للفصول</h2>
-        <div class="grid">
-            <div class="form-group">
-                <label>اختر الصف:</label>
-                <select onchange="location.href='/admin?grade_id='+this.value">
-                    <option value="">-- اختر --</option>
-                    {% for g in grades %}<option value="{{g.id}}" {% if selected_grade == g.id %}selected{% endif %}>{{g.name}}</option>{% endfor %}
-                </select>
-            </div>
-            {% if selected_grade %}
-            <div class="form-group">
-                <label>اختر الفصل:</label>
-                <select onchange="location.href='/admin?grade_id={{selected_grade}}&class_id='+this.value">
-                    <option value="">-- اختر --</option>
-                    {% for c in classes %}<option value="{{c.id}}" {% if selected_class == c.id %}selected{% endif %}>{{c.name}}</option>{% endfor %}
-                </select>
-            </div>
-            {% endif %}
-        </div>
-
-        {% if selected_class %}
-        <form method="POST" style="margin-top:15px;">
-            <input type="hidden" name="grade_id" value="{{selected_grade}}">
-            <input type="hidden" name="class_id" value="{{selected_class}}">
-            <div class="grid">
-                <select name="day">{% for d in days_order %}<option value="{{d}}">{{days_ar[d]}}</option>{% endfor %}</select>
-                <input type="number" name="period" min="1" max="8" placeholder="الحصة" required>
-                <input type="text" name="subject_name" placeholder="المادة" required>
-            </div>
-            <button type="submit" name="add_subject" style="margin-top:10px;">حفظ المادة للفصل</button>
-        </form>
-
-        <table>
-            <thead><tr><th>اليوم</th><th>الحصة</th><th>المادة</th><th>حذف</th></tr></thead>
-            <tbody>
-                {% for e in entries %}
-                <tr><td>{{days_ar[e.day]}}</td><td>{{e.period}}</td><td>{{e.subject_name}}</td>
-                <td><form method="POST"><input type="hidden" name="subject_id" value="{{e.id}}">
-                <button type="submit" name="delete_subject" style="background:red;">حذف</button></form></td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-
-        <div style="margin-top:15px; background:#eee; padding:10px; border-radius:4px;">
-            <strong>رابط الطالب لهذا الفصل:</strong><br>
-            <input type="text" readonly value="{{request.host_url}}student/{{selected_grade}}/{{selected_class}}" style="width:80%;">
-        </div>
-        {% endif %}
-    </div>
-
-    <div class="card">
-        <h2>الإعدادات العامة</h2>
-        <form method="POST">
-            <label>الأسبوع الحالي:</label>
-            <input type="number" name="current_week" value="{{config.current_week}}">
-            <button type="submit" name="update_week" style="margin-top:5px;">تحديث</button>
+        <h2>الإعدادات العامة وشعار المدرسة</h2>
+        <form method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="upload_logo">
+            <input type="file" name="logo">
+            <button type="submit">رفع الشعار</button>
         </form>
         <hr>
         <form method="POST">
-            <div class="grid">
-                <input type="date" name="exam_date_1" value="{{config.exam_date_1}}">
-                <input type="date" name="exam_date_2" value="{{config.exam_date_2}}">
-                <input type="date" name="exam_date_final" value="{{config.exam_date_final}}">
+            <input type="hidden" name="action" value="update_settings">
+            <div class="form-group">
+                <label>الأسبوع الحالي:</label>
+                <input type="number" name="current_week" value="{{ settings.current_week }}">
             </div>
-            <button type="submit" name="update_exams" style="margin-top:5px;">حفظ التواريخ</button>
+            <div class="form-group">
+                <label>تاريخ الفترة الأولى:</label>
+                <input type="date" name="period1_date" value="{{ settings.period1_date }}">
+            </div>
+            <div class="form-group">
+                <label>تاريخ الفترة الثانية:</label>
+                <input type="date" name="period2_date" value="{{ settings.period2_date }}">
+            </div>
+            <div class="form-group">
+                <label>تاريخ النهائي:</label>
+                <input type="date" name="final_date" value="{{ settings.final_date }}">
+            </div>
+            <button type="submit">حفظ الإعدادات</button>
         </form>
     </div>
-    <div style="text-align:center;"><a href="/">العودة للوحة المعلم</a></div>
+
+    <div class="card">
+        <h2>إدارة الصفوف (Grades)</h2>
+        <form method="POST">
+            <input type="hidden" name="action" value="add_grade">
+            <input type="text" name="name" placeholder="اسم الصف" required>
+            <button type="submit">إضافة صف</button>
+        </form>
+        <ul>
+            {% for g in grades %}<li>{{ g.name }}</li>{% endfor %}
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>إدارة الفصول (Classes)</h2>
+        <form method="POST">
+            <input type="hidden" name="action" value="add_class">
+            <select name="grade_id">
+                {% for g in grades %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}
+            </select>
+            <input type="text" name="name" placeholder="اسم الفصل" required>
+            <button type="submit">إضافة فصل</button>
+        </form>
+        <ul>
+            {% for c in classes %}<li>{{ c.grade_name }} - {{ c.name }}</li>{% endfor %}
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>إدارة المواد الثابتة (Fixed Subjects)</h2>
+        <form method="POST">
+            <input type="hidden" name="action" value="add_subject">
+            <select name="class_id">
+                {% for c in classes %}<option value="{{ c.id }}">{{ c.grade_name }} - {{ c.name }}</option>{% endfor %}
+            </select>
+            <select name="day">
+                {% for en, ar in days_ar.items() %}<option value="{{ en }}">{{ ar }}</option>{% endfor %}
+            </select>
+            <input type="number" name="period" min="1" max="8" placeholder="الحصة" required>
+            <input type="text" name="name" placeholder="اسم المادة" required>
+            <button type="submit">إضافة مادة</button>
+        </form>
+        <table>
+            <tr><th>الفصل</th><th>اليوم</th><th>الحصة</th><th>المادة</th></tr>
+            {% for s in subjects %}
+            <tr><td>{{ s.class_name }}</td><td>{{ days_ar[s.day] }}</td><td>{{ s.period }}</td><td>{{ s.name }}</td></tr>
+            {% endfor %}
+        </table>
+    </div>
 </body>
 </html>
