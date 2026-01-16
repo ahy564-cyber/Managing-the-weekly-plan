@@ -5,7 +5,7 @@ from datetime import datetime
 from functools import wraps
 
 app = Flask(__name__)
-app.secret_key = os.getenv('SESSION_SECRET', 'dev-secret-key')
+app.secret_key = os.getenv('SESSION_SECRET', 'dev-secret-key-12345')
 DATABASE = 'school.db'
 
 DAYS_AR = {
@@ -52,6 +52,7 @@ def init_db():
                 homework TEXT
             )
         ''')
+        # Ensure default values exist
         cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('current_week', '1')")
         cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('admin_password', 'admin123')")
         db.commit()
@@ -69,9 +70,11 @@ def login():
     if request.method == 'POST':
         password = request.form.get('password')
         db = get_db()
+        # Defensive check for password
         row = db.execute("SELECT value FROM config WHERE key = 'admin_password'").fetchone()
+        admin_pass = row['value'] if row else 'admin123'
         
-        if row and password == row['value']:
+        if password == admin_pass:
             session['user_role'] = 'admin'
             return redirect(url_for('admin'))
         else:
@@ -87,7 +90,7 @@ def logout():
 @app.route('/', methods=['GET', 'POST'])
 def index():
     db = get_db()
-    # The home page is now the teacher's editable table
+    # The home page is the teacher's editable table
     row = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()
     config_week = row['value'] if row else '1'
     selected_week = request.args.get('week', config_week)
@@ -123,8 +126,8 @@ def index():
 @app.route('/student')
 def student():
     db = get_db()
-    current_week_row = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()
-    current_week = int(current_week_row['value']) if current_week_row else 1
+    row = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()
+    current_week = int(row['value']) if row else 1
     
     rows = db.execute("SELECT * FROM schedule WHERE week_number = ?", (current_week,)).fetchall()
     
@@ -190,6 +193,5 @@ def admin():
     return render_template('admin.html', current_week=current_week, days_ar=DAYS_AR, days_order=DAYS_ORDER, entries=entries)
 
 if __name__ == '__main__':
-    if not os.path.exists(DATABASE):
-        init_db()
+    init_db()
     app.run(host='0.0.0.0', port=5000, debug=True)
