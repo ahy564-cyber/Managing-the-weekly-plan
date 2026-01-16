@@ -3,56 +3,108 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>لوحة المعلم - تعديل الخطة</title>
+    <title>لوحة المعلم - تعديل خطة الدراسة</title>
     <style>
+        /* Exact copy of student view styles for visual match */
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background: #f4f4f9; color: #333; }
-        .header { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .flex-header { display: flex; justify-content: space-between; align-items: center; }
-        h1 { margin: 0; color: #2c3e50; font-size: 1.5em; }
+        .header { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; text-align: center; }
+        h1 { margin: 0; color: #2c3e50; font-size: 1.8em; }
+        .info { color: #7f8c8d; margin-top: 10px; font-size: 1.1em; }
         
-        .controls { background: #fff; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; gap: 20px; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 1em; }
-        .btn-save { background: #27ae60; color: white; border: none; padding: 10px 25px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: background 0.3s; }
-        .btn-save:hover { background: #219150; }
+        .controls-bar { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            background: #fff; 
+            padding: 15px 20px; 
+            border-radius: 8px; 
+            margin-bottom: 20px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .week-select-group { display: flex; align-items: center; gap: 10px; }
+        select { padding: 8px 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 1em; background: #fff; }
         
+        .btn-save { 
+            background: #27ae60; 
+            color: white; 
+            border: none; 
+            padding: 10px 25px; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            font-size: 1em;
+            transition: all 0.2s;
+            box-shadow: 0 2px 4px rgba(39, 174, 96, 0.2);
+        }
+        .btn-save:hover { background: #219150; transform: translateY(-1px); }
+        .btn-save:active { transform: translateY(0); }
+
         .table-container { background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; min-width: 800px; }
-        th, td { border: 1px solid #e0e0e0; padding: 8px; text-align: center; vertical-align: top; }
-        th { background: #34495e; color: #fff; }
-        .day-col { background: #ecf0f1; font-weight: bold; width: 100px; vertical-align: middle; }
+        table { width: 100%; border-collapse: collapse; min-width: 900px; }
+        th, td { border: 1px solid #e0e0e0; padding: 10px; text-align: center; vertical-align: middle; }
         
-        .entry-box { display: flex; flex-direction: column; gap: 5px; text-align: right; }
-        .subject-display { font-weight: bold; color: #2980b9; margin-bottom: 5px; text-align: center; border-bottom: 1px solid #eee; padding-bottom: 3px; }
+        th { background: #34495e; color: #fff; font-weight: 600; padding: 12px; }
+        .day-col { background: #ecf0f1; font-weight: bold; color: #2c3e50; width: 100px; }
         
-        input.edit-topic, textarea.edit-hw { width: 100%; border: 1px solid #eee; border-radius: 3px; padding: 5px; font-size: 0.85em; box-sizing: border-box; font-family: inherit; }
-        input.edit-topic:focus, textarea.edit-hw:focus { border-color: #3498db; outline: none; background: #fffef0; }
-        textarea.edit-hw { resize: vertical; min-height: 40px; }
+        .entry-editor { display: flex; flex-direction: column; gap: 6px; text-align: right; }
+        .subject-label { font-weight: bold; color: #2980b9; border-bottom: 1px solid #f0f0f0; padding-bottom: 4px; margin-bottom: 2px; }
         
-        .empty-cell { color: #ccc; font-style: italic; display: flex; align-items: center; justify-content: center; height: 60px; }
+        .input-field { 
+            width: 100%; 
+            border: 1px solid #eee; 
+            border-radius: 4px; 
+            padding: 6px; 
+            font-size: 0.9em; 
+            box-sizing: border-box; 
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+        .input-field:focus { border-color: #3498db; outline: none; background: #fffdf0; }
+        .textarea-field { resize: vertical; min-height: 45px; }
         
-        .nav-footer { margin-top: 25px; display: flex; justify-content: center; gap: 20px; }
-        .btn-secondary { padding: 8px 15px; color: #7f8c8d; text-decoration: none; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9em; }
-        .btn-secondary:hover { background: #eee; }
-        .btn-admin-link { background: #34495e; color: #fff; border: none; padding: 8px 15px; border-radius: 4px; text-decoration: none; font-size: 0.9em; }
+        .empty-cell { color: #bdc3c7; font-size: 1.1em; padding: 20px 0; }
+        
+        #save-status { font-weight: bold; margin-right: 15px; font-size: 0.9em; }
+
+        .admin-access { position: fixed; bottom: 20px; left: 20px; }
+        .btn-admin { 
+            background: #34495e; 
+            color: #fff; 
+            text-decoration: none; 
+            padding: 10px 15px; 
+            border-radius: 50px; 
+            font-size: 0.85em; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-admin:hover { background: #2c3e50; }
+
+        .nav-links { margin-top: 30px; text-align: center; }
+        .nav-links a { color: #7f8c8d; text-decoration: none; margin: 0 15px; font-size: 0.95em; }
+        .nav-links a:hover { color: #34495e; text-decoration: underline; }
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="flex-header">
-            <h1>لوحة تعديل المعلم - الأسبوع الدراسي</h1>
-            <a href="/admin" class="btn-admin-link">لوحة المدير ⚙️</a>
-        </div>
+        <h1>لوحة المعلم - تعديل خطة الدراسة</h1>
+        <div class="info">تعديل مواضيع الدروس والواجبات المنزلية</div>
     </div>
 
-    <div class="controls">
-        <label>عرض وتعديل الأسبوع:</label>
-        <select id="week-selector" onchange="switchWeek(this.value)">
-            {% for w in range(1, 20) %}
-            <option value="{{ w }}" {% if w == selected_week %}selected{% endif %}>الأسبوع {{ w }}</option>
-            {% endfor %}
-        </select>
-        <button type="button" class="btn-save" onclick="saveAll()">حفظ جميع التغييرات</button>
-        <span id="save-status" style="margin-right: auto; font-weight: bold;"></span>
+    <div class="controls-bar">
+        <div class="week-select-group">
+            <label for="week-selector">اختر الأسبوع للعرض والتعديل:</label>
+            <select id="week-selector" onchange="switchWeek(this.value)">
+                {% for w in range(1, 20) %}
+                <option value="{{ w }}" {% if w == selected_week %}selected{% endif %}>الأسبوع {{ w }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <span id="save-status"></span>
+            <button type="button" class="btn-save" onclick="saveAll()">حفظ التغييرات للأسبوع {{ selected_week }}</button>
+        </div>
     </div>
 
     <div class="table-container">
@@ -73,13 +125,13 @@
                     <td>
                         {% set cell = schedule[day_eng][p] %}
                         {% if cell.id %}
-                        <div class="entry-box" data-id="{{ cell.id }}">
-                            <div class="subject-display">{{ cell.subject }}</div>
-                            <input type="text" class="edit-topic" placeholder="الموضوع..." value="{{ cell.topic or '' }}">
-                            <textarea class="edit-hw" placeholder="الواجب المنزلي...">{{ cell.homework or '' }}</textarea>
+                        <div class="entry-editor" data-id="{{ cell.id }}">
+                            <div class="subject-label">{{ cell.subject }}</div>
+                            <input type="text" class="input-field edit-topic" placeholder="الموضوع (اختياري)..." value="{{ cell.topic or '' }}">
+                            <textarea class="input-field textarea-field edit-hw" placeholder="الواجب المنزلي (اختياري)...">{{ cell.homework or '' }}</textarea>
                         </div>
                         {% else %}
-                        <div class="empty-cell">غير محدد</div>
+                        <div class="empty-cell">-</div>
                         {% endif %}
                     </td>
                     {% endfor %}
@@ -89,9 +141,16 @@
         </table>
     </div>
 
-    <div class="nav-footer">
-        <a href="/" class="btn-secondary">القائمة الرئيسية</a>
-        <a href="/logout" class="btn-secondary" style="color: #c0392b;">تسجيل الخروج</a>
+    <div class="nav-links">
+        <a href="/">القائمة الرئيسية</a>
+        <a href="/logout" style="color: #c0392b;">تسجيل الخروج</a>
+    </div>
+
+    <div class="admin-access">
+        <a href="/admin" class="btn-admin">
+            <span>⚙️</span>
+            <span>لوحة المدير (إدارة المواد)</span>
+        </a>
     </div>
 
     <script>
@@ -101,15 +160,19 @@
 
         async function saveAll() {
             const status = document.getElementById('save-status');
+            const saveBtn = document.querySelector('.btn-save');
+            
             status.textContent = 'جاري الحفظ...';
             status.style.color = '#3498db';
+            saveBtn.disabled = true;
+            saveBtn.style.opacity = '0.7';
 
             const entries = [];
-            document.querySelectorAll('.entry-box').forEach(box => {
+            document.querySelectorAll('.entry-editor').forEach(box => {
                 entries.push({
                     id: box.getAttribute('data-id'),
-                    topic: box.querySelector('.edit-topic').value,
-                    homework: box.querySelector('.edit-hw').value
+                    topic: box.querySelector('.edit-topic').value.trim(),
+                    homework: box.querySelector('.edit-hw').value.trim()
                 });
             });
 
@@ -123,13 +186,16 @@
                 if (response.ok) {
                     status.textContent = 'تم الحفظ بنجاح! ✓';
                     status.style.color = '#27ae60';
-                    setTimeout(() => { status.textContent = ''; }, 3000);
+                    setTimeout(() => { status.textContent = ''; }, 4000);
                 } else {
                     throw new Error();
                 }
             } catch (e) {
                 status.textContent = 'حدث خطأ أثناء الحفظ! ✗';
                 status.style.color = '#c0392b';
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.style.opacity = '1';
             }
         }
     </script>
