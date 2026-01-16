@@ -41,6 +41,32 @@
     {% endwith %}
 
     <div class="card">
+        <h2>روابط الطلاب للفصول</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>الصف</th>
+                    <th>الفصل</th>
+                    <th>رابط الطالب</th>
+                    <th>الإجراء</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in classes %}
+                <tr>
+                    <td>{{ c.grade_name }}</td>
+                    <td>{{ c.name }}</td>
+                    <td><code id="link-{{ c.id }}">{{ request.host_url }}student/{{ c.grade_id }}/{{ c.id }}</code></td>
+                    <td>
+                        <button class="btn-success" onclick="copyLink('link-{{ c.id }}')">نسخ الرابط</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
         <h2>الإعدادات العامة وشعار المدرسة</h2>
         <form method="POST" enctype="multipart/form-data" class="flex mb-2">
             <input type="hidden" name="action" value="upload_logo">
@@ -96,32 +122,6 @@
                 <button type="submit" class="btn-danger" style="width: 100%;">مسح التاريخ النهائي</button>
             </form>
         </div>
-    </div>
-
-    <div class="card">
-        <h2>روابط الطلاب للفصول</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>الصف</th>
-                    <th>الفصل</th>
-                    <th>رابط الطالب</th>
-                    <th>الإجراء</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for c in classes %}
-                <tr>
-                    <td>{{ c.grade_name }}</td>
-                    <td>{{ c.name }}</td>
-                    <td><code id="link-{{ c.id }}">{{ request.host_url }}student/{{ c.grade_id }}/{{ c.id }}</code></td>
-                    <td>
-                        <button class="btn-success" onclick="copyLink('link-{{ c.id }}')">نسخ الرابط</button>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
     </div>
 
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 25px;">

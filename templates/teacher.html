@@ -18,6 +18,7 @@
         .fixed-sub { font-weight: 700; color: #1e3a8a; background: #eff6ff; padding: 5px; border-radius: 4px; display: block; margin-bottom: 8px; font-size: 0.95em; }
         .save-btn { background: #10b981; color: white; border: none; padding: 12px 30px; border-radius: 8px; cursor: pointer; font-weight: 700; transition: all 0.2s; }
         .save-btn:hover { background: #059669; transform: translateY(-1px); }
+        .reset-btn { background: #64748b; color: white; border: none; padding: 12px 30px; border-radius: 8px; cursor: pointer; font-weight: 700; transition: all 0.2s; }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
         .admin-link { color: #3b82f6; text-decoration: none; font-weight: 600; }
     </style>
@@ -50,7 +51,10 @@
                     {% for w in range(1, 20) %}<option value="{{ w }}" {% if selected_week == w|string %}selected{% endif %}>أسبوع {{ w }}</option>{% endfor %}
                 </select>
             </div>
-            <button class="save-btn" onclick="saveData()">حفظ الموضوع والواجب ✓</button>
+            <div style="display: flex; gap: 10px;">
+                <button class="save-btn" onclick="saveData()">حفظ التعديلات ✓</button>
+                <button class="reset-btn" onclick="resetWeek()">إعادة التعيين لـ{{ selected_week }} ↺</button>
+            </div>
         </div>
     </div>
 
@@ -68,13 +72,9 @@
                 <td style="background: #f8fafc; font-weight: 700;">{{ days_ar[d] }}</td>
                 {% for p in range(1, 9) %}
                 <td data-day="{{ d }}" data-period="{{ p }}">
-                    {% if schedule[d][p].subject_name %}
-                    <span class="fixed-sub">{{ schedule[d][p].subject_name }}</span>
+                    <input type="text" class="sub-ovr" value="{{ schedule[d][p].subject_name }}" placeholder="تعديل اسم المادة (اختياري)">
                     <input type="text" class="topic" value="{{ schedule[d][p].topic }}" placeholder="الموضوع اليومي...">
                     <input type="text" class="hw" value="{{ schedule[d][p].homework }}" placeholder="الواجب المنزلي...">
-                    {% else %}
-                    <span style="color: #cbd5e1; font-size: 0.8em;">لا توجد مادة</span>
-                    {% endif %}
                 </td>
                 {% endfor %}
             </tr>
@@ -91,17 +91,14 @@
         function saveData() {
             const entries = [];
             document.querySelectorAll('td[data-day]').forEach(td => {
-                const topic = td.querySelector('.topic');
-                if (topic) {
-                    entries.push({
-                        day: td.dataset.day,
-                        period: td.dataset.period,
-                        topic: topic.value,
-                        homework: td.querySelector('.hw').value
-                    });
-                }
+                entries.push({
+                    day: td.dataset.day,
+                    period: td.dataset.period,
+                    subject_name: td.querySelector('.sub-ovr').value,
+                    topic: td.querySelector('.topic').value,
+                    homework: td.querySelector('.hw').value
+                });
             });
-            if (entries.length === 0) return;
             
             const btn = document.querySelector('.save-btn');
             btn.textContent = 'جاري الحفظ...';
@@ -116,11 +113,22 @@
                     btn.textContent = 'تم الحفظ بنجاح ✓';
                     btn.style.background = '#059669';
                     setTimeout(() => {
-                        btn.textContent = 'حفظ الموضوع والواجب ✓';
+                        btn.textContent = 'حفظ التعديلات ✓';
                         btn.style.background = '#10b981';
                         btn.style.opacity = '1';
                     }, 2000);
                 }
+            });
+        }
+
+        function resetWeek() {
+            if(!confirm('هل أنت متأكد من حذف جميع تعديلات هذا الأسبوع والعودة للجدول الأساسي؟')) return;
+            fetch(location.href, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({action: 'reset_week'})
+            }).then(r => {
+                if(r.ok) location.reload();
             });
         }
     </script>

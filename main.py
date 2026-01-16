@@ -50,7 +50,7 @@ def init_db():
         cursor.execute('CREATE TABLE IF NOT EXISTS grades (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE)')
         cursor.execute('CREATE TABLE IF NOT EXISTS classes (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, grade_id INTEGER, FOREIGN KEY(grade_id) REFERENCES grades(id))')
         cursor.execute('CREATE TABLE IF NOT EXISTS subjects (id INTEGER PRIMARY KEY AUTOINCREMENT, class_id INTEGER, day TEXT, period INTEGER, name TEXT, FOREIGN KEY(class_id) REFERENCES classes(id))')
-        cursor.execute('CREATE TABLE IF NOT EXISTS weekly_data (id INTEGER PRIMARY KEY AUTOINCREMENT, class_id INTEGER, week_number INTEGER, day TEXT, period INTEGER, topic TEXT, homework TEXT, FOREIGN KEY(class_id) REFERENCES classes(id))')
+        cursor.execute('CREATE TABLE IF NOT EXISTS weekly_data (id INTEGER PRIMARY KEY AUTOINCREMENT, class_id INTEGER, week_number INTEGER, day TEXT, period INTEGER, topic TEXT, homework TEXT, subject_name TEXT, FOREIGN KEY(class_id) REFERENCES classes(id))')
         cursor.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)')
         
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('admin_password', 'admin123')")
@@ -146,12 +146,7 @@ def delete_date(date_type):
         db = get_db()
         db.execute("UPDATE settings SET value = '' WHERE key = ?", (date_type,))
         db.commit()
-        # Verify it's empty
-        check = db.execute("SELECT value FROM settings WHERE key = ?", (date_type,)).fetchone()
-        if check and check['value'] == '':
-            flash('تم حذف التاريخ بنجاح')
-        else:
-            flash('حدث خطأ أثناء حذف التاريخ')
+        flash('تم حذف التاريخ بنجاح')
     return redirect(url_for('admin'))
 
 @app.route('/')
@@ -170,16 +165,21 @@ def teacher():
     
     if request.method == 'POST':
         data = request.json
+        if data.get('action') == 'reset_week':
+            db.execute("DELETE FROM weekly_data WHERE class_id = ? AND week_number = ?", (class_id, week))
+            db.commit()
+            return jsonify({'status': 'success'})
+            
         for entry in data.get('entries', []):
             exists = db.execute("SELECT id FROM weekly_data WHERE class_id = ? AND week_number = ? AND day = ? AND period = ?",
                                (class_id, week, entry['day'], entry['period'])).fetchone()
             if exists:
-                db.execute("UPDATE weekly_data SET topic = ?, homework = ? WHERE id = ?",
-                           (entry['topic'], entry['homework'], exists['id']))
+                db.execute("UPDATE weekly_data SET topic = ?, homework = ?, subject_name = ? WHERE id = ?",
+                           (entry['topic'], entry['homework'], entry['subject_name'], exists['id']))
             else:
-                db.execute("""INSERT INTO weekly_data (class_id, week_number, day, period, topic, homework) 
-                              VALUES (?, ?, ?, ?, ?, ?)""", 
-                           (class_id, week, entry['day'], entry['period'], entry['topic'], entry['homework']))
+                db.execute("""INSERT INTO weekly_data (class_id, week_number, day, period, topic, homework, subject_name) 
+                              VALUES (?, ?, ?, ?, ?, ?, ?)""", 
+                           (class_id, week, entry['day'], entry['period'], entry['topic'], entry['homework'], entry['subject_name']))
         db.commit()
         return jsonify({'status': 'success'})
 
@@ -193,7 +193,10 @@ def teacher():
         
         weekly = db.execute("SELECT * FROM weekly_data WHERE class_id = ? AND week_number = ?", (class_id, week)).fetchall()
         for w in weekly:
-            schedule[w['day']][w['period']].update({'topic': w['topic'], 'homework': w['homework']})
+            day_data = schedule[w['day']][w['period']]
+            day_data.update({'topic': w['topic'], 'homework': w['homework']})
+            if w['subject_name']:
+                day_data['subject_name'] = w['subject_name']
 
     return render_template('teacher.html', grades=grades, classes=classes, schedule=schedule, 
                          selected_grade=grade_id, selected_class=class_id, selected_week=week, 
@@ -214,7 +217,10 @@ def student(grade_id, class_id):
     
     weekly = db.execute("SELECT * FROM weekly_data WHERE class_id = ? AND week_number = ?", (class_id, week)).fetchall()
     for w in weekly:
-        schedule[w['day']][w['period']].update({'topic': w['topic'], 'homework': w['homework']})
+        day_data = schedule[w['day']][w['period']]
+        day_data.update({'topic': w['topic'], 'homework': w['homework']})
+        if w['subject_name']:
+            day_data['subject_name'] = w['subject_name']
 
     return render_template('student.html', schedule=schedule, days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings, 
                          week=week, grade_name=grade['name'] if grade else '', class_name=cls['name'] if cls else '')
