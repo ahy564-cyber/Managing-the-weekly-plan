@@ -37,8 +37,7 @@ def init_db():
         db = get_db()
         cursor = db.cursor()
         
-        # Reset and create tables
-        cursor.execute('DROP TABLE IF EXISTS config')
+        # Ensure config table exists
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS config (
                 key TEXT PRIMARY KEY,
@@ -46,7 +45,7 @@ def init_db():
             )
         ''')
         
-        cursor.execute('DROP TABLE IF EXISTS subjects')
+        # Ensure subjects table exists
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS subjects (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,7 +55,7 @@ def init_db():
             )
         ''')
         
-        cursor.execute('DROP TABLE IF EXISTS tasks')
+        # Ensure tasks table exists
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS tasks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,11 +67,11 @@ def init_db():
             )
         ''')
         
-        # Insert default values
-        cursor.execute("INSERT INTO config (key, value) VALUES ('current_week', '1')")
-        cursor.execute("INSERT INTO config (key, value) VALUES ('admin_password', 'admin123')")
+        # Insert default values if they don't exist
+        cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('current_week', '1')")
+        cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('admin_password', 'admin123')")
         db.commit()
-        print("Database Restructured: Subjects and Tasks tables created.")
+        print("Database Initialized/Verified: Subjects and Tasks tables ready.")
 
 def admin_required(f):
     @wraps(f)
@@ -234,6 +233,5 @@ def admin():
     return render_template('admin.html', current_week=current_week, days_ar=DAYS_AR, days_order=DAYS_ORDER, entries=subjects)
 
 if __name__ == '__main__':
-    if not os.path.exists(DATABASE):
-        init_db()
+    init_db()
     app.run(host='0.0.0.0', port=5000, debug=True)
