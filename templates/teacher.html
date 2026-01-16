@@ -3,34 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <title>لوحة المعلم</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Segoe UI', sans-serif; margin: 20px; background: #f0f2f5; }
-        .card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .controls { display: flex; gap: 15px; margin-bottom: 20px; }
-        select { padding: 10px; border-radius: 4px; border: 1px solid #ddd; }
-        table { width: 100%; border-collapse: collapse; background: white; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
-        th { background: #007bff; color: white; }
-        input { width: 100%; border: 1px solid #eee; padding: 5px; }
-        .save-btn { background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
+        body { font-family: 'Cairo', sans-serif; margin: 20px; background: #f1f5f9; color: #334155; }
+        .card { background: white; padding: 25px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; align-items: flex-end; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 0.9em; }
+        select { padding: 10px; border-radius: 8px; border: 1.5px solid #cbd5e1; width: 100%; font-family: inherit; }
+        table { width: 100%; border-collapse: separate; border-spacing: 0; background: white; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
+        th, td { border: 1px solid #e2e8f0; padding: 12px; text-align: center; }
+        th { background: #334155; color: white; font-weight: 700; }
+        input { width: 100%; border: 1px solid #e2e8f0; padding: 8px; border-radius: 6px; box-sizing: border-box; font-family: inherit; margin-bottom: 5px; }
+        input:focus { border-color: #3b82f6; outline: none; }
+        .fixed-sub { font-weight: 700; color: #1e3a8a; background: #eff6ff; padding: 5px; border-radius: 4px; display: block; margin-bottom: 8px; font-size: 0.95em; }
+        .save-btn { background: #10b981; color: white; border: none; padding: 12px 30px; border-radius: 8px; cursor: pointer; font-weight: 700; transition: all 0.2s; }
+        .save-btn:hover { background: #059669; transform: translateY(-1px); }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .admin-link { color: #3b82f6; text-decoration: none; font-weight: 600; }
     </style>
 </head>
 <body>
+    <div class="header">
+        <h1>لوحة تحكم المعلم</h1>
+        <a href="/admin" class="admin-link">لوحة المدير 🔑</a>
+    </div>
+
     <div class="card">
-        <h2>لوحة تحكم المعلم</h2>
         <div class="controls">
-            <select onchange="location.href='/?grade_id='+this.value">
-                <option>اختر الصف</option>
-                {% for g in grades %}<option value="{{ g.id }}" {% if selected_grade == g.id|string %}selected{% endif %}>{{ g.name }}</option>{% endfor %}
-            </select>
-            <select onchange="location.href='/?grade_id={{ selected_grade }}&class_id='+this.value">
-                <option>اختر الفصل</option>
-                {% for c in classes %}<option value="{{ c.id }}" {% if selected_class == c.id|string %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
-            </select>
-            <select onchange="location.href='/?grade_id={{ selected_grade }}&class_id={{ selected_class }}&week='+this.value">
-                {% for w in range(1, 20) %}<option value="{{ w }}" {% if selected_week == w|string %}selected{% endif %}>أسبوع {{ w }}</option>{% endfor %}
-            </select>
-            <button class="save-btn" onclick="saveData()">حفظ التغييرات</button>
+            <div>
+                <label>الصف:</label>
+                <select onchange="location.href='/teacher?grade_id='+this.value">
+                    <option value="">اختر الصف...</option>
+                    {% for g in grades %}<option value="{{ g.id }}" {% if selected_grade == g.id|string %}selected{% endif %}>{{ g.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>الفصل:</label>
+                <select onchange="location.href='/teacher?grade_id={{ selected_grade }}&class_id='+this.value">
+                    <option value="">اختر الفصل...</option>
+                    {% for c in classes %}<option value="{{ c.id }}" {% if selected_class == c.id|string %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>الأسبوع الدراسي:</label>
+                <select onchange="location.href='/teacher?grade_id={{ selected_grade }}&class_id={{ selected_class }}&week='+this.value">
+                    {% for w in range(1, 20) %}<option value="{{ w }}" {% if selected_week == w|string %}selected{% endif %}>أسبوع {{ w }}</option>{% endfor %}
+                </select>
+            </div>
+            <button class="save-btn" onclick="saveData()">حفظ الموضوع والواجب ✓</button>
         </div>
     </div>
 
@@ -38,44 +58,70 @@
     <table>
         <thead>
             <tr>
-                <th>اليوم</th>
+                <th style="width: 100px;">اليوم</th>
                 {% for p in range(1, 9) %}<th>ح {{ p }}</th>{% endfor %}
             </tr>
         </thead>
         <tbody>
             {% for d in days_order %}
             <tr>
-                <td>{{ days_ar[d] }}</td>
+                <td style="background: #f8fafc; font-weight: 700;">{{ days_ar[d] }}</td>
                 {% for p in range(1, 9) %}
                 <td data-day="{{ d }}" data-period="{{ p }}">
-                    <input type="text" class="sub" value="{{ schedule[d][p].subject_name }}" placeholder="المادة">
-                    <input type="text" class="topic" value="{{ schedule[d][p].topic }}" placeholder="الموضوع">
-                    <input type="text" class="hw" value="{{ schedule[d][p].homework }}" placeholder="الواجب">
+                    {% if schedule[d][p].subject_name %}
+                    <span class="fixed-sub">{{ schedule[d][p].subject_name }}</span>
+                    <input type="text" class="topic" value="{{ schedule[d][p].topic }}" placeholder="الموضوع اليومي...">
+                    <input type="text" class="hw" value="{{ schedule[d][p].homework }}" placeholder="الواجب المنزلي...">
+                    {% else %}
+                    <span style="color: #cbd5e1; font-size: 0.8em;">لا توجد مادة</span>
+                    {% endif %}
                 </td>
                 {% endfor %}
             </tr>
             {% endfor %}
         </tbody>
     </table>
+    {% else %}
+    <div style="text-align: center; padding: 50px; background: white; border-radius: 12px; color: #94a3b8;">
+        <h3>يرجى اختيار الصف والفصل للبدء في تعبئة البيانات</h3>
+    </div>
     {% endif %}
 
     <script>
         function saveData() {
             const entries = [];
             document.querySelectorAll('td[data-day]').forEach(td => {
-                entries.push({
-                    day: td.dataset.day,
-                    period: td.dataset.period,
-                    subject_name: td.querySelector('.sub').value,
-                    topic: td.querySelector('.topic').value,
-                    homework: td.querySelector('.hw').value
-                });
+                const topic = td.querySelector('.topic');
+                if (topic) {
+                    entries.push({
+                        day: td.dataset.day,
+                        period: td.dataset.period,
+                        topic: topic.value,
+                        homework: td.querySelector('.hw').value
+                    });
+                }
             });
+            if (entries.length === 0) return;
+            
+            const btn = document.querySelector('.save-btn');
+            btn.textContent = 'جاري الحفظ...';
+            btn.style.opacity = '0.7';
+
             fetch(location.href, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({entries})
-            }).then(() => alert('تم الحفظ'));
+            }).then(r => {
+                if(r.ok) {
+                    btn.textContent = 'تم الحفظ بنجاح ✓';
+                    btn.style.background = '#059669';
+                    setTimeout(() => {
+                        btn.textContent = 'حفظ الموضوع والواجب ✓';
+                        btn.style.background = '#10b981';
+                        btn.style.opacity = '1';
+                    }, 2000);
+                }
+            });
         }
     </script>
 </body>

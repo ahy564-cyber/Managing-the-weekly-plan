@@ -47,11 +47,10 @@ def init_db():
     with app.app_context():
         db = get_db()
         cursor = db.cursor()
-        
         cursor.execute('CREATE TABLE IF NOT EXISTS grades (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE)')
         cursor.execute('CREATE TABLE IF NOT EXISTS classes (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, grade_id INTEGER, FOREIGN KEY(grade_id) REFERENCES grades(id))')
         cursor.execute('CREATE TABLE IF NOT EXISTS subjects (id INTEGER PRIMARY KEY AUTOINCREMENT, class_id INTEGER, day TEXT, period INTEGER, name TEXT, FOREIGN KEY(class_id) REFERENCES classes(id))')
-        cursor.execute('CREATE TABLE IF NOT EXISTS weekly_data (id INTEGER PRIMARY KEY AUTOINCREMENT, class_id INTEGER, week_number INTEGER, day TEXT, period INTEGER, topic TEXT, homework TEXT, subject_name TEXT, FOREIGN KEY(class_id) REFERENCES classes(id))')
+        cursor.execute('CREATE TABLE IF NOT EXISTS weekly_data (id INTEGER PRIMARY KEY AUTOINCREMENT, class_id INTEGER, week_number INTEGER, day TEXT, period INTEGER, topic TEXT, homework TEXT, FOREIGN KEY(class_id) REFERENCES classes(id))')
         cursor.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)')
         
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('admin_password', 'admin123')")
@@ -61,6 +60,14 @@ def init_db():
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('final_date', '')")
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('current_week', '1')")
         db.commit()
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if session.get('user_role') != 'admin':
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -77,29 +84,47 @@ def login():
 @app.route('/logout')
 def logout():
     session.clear()
-    return redirect(url_for('index'))
+    return redirect(url_for('teacher'))
 
 @app.route('/admin', methods=['GET', 'POST'])
+@admin_required
 def admin():
     db = get_db()
     if request.method == 'POST':
         action = request.form.get('action')
         if action == 'add_grade':
             db.execute("INSERT INTO grades (name) VALUES (?)", (request.form.get('name'),))
+            flash('تم إضافة الصف بنجاح')
+        elif action == 'delete_grade':
+            gid = request.form.get('grade_id')
+            db.execute("DELETE FROM grades WHERE id = ?", (gid,))
+            flash('تم حذف الصف بنجاح')
         elif action == 'add_class':
             db.execute("INSERT INTO classes (name, grade_id) VALUES (?, ?)", (request.form.get('name'), request.form.get('grade_id')))
+            flash('تم إضافة الفصل بنجاح')
+        elif action == 'delete_class':
+            cid = request.form.get('class_id')
+            db.execute("DELETE FROM classes WHERE id = ?", (cid,))
+            flash('تم حذف الفصل بنجاح')
         elif action == 'add_subject':
             db.execute("INSERT INTO subjects (class_id, day, period, name) VALUES (?, ?, ?, ?)", 
                       (request.form.get('class_id'), request.form.get('day'), request.form.get('period'), request.form.get('name')))
+            flash('تم حفظ المادة بنجاح')
+        elif action == 'delete_subject':
+            sid = request.form.get('subject_id')
+            db.execute("DELETE FROM subjects WHERE id = ?", (sid,))
+            flash('تم حذف المادة بنجاح')
         elif action == 'update_settings':
             for key in ['period1_date', 'period2_date', 'final_date', 'current_week']:
                 db.execute("UPDATE settings SET value = ? WHERE key = ?", (request.form.get(key), key))
+            flash('تم تحديث الإعدادات بنجاح')
         elif action == 'upload_logo':
             file = request.files.get('logo')
             if file:
                 filename = secure_filename(file.filename)
                 file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
                 db.execute("UPDATE settings SET value = ? WHERE key = 'school_logo'", (filename,))
+                flash('تم رفع الشعار بنجاح')
         db.commit()
         return redirect(url_for('admin'))
 
@@ -110,8 +135,12 @@ def admin():
     
     return render_template('admin.html', grades=grades, classes=classes, settings=settings, subjects=subjects, days_ar=DAYS_AR, days_order=DAYS_ORDER)
 
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/')
 def index():
+    return redirect(url_for('teacher'))
+
+@app.route('/teacher', methods=['GET', 'POST'])
+def teacher():
     db = get_db()
     grade_id = request.args.get('grade_id')
     class_id = request.args.get('class_id')
@@ -123,9 +152,16 @@ def index():
     if request.method == 'POST':
         data = request.json
         for entry in data.get('entries', []):
-            db.execute("""INSERT INTO weekly_data (class_id, week_number, day, period, topic, homework, subject_name) 
-                          VALUES (?, ?, ?, ?, ?, ?, ?)""", 
-                       (class_id, week, entry['day'], entry['period'], entry['topic'], entry['homework'], entry['subject_name']))
+            # Check if exists
+            exists = db.execute("SELECT id FROM weekly_data WHERE class_id = ? AND week_number = ? AND day = ? AND period = ?",
+                               (class_id, week, entry['day'], entry['period'])).fetchone()
+            if exists:
+                db.execute("UPDATE weekly_data SET topic = ?, homework = ? WHERE id = ?",
+                           (entry['topic'], entry['homework'], exists['id']))
+            else:
+                db.execute("""INSERT INTO weekly_data (class_id, week_number, day, period, topic, homework) 
+                              VALUES (?, ?, ?, ?, ?, ?)""", 
+                           (class_id, week, entry['day'], entry['period'], entry['topic'], entry['homework']))
         db.commit()
         return jsonify({'status': 'success'})
 
@@ -139,7 +175,7 @@ def index():
         
         weekly = db.execute("SELECT * FROM weekly_data WHERE class_id = ? AND week_number = ?", (class_id, week)).fetchall()
         for w in weekly:
-            schedule[w['day']][w['period']].update({'topic': w['topic'], 'homework': w['homework'], 'subject_name': w['subject_name']})
+            schedule[w['day']][w['period']].update({'topic': w['topic'], 'homework': w['homework']})
 
     return render_template('teacher.html', grades=grades, classes=classes, schedule=schedule, 
                          selected_grade=grade_id, selected_class=class_id, selected_week=week, 
@@ -151,15 +187,20 @@ def student(grade_id, class_id):
     settings = {row['key']: row['value'] for row in db.execute("SELECT * FROM settings").fetchall()}
     week = settings.get('current_week', '1')
     
+    # Get grade and class names
+    grade = db.execute("SELECT name FROM grades WHERE id = ?", (grade_id,)).fetchone()
+    cls = db.execute("SELECT name FROM classes WHERE id = ?", (class_id,)).fetchone()
+    
     schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
     fixed = db.execute("SELECT * FROM subjects WHERE class_id = ?", (class_id,)).fetchall()
     for f in fixed: schedule[f['day']][f['period']]['subject_name'] = f['name']
     
     weekly = db.execute("SELECT * FROM weekly_data WHERE class_id = ? AND week_number = ?", (class_id, week)).fetchall()
     for w in weekly:
-        schedule[w['day']][w['period']].update({'topic': w['topic'], 'homework': w['homework'], 'subject_name': w['subject_name']})
+        schedule[w['day']][w['period']].update({'topic': w['topic'], 'homework': w['homework']})
 
-    return render_template('student.html', schedule=schedule, days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings, week=week)
+    return render_template('student.html', schedule=schedule, days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings, 
+                         week=week, grade_name=grade['name'] if grade else '', class_name=cls['name'] if cls else '')
 
 if __name__ == '__main__':
     init_db()
