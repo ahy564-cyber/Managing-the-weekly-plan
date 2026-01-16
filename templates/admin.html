@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>لوحة المدير - إدارة الجدول الثابت</title>
+    <title>لوحة المدير - نظام الخطة الدراسية</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background: #f4f4f9; color: #333; }
         .card { background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 25px; }
@@ -13,7 +15,7 @@
         input, select { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 1em; }
         button { background: #3498db; color: white; border: none; padding: 12px 25px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background 0.3s; }
         button:hover { background: #2980b9; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 15px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px; }
         .entries-table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #fff; }
         .entries-table th, .entries-table td { border: 1px solid #e0e0e0; padding: 12px; text-align: center; }
         .entries-table th { background: #f8f9fa; }
@@ -21,84 +23,157 @@
         .btn-delete:hover { background: #c0392b; }
         .nav { margin-top: 30px; text-align: center; }
         .btn-link { color: #3498db; text-decoration: none; font-weight: bold; margin: 0 15px; }
+        .logo-preview { max-width: 100px; max-height: 100px; display: block; margin-bottom: 10px; }
+        .countdowns { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
+        .countdown-item { background: #34495e; color: #fff; padding: 15px; border-radius: 8px; flex: 1; min-width: 200px; text-align: center; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h1>إعدادات النظام (المدير)</h1>
-        <form method="POST">
-            <div class="form-group">
-                <label for="current_week">تحديد الأسبوع الحالي للطلاب (1-19):</label>
-                <div style="display: flex; gap: 10px; align-items: flex-end;">
-                    <input type="number" id="current_week" name="current_week" value="{{ current_week }}" min="1" max="19" style="width: 120px;">
-                    <button type="submit" name="update_week">تحديث الأسبوع</button>
-                </div>
-            </div>
-        </form>
-    </div>
+    <div id="capture-area">
+        {% if config.school_logo %}
+        <div style="text-align: center; margin-bottom: 20px;">
+            <img src="/static/uploads/{{ config.school_logo }}" class="logo-preview" style="margin: 0 auto;">
+        </div>
+        {% endif %}
 
-    <div class="card">
-        <h2>توزيع المواد الثابت (يظهر في كل الأسابيع)</h2>
-        <form method="POST">
-            <input type="hidden" name="add_subject" value="1">
+        <div class="countdowns">
+            {% if config.exam_date_1 %}<div class="countdown-item" data-date="{{ config.exam_date_1 }}">الاختبارات الفترية الأولى بعد: <span class="timer">--</span></div>{% endif %}
+            {% if config.exam_date_2 %}<div class="countdown-item" data-date="{{ config.exam_date_2 }}">الاختبارات الفترية الثانية بعد: <span class="timer">--</span></div>{% endif %}
+            {% if config.exam_date_final %}<div class="countdown-item" data-date="{{ config.exam_date_final }}">الاختبارات النهائية بعد: <span class="timer">--</span></div>{% endif %}
+        </div>
+
+        <div class="card">
+            <h1>إعدادات النظام</h1>
             <div class="grid">
-                <div class="form-group">
-                    <label>اليوم:</label>
-                    <select name="day" required>
-                        {% for day_eng in days_order %}
-                        <option value="{{ day_eng }}">{{ days_ar[day_eng] }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>الحصة (1-8):</label>
-                    <input type="number" name="period" min="1" max="8" required>
-                </div>
-                <div class="form-group">
-                    <label>اسم المادة:</label>
-                    <input type="text" name="subject_name" required placeholder="مثلاً: لغة عربية">
-                </div>
+                <form method="POST">
+                    <div class="form-group">
+                        <label for="current_week">الأسبوع الحالي للطلاب (1-19):</label>
+                        <input type="number" id="current_week" name="current_week" value="{{ config.current_week }}" min="1" max="19">
+                        <button type="submit" name="update_week" style="margin-top:10px;">تحديث الأسبوع</button>
+                    </div>
+                </form>
+                
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label>شعار المدرسة:</label>
+                        <input type="file" name="logo" accept="image/*">
+                        <button type="submit" name="upload_logo" style="margin-top:10px;">رفع الشعار</button>
+                    </div>
+                </form>
             </div>
-            <button type="submit">حفظ المادة في الجدول</button>
-        </form>
-    </div>
+        </div>
 
-    <div class="card">
-        <h2>هيكل الجدول الثابت</h2>
-        <table class="entries-table">
-            <thead>
-                <tr>
-                    <th>اليوم</th>
-                    <th>الحصة</th>
-                    <th>المادة</th>
-                    <th>إجراءات</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for entry in entries %}
-                <tr>
-                    <td>{{ days_ar[entry.day] }}</td>
-                    <td>{{ entry.period }}</td>
-                    <td>{{ entry.subject_name }}</td>
-                    <td>
-                        <form method="POST" style="display:inline;">
-                            <input type="hidden" name="subject_id" value="{{ entry.id }}">
-                            <button type="submit" name="delete_subject" class="btn-delete">حذف</button>
-                        </form>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="4">لا توجد مواد مضافة بعد.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="card">
+            <h2>مواعيد الاختبارات</h2>
+            <form method="POST">
+                <div class="grid">
+                    <div class="form-group">
+                        <label>الفترية الأولى:</label>
+                        <input type="date" name="exam_date_1" value="{{ config.exam_date_1 }}">
+                    </div>
+                    <div class="form-group">
+                        <label>الفترية الثانية:</label>
+                        <input type="date" name="exam_date_2" value="{{ config.exam_date_2 }}">
+                    </div>
+                    <div class="form-group">
+                        <label>النهائية:</label>
+                        <input type="date" name="exam_date_final" value="{{ config.exam_date_final }}">
+                    </div>
+                </div>
+                <button type="submit" name="update_exams">حفظ المواعيد</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>إدارة المواد الثابتة</h2>
+            <form method="POST">
+                <div class="grid">
+                    <div class="form-group">
+                        <label>اليوم:</label>
+                        <select name="day" required>
+                            {% for day_eng in days_order %}
+                            <option value="{{ day_eng }}">{{ days_ar[day_eng] }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>الحصة (1-8):</label>
+                        <input type="number" name="period" min="1" max="8" required>
+                    </div>
+                    <div class="form-group">
+                        <label>اسم المادة:</label>
+                        <input type="text" name="subject_name" required placeholder="مثلاً: لغة عربية">
+                    </div>
+                </div>
+                <button type="submit" name="add_subject">حفظ المادة</button>
+            </form>
+
+            <table class="entries-table">
+                <thead>
+                    <tr>
+                        <th>اليوم</th>
+                        <th>الحصة</th>
+                        <th>المادة</th>
+                        <th>إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in entries %}
+                    <tr>
+                        <td>{{ days_ar[entry.day] }}</td>
+                        <td>{{ entry.period }}</td>
+                        <td>{{ entry.subject_name }}</td>
+                        <td>
+                            <form method="POST" style="display:inline;">
+                                <input type="hidden" name="subject_id" value="{{ entry.id }}">
+                                <button type="submit" name="delete_subject" class="btn-delete">حذف</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <div class="nav">
-        <a href="/" class="btn-link">← العودة للوحة المعلم</a>
-        <a href="/logout" class="btn-link" style="color: #c0392b;">تسجيل الخروج</a>
+        <button onclick="downloadPDF()">تحميل PDF</button>
+        <button onclick="saveImage()">حفظ كصورة</button>
+        <a href="/" class="btn-link">← لوحة المعلم</a>
+        <a href="/logout" class="btn-link" style="color: #c0392b;">خروج</a>
     </div>
+
+    <script>
+        function updateTimers() {
+            document.querySelectorAll('.countdown-item').forEach(item => {
+                const target = new Date(item.dataset.date).getTime();
+                const now = new Date().getTime();
+                const dist = target - now;
+                if (dist > 0) {
+                    const days = Math.floor(dist / (1000 * 60 * 60 * 24));
+                    item.querySelector('.timer').textContent = days + ' يوم';
+                } else {
+                    item.querySelector('.timer').textContent = 'بدأت أو انتهت';
+                }
+            });
+        }
+        setInterval(updateTimers, 1000);
+        updateTimers();
+
+        function downloadPDF() {
+            const element = document.getElementById('capture-area');
+            html2pdf().from(element).save('admin_settings.pdf');
+        }
+
+        function saveImage() {
+            const element = document.getElementById('capture-area');
+            html2canvas(element).then(canvas => {
+                const link = document.createElement('a');
+                link.download = 'admin_settings.png';
+                link.href = canvas.toDataURL();
+                link.click();
+            });
+        }
+    </script>
 </body>
 </html>

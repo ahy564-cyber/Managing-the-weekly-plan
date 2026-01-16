@@ -1,12 +1,18 @@
-from flask import Flask, render_template, request, redirect, url_for, g, session, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, g, session, flash, jsonify, send_from_directory
 import sqlite3
 import os
 from datetime import datetime
 from functools import wraps
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SESSION_SECRET', 'super-secret-key-999')
 DATABASE = 'school.db'
+UPLOAD_FOLDER = 'static/uploads'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 
 DAYS_AR = {
     'Sunday': 'الأحد',
@@ -63,14 +69,20 @@ def init_db():
             )
         ''')
         
+        # New tables/columns check
         cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('current_week', '1')")
         cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('admin_password', 'admin123')")
+        cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('exam_date_1', '')")
+        cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('exam_date_2', '')")
+        cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('exam_date_final', '')")
+        cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('school_logo', '')")
         db.commit()
 
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # Admin access is currently direct as requested
+        if session.get('user_role') != 'admin':
+            return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -96,12 +108,17 @@ def logout():
     session.clear()
     return redirect(url_for('index'))
 
+def get_common_data():
+    db = get_db()
+    config_rows = db.execute("SELECT key, value FROM config").fetchall()
+    config = {row['key']: row['value'] for row in config_rows}
+    return config
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     db = get_db()
-    row = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()
-    config_week = row['value'] if row else '1'
-    selected_week = int(request.args.get('week', config_week))
+    config = get_common_data()
+    selected_week = int(request.args.get('week', config.get('current_week', 1)))
     
     if request.method == 'POST':
         data = request.json
@@ -125,8 +142,6 @@ def index():
 
     subjects_rows = db.execute("SELECT * FROM subjects").fetchall()
     tasks_rows = db.execute("SELECT * FROM tasks WHERE week_number = ?", (selected_week,)).fetchall()
-    
-    # Convert tasks to a dict for easy lookup
     tasks_map = {row['subject_id']: {'topic': row['topic'], 'homework': row['homework']} for row in tasks_rows}
     
     schedule_data = {day: {p: {} for p in range(1, 9)} for day in DAYS_ORDER}
@@ -148,13 +163,14 @@ def index():
                          selected_week=selected_week, 
                          schedule=schedule_data, 
                          days_order=DAYS_ORDER,
-                         days_ar=DAYS_AR)
+                         days_ar=DAYS_AR,
+                         config=config)
 
 @app.route('/student')
 def student():
     db = get_db()
-    row = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()
-    current_week = int(row['value']) if row else 1
+    config = get_common_data()
+    current_week = int(config.get('current_week', 1))
     
     subjects_rows = db.execute("SELECT * FROM subjects").fetchall()
     tasks_rows = db.execute("SELECT * FROM tasks WHERE week_number = ?", (current_week,)).fetchall()
@@ -188,7 +204,8 @@ def student():
                          days_order=DAYS_ORDER,
                          days_ar=DAYS_AR,
                          date=date_str, 
-                         day=day_str_ar)
+                         day=day_str_ar,
+                         config=config)
 
 @app.route('/admin', methods=['GET', 'POST'])
 @admin_required
@@ -198,30 +215,36 @@ def admin():
         if 'update_week' in request.form:
             new_week = request.form.get('current_week')
             db.execute("UPDATE config SET value = ? WHERE key = 'current_week'", (new_week,))
-            db.commit()
+        elif 'update_exams' in request.form:
+            db.execute("UPDATE config SET value = ? WHERE key = 'exam_date_1'", (request.form.get('exam_date_1'),))
+            db.execute("UPDATE config SET value = ? WHERE key = 'exam_date_2'", (request.form.get('exam_date_2'),))
+            db.execute("UPDATE config SET value = ? WHERE key = 'exam_date_final'", (request.form.get('exam_date_final'),))
+        elif 'upload_logo' in request.form:
+            file = request.files.get('logo')
+            if file and file.filename != '':
+                filename = secure_filename(file.filename)
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                db.execute("UPDATE config SET value = ? WHERE key = 'school_logo'", (filename,))
         elif 'add_subject' in request.form:
             day = request.form.get('day')
             period = request.form.get('period')
             subject_name = request.form.get('subject_name')
-            
             existing = db.execute("SELECT id FROM subjects WHERE day = ? AND period = ?", (day, period)).fetchone()
             if existing:
                 db.execute("UPDATE subjects SET subject_name=? WHERE id=?", (subject_name, existing['id']))
             else:
                 db.execute("INSERT INTO subjects (day, period, subject_name) VALUES (?, ?, ?)", (day, period, subject_name))
-            db.commit()
         elif 'delete_subject' in request.form:
             sub_id = request.form.get('subject_id')
             db.execute("DELETE FROM subjects WHERE id = ?", (sub_id,))
             db.execute("DELETE FROM tasks WHERE subject_id = ?", (sub_id,))
-            db.commit()
-            
+        
+        db.commit()
         return redirect(url_for('admin'))
 
-    row = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()
-    current_week = row['value'] if row else '1'
+    config = get_common_data()
     subjects = db.execute("SELECT * FROM subjects ORDER BY day, period").fetchall()
-    return render_template('admin.html', current_week=current_week, days_ar=DAYS_AR, days_order=DAYS_ORDER, entries=subjects)
+    return render_template('admin.html', config=config, days_ar=DAYS_AR, days_order=DAYS_ORDER, entries=subjects)
 
 if __name__ == '__main__':
     init_db()

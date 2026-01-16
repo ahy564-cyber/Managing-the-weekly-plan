@@ -6,90 +6,46 @@
     <title>لوحة المعلم - نظام الخطة الدراسية</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background: #f4f4f9; color: #333; }
-        .header { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; position: relative; }
-        h1 { margin: 0; color: #2c3e50; font-size: 1.8em; text-align: center; }
-        
-        .admin-link { position: absolute; top: 10px; left: 10px; text-decoration: none; color: #7f8c8d; font-size: 0.9em; display: flex; align-items: center; gap: 5px; }
-        .admin-link:hover { color: #34495e; }
-
-        .controls-bar { 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            background: #fff; 
-            padding: 15px 20px; 
-            border-radius: 8px; 
-            margin-bottom: 20px; 
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        }
-        .week-select-group { display: flex; align-items: center; gap: 10px; }
-        select { padding: 8px 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 1em; background: #fff; }
-        
-        .btn-save { 
-            background: #27ae60; 
-            color: white; 
-            border: none; 
-            padding: 10px 25px; 
-            border-radius: 6px; 
-            cursor: pointer; 
-            font-weight: bold; 
-            font-size: 1.1em;
-            transition: all 0.2s;
-            box-shadow: 0 2px 4px rgba(39, 174, 96, 0.2);
-        }
-        .btn-save:hover { background: #219150; transform: translateY(-1px); }
-        .btn-save:active { transform: translateY(0); }
-
+        .header { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; text-align: center; }
+        h1 { margin: 0; color: #2c3e50; }
+        .admin-link { position: absolute; top: 10px; left: 10px; text-decoration: none; color: #7f8c8d; }
+        .controls-bar { display: flex; justify-content: space-between; align-items: center; background: #fff; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
         .table-container { background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; min-width: 900px; }
-        th, td { border: 1px solid #e0e0e0; padding: 10px; text-align: center; vertical-align: middle; }
-        
-        th { background: #34495e; color: #fff; font-weight: 600; padding: 12px; }
-        .day-col { background: #ecf0f1; font-weight: bold; color: #2c3e50; width: 120px; }
-        
-        .entry-editor { display: flex; flex-direction: column; gap: 6px; text-align: right; }
-        .subject-label { font-weight: bold; color: #2980b9; border-bottom: 1px solid #f0f0f0; padding-bottom: 4px; margin-bottom: 2px; text-align: center; }
-        
-        .input-field { 
-            width: 100%; 
-            border: 1px solid #eee; 
-            border-radius: 4px; 
-            padding: 6px; 
-            font-size: 0.9em; 
-            box-sizing: border-box; 
-            font-family: inherit;
-            transition: border-color 0.2s;
-            background: #fff;
-        }
-        .input-field:focus { border-color: #3498db; outline: none; background: #fffdf0; }
-        .textarea-field { resize: vertical; min-height: 50px; }
-        
-        .empty-cell { color: #bdc3c7; font-size: 1.1em; padding: 20px 0; }
-        
-        #save-status { font-weight: bold; margin-right: 15px; font-size: 1em; }
-
-        .footer { margin-top: 30px; text-align: center; }
-        .btn-student-view { display: inline-block; padding: 12px 25px; background: #3498db; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; }
+        th, td { border: 1px solid #e0e0e0; padding: 10px; text-align: center; }
+        th { background: #34495e; color: #fff; }
+        .input-field { width: 100%; border: 1px solid #eee; border-radius: 4px; padding: 6px; box-sizing: border-box; }
+        .btn-save { background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; }
+        .countdowns { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; }
+        .countdown-item { background: #34495e; color: #fff; padding: 10px; border-radius: 5px; font-size: 0.85em; flex: 1; text-align: center; }
+        .logo { max-width: 80px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
     <div class="header">
-        <a href="/admin" class="admin-link"><span>⚙️</span> لوحة التحكم</a>
+        <a href="/login" class="admin-link">⚙️ دخول المدير</a>
+        {% if config.school_logo %}<img src="/static/uploads/{{ config.school_logo }}" class="logo">{% endif %}
         <h1>لوحة المعلم - الأسبوع {{ selected_week }}</h1>
     </div>
 
+    <div class="countdowns">
+        {% if config.exam_date_1 %}<div class="countdown-item" data-date="{{ config.exam_date_1 }}">الفترية الأولى: <span class="timer">--</span></div>{% endif %}
+        {% if config.exam_date_2 %}<div class="countdown-item" data-date="{{ config.exam_date_2 }}">الفترية الثانية: <span class="timer">--</span></div>{% endif %}
+        {% if config.exam_date_final %}<div class="countdown-item" data-date="{{ config.exam_date_final }}">النهائية: <span class="timer">--</span></div>{% endif %}
+    </div>
+
     <div class="controls-bar">
-        <div class="week-select-group">
-            <label for="week-selector">الأسبوع الدراسي:</label>
-            <select id="week-selector" onchange="switchWeek(this.value)">
+        <div>
+            <label>الأسبوع:</label>
+            <select onchange="location.href='/?week='+this.value">
                 {% for w in range(1, 20) %}
-                <option value="{{ w }}" {% if w == selected_week %}selected{% endif %}>الأسبوع {{ w }}</option>
+                <option value="{{ w }}" {% if w == selected_week %}selected{% endif %}>{{ w }}</option>
                 {% endfor %}
             </select>
         </div>
         <div>
-            <span id="save-status"></span>
-            <button type="button" class="btn-save" onclick="saveAll()">حفظ التغييرات</button>
+            <span id="status"></span>
+            <button class="btn-save" onclick="save()">حفظ التغييرات</button>
         </div>
     </div>
 
@@ -97,28 +53,24 @@
         <table>
             <thead>
                 <tr>
-                    <th>اليوم / الحصة</th>
-                    {% for p in range(1, 9) %}
-                    <th>الحصة {{ p }}</th>
-                    {% endfor %}
+                    <th>اليوم</th>
+                    {% for p in range(1, 9) %}<th>الحصة {{ p }}</th>{% endfor %}
                 </tr>
             </thead>
             <tbody>
-                {% for day_eng in days_order %}
+                {% for d in days_order %}
                 <tr>
-                    <td class="day-col">{{ days_ar[day_eng] }}</td>
+                    <td style="background:#ecf0f1; font-weight:bold;">{{ days_ar[d] }}</td>
                     {% for p in range(1, 9) %}
                     <td>
-                        {% set cell = schedule[day_eng][p] %}
+                        {% set cell = schedule[d][p] %}
                         {% if cell.subject_id %}
-                        <div class="entry-editor" data-subject-id="{{ cell.subject_id }}" data-week="{{ selected_week }}">
-                            <div class="subject-label">{{ cell.subject }}</div>
-                            <input type="text" class="input-field edit-topic" placeholder="الموضوع..." value="{{ cell.topic or '' }}">
-                            <textarea class="input-field textarea-field edit-hw" placeholder="الواجب المنزلي...">{{ cell.homework or '' }}</textarea>
+                        <div class="editor" data-sub="{{ cell.subject_id }}" data-week="{{ selected_week }}">
+                            <div style="font-weight:bold; color:#2980b9;">{{ cell.subject }}</div>
+                            <input type="text" class="input-field topic" placeholder="الموضوع" value="{{ cell.topic }}">
+                            <textarea class="input-field hw" placeholder="الواجب">{{ cell.homework }}</textarea>
                         </div>
-                        {% else %}
-                        <div class="empty-cell">-</div>
-                        {% endif %}
+                        {% else %}-{% endif %}
                     </td>
                     {% endfor %}
                 </tr>
@@ -127,52 +79,43 @@
         </table>
     </div>
 
-    <div class="footer">
-        <a href="/student" class="btn-student-view">عرض الطالب (ما يراه الطلاب)</a>
+    <div style="text-align:center; margin-top:20px;">
+        <a href="/student" style="padding:10px 20px; background:#3498db; color:white; text-decoration:none; border-radius:5px;">عرض الطالب</a>
     </div>
 
     <script>
-        function switchWeek(week) {
-            window.location.href = '/?week=' + week;
+        function updateTimers() {
+            document.querySelectorAll('.countdown-item').forEach(item => {
+                const target = new Date(item.dataset.date).getTime();
+                const now = new Date().getTime();
+                const dist = target - now;
+                if (dist > 0) {
+                    item.querySelector('.timer').textContent = Math.floor(dist / (1000 * 60 * 60 * 24)) + ' يوم';
+                } else {
+                    item.querySelector('.timer').textContent = 'انتهى';
+                }
+            });
         }
+        setInterval(updateTimers, 1000); updateTimers();
 
-        async function saveAll() {
-            const status = document.getElementById('save-status');
-            const saveBtn = document.querySelector('.btn-save');
-            
-            status.textContent = 'جاري الحفظ...';
-            status.style.color = '#3498db';
-            saveBtn.disabled = true;
-
+        async function save() {
             const entries = [];
-            document.querySelectorAll('.entry-editor').forEach(box => {
+            document.querySelectorAll('.editor').forEach(ed => {
                 entries.push({
-                    subject_id: box.getAttribute('data-subject-id'),
-                    week: box.getAttribute('data-week'),
-                    topic: box.querySelector('.edit-topic').value,
-                    homework: box.querySelector('.edit-hw').value
+                    subject_id: ed.dataset.sub,
+                    week: ed.dataset.week,
+                    topic: ed.querySelector('.topic').value,
+                    homework: ed.querySelector('.hw').value
                 });
             });
-
-            try {
-                const response = await fetch('/?week={{ selected_week }}', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ entries: entries })
-                });
-
-                if (response.ok) {
-                    status.textContent = 'تم الحفظ بنجاح! ✓';
-                    status.style.color = '#27ae60';
-                    setTimeout(() => { status.textContent = ''; }, 3000);
-                } else {
-                    throw new Error();
-                }
-            } catch (e) {
-                status.textContent = 'حدث خطأ! ✗';
-                status.style.color = '#c0392b';
-            } finally {
-                saveBtn.disabled = false;
+            const res = await fetch('/?week={{ selected_week }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ entries })
+            });
+            if (res.ok) {
+                document.getElementById('status').textContent = 'تم الحفظ ✓';
+                setTimeout(() => document.getElementById('status').textContent = '', 2000);
             }
         }
     </script>

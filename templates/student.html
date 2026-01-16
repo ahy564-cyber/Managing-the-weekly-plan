@@ -3,77 +3,78 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>عرض الطالب - خطة الدراسة الأسبوعية</title>
+    <title>عرض الطالب - نظام الخطة الدراسية</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background: #f4f4f9; color: #333; }
         .header { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; text-align: center; }
-        h1 { margin: 0; color: #2c3e50; font-size: 1.8em; }
-        .info { color: #7f8c8d; margin-top: 10px; font-size: 1.1em; }
-        
         .table-container { background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; min-width: 800px; }
-        th, td { border: 1px solid #e0e0e0; padding: 12px; text-align: center; vertical-align: middle; }
-        
-        th { background: #34495e; color: #fff; font-weight: 600; }
-        .day-col { background: #ecf0f1; font-weight: bold; color: #2c3e50; width: 120px; }
-        
-        .entry { min-height: 60px; display: flex; flex-direction: column; justify-content: center; }
-        .subject { font-weight: bold; color: #2980b9; margin-bottom: 4px; }
-        .topic { font-size: 0.9em; color: #555; }
-        .homework { font-size: 0.8em; color: #c0392b; margin-top: 5px; font-style: italic; border-top: 1px dashed #fadbd8; padding-top: 3px; }
-        
-        .empty { color: #bdc3c7; font-size: 1.2em; }
-        
-        .nav { margin-top: 25px; text-align: center; }
-        .btn-back { display: inline-block; padding: 10px 20px; background: #3498db; color: #fff; text-decoration: none; border-radius: 5px; transition: background 0.3s; }
-        .btn-back:hover { background: #2980b9; }
+        th, td { border: 1px solid #e0e0e0; padding: 10px; text-align: center; }
+        th { background: #34495e; color: #fff; }
+        .countdowns { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; }
+        .countdown-item { background: #34495e; color: #fff; padding: 10px; border-radius: 5px; flex: 1; text-align: center; font-size: 0.9em; }
+        .logo { max-width: 100px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>خطة الدراسة الأسبوعية - الأسبوع {{ week }}</h1>
-        <div class="info">
-            <strong>اليوم:</strong> {{ day }}، {{ date }}
+    <div id="capture">
+        <div class="header">
+            {% if config.school_logo %}<img src="/static/uploads/{{ config.school_logo }}" class="logo">{% endif %}
+            <h1>خطة الدراسة الأسبوعية - الأسبوع {{ week }}</h1>
+            <p>{{ day }}، {{ date }}</p>
+        </div>
+
+        <div class="countdowns">
+            {% if config.exam_date_1 %}<div class="countdown-item" data-date="{{ config.exam_date_1 }}">الفترية الأولى بعد: <span class="timer">--</span></div>{% endif %}
+            {% if config.exam_date_2 %}<div class="countdown-item" data-date="{{ config.exam_date_2 }}">الفترية الثانية بعد: <span class="timer">--</span></div>{% endif %}
+            {% if config.exam_date_final %}<div class="countdown-item" data-date="{{ config.exam_date_final }}">النهائية بعد: <span class="timer">--</span></div>{% endif %}
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>اليوم</th>
+                        {% for p in range(1, 9) %}<th>الحصة {{ p }}</th>{% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in days_order %}
+                    <tr>
+                        <td style="background:#ecf0f1; font-weight:bold;">{{ days_ar[d] }}</td>
+                        {% for p in range(1, 9) %}
+                        <td>
+                            {% set cell = schedule[d][p] %}
+                            {% if cell.subject %}
+                            <div style="font-weight:bold; color:#2980b9;">{{ cell.subject }}</div>
+                            <div style="font-size:0.9em;">{{ cell.topic }}</div>
+                            {% if cell.homework %}<div style="font-size:0.8em; color:#c0392b;">الواجب: {{ cell.homework }}</div>{% endif %}
+                            {% else %}-{% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
 
-    <div class="table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>اليوم / الحصة</th>
-                    {% for p in range(1, 9) %}
-                    <th>الحصة {{ p }}</th>
-                    {% endfor %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for day_eng in days_order %}
-                <tr>
-                    <td class="day-col">{{ days_ar[day_eng] }}</td>
-                    {% for p in range(1, 9) %}
-                    <td>
-                        <div class="entry">
-                        {% if schedule[day_eng][p].subject %}
-                            <div class="subject">{{ schedule[day_eng][p].subject }}</div>
-                            <div class="topic">{{ schedule[day_eng][p].topic }}</div>
-                            {% if schedule[day_eng][p].homework %}
-                            <div class="homework">الواجب: {{ schedule[day_eng][p].homework }}</div>
-                            {% endif %}
-                        {% else %}
-                            <span class="empty">-</span>
-                        {% endif %}
-                        </div>
-                    </td>
-                    {% endfor %}
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <div style="text-align:center; margin-top:20px;">
+        <button onclick="html2pdf().from(document.getElementById('capture')).save('schedule.pdf')">PDF</button>
+        <button onclick="html2canvas(document.getElementById('capture')).then(c=>{const l=document.createElement('a');l.download='schedule.png';l.href=c.toDataURL();l.click();})">صورة</button>
+        <a href="/" style="margin-left:15px; text-decoration:none; color:#3498db;">العودة</a>
     </div>
 
-    <div class="nav">
-        <a href="/" class="btn-back">← العودة للوحة المعلم</a>
-    </div>
+    <script>
+        function update() {
+            document.querySelectorAll('.countdown-item').forEach(i => {
+                const t = new Date(i.dataset.date).getTime() - new Date().getTime();
+                i.querySelector('.timer').textContent = t > 0 ? Math.floor(t / 86400000) + ' يوم' : 'انتهى';
+            });
+        }
+        setInterval(update, 1000); update();
+    </script>
 </body>
 </html>
