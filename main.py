@@ -54,20 +54,15 @@ def init_db():
         ''')
         cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('current_week', '1')")
         cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('admin_password', 'admin123')")
-        cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('teacher_password', 'teacher123')")
         db.commit()
 
-def login_required(role=None):
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            if 'user_role' not in session:
-                return redirect(url_for('login'))
-            if role and session['user_role'] != role:
-                return redirect(url_for('index'))
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if session.get('user_role') != 'admin':
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -75,14 +70,10 @@ def login():
         password = request.form.get('password')
         db = get_db()
         admin_pass = db.execute("SELECT value FROM config WHERE key = 'admin_password'").fetchone()['value']
-        teacher_pass = db.execute("SELECT value FROM config WHERE key = 'teacher_password'").fetchone()['value']
         
         if password == admin_pass:
             session['user_role'] = 'admin'
             return redirect(url_for('admin'))
-        elif password == teacher_pass:
-            session['user_role'] = 'teacher'
-            return redirect(url_for('teacher_portal'))
         else:
             flash('كلمة المرور غير صحيحة')
             return redirect(url_for('login'))
@@ -91,13 +82,42 @@ def login():
 @app.route('/logout')
 def logout():
     session.pop('user_role', None)
-    return redirect(url_for('login'))
+    return redirect(url_for('index'))
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
     db = get_db()
-    current_week = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()['value']
-    return render_template('index.html', current_week=current_week)
+    # The home page is now the teacher's editable table
+    config_week = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()['value']
+    selected_week = request.args.get('week', config_week)
+    
+    if request.method == 'POST':
+        data = request.json
+        if data and 'entries' in data:
+            for entry in data['entries']:
+                db.execute("UPDATE schedule SET topic=?, homework=? WHERE id=?", 
+                          (entry.get('topic'), entry.get('homework'), entry.get('id')))
+            db.commit()
+            return jsonify({'status': 'success'})
+        return jsonify({'status': 'error'}), 400
+
+    rows = db.execute("SELECT * FROM schedule WHERE week_number = ?", (selected_week,)).fetchall()
+    
+    schedule_data = {day: {p: {} for p in range(1, 9)} for day in DAYS_ORDER}
+    for row in rows:
+        if row['day'] in schedule_data and 1 <= row['period'] <= 8:
+            schedule_data[row['day']][row['period']] = {
+                'id': row['id'],
+                'subject': row['subject'],
+                'topic': row['topic'],
+                'homework': row['homework']
+            }
+            
+    return render_template('teacher.html', 
+                         selected_week=int(selected_week), 
+                         schedule=schedule_data, 
+                         days_order=DAYS_ORDER,
+                         days_ar=DAYS_AR)
 
 @app.route('/student')
 def student():
@@ -134,7 +154,7 @@ def student():
                          day=day_str_ar)
 
 @app.route('/admin', methods=['GET', 'POST'])
-@login_required(role='admin')
+@admin_required
 def admin():
     db = get_db()
     if request.method == 'POST':
@@ -166,42 +186,6 @@ def admin():
     current_week = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()['value']
     entries = db.execute("SELECT * FROM schedule WHERE week_number = ? ORDER BY day, period", (current_week,)).fetchall()
     return render_template('admin.html', current_week=current_week, days_ar=DAYS_AR, days_order=DAYS_ORDER, entries=entries)
-
-@app.route('/teacher', methods=['GET', 'POST'])
-@login_required(role='teacher')
-def teacher_portal():
-    db = get_db()
-    config_week = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()['value']
-    selected_week = request.args.get('week', config_week)
-    
-    if request.method == 'POST':
-        # Bulk save logic
-        data = request.json
-        if data and 'entries' in data:
-            for entry in data['entries']:
-                db.execute("UPDATE schedule SET topic=?, homework=? WHERE id=?", 
-                          (entry.get('topic'), entry.get('homework'), entry.get('id')))
-            db.commit()
-            return jsonify({'status': 'success'})
-        return jsonify({'status': 'error'}), 400
-
-    rows = db.execute("SELECT * FROM schedule WHERE week_number = ?", (selected_week,)).fetchall()
-    
-    schedule_data = {day: {p: {} for p in range(1, 9)} for day in DAYS_ORDER}
-    for row in rows:
-        if row['day'] in schedule_data and 1 <= row['period'] <= 8:
-            schedule_data[row['day']][row['period']] = {
-                'id': row['id'],
-                'subject': row['subject'],
-                'topic': row['topic'],
-                'homework': row['homework']
-            }
-            
-    return render_template('teacher.html', 
-                         selected_week=int(selected_week), 
-                         schedule=schedule_data, 
-                         days_order=DAYS_ORDER,
-                         days_ar=DAYS_AR)
 
 if __name__ == '__main__':
     if not os.path.exists(DATABASE):
