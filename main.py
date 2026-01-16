@@ -116,12 +116,14 @@ def admin():
             flash('تم حذف المادة بنجاح')
         elif action == 'update_settings':
             for key in ['period1_date', 'period2_date', 'final_date', 'current_week']:
-                db.execute("UPDATE settings SET value = ? WHERE key = ?", (request.form.get(key), key))
+                val = request.form.get(key)
+                if val is not None:
+                    db.execute("UPDATE settings SET value = ? WHERE key = ?", (val, key))
             flash('تم تحديث الإعدادات بنجاح')
         elif action == 'delete_exam_date':
             exam_key = request.form.get('exam_key')
             db.execute("UPDATE settings SET value = '' WHERE key = ?", (exam_key,))
-            flash('تم حذف تاريخ الاختبار بنجاح')
+            flash('تم حذف التاريخ بنجاح')
         elif action == 'upload_logo':
             file = request.files.get('logo')
             if file:
