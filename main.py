@@ -118,6 +118,10 @@ def admin():
             for key in ['period1_date', 'period2_date', 'final_date', 'current_week']:
                 db.execute("UPDATE settings SET value = ? WHERE key = ?", (request.form.get(key), key))
             flash('تم تحديث الإعدادات بنجاح')
+        elif action == 'delete_exam_date':
+            exam_key = request.form.get('exam_key')
+            db.execute("UPDATE settings SET value = '' WHERE key = ?", (exam_key,))
+            flash('تم حذف تاريخ الاختبار بنجاح')
         elif action == 'upload_logo':
             file = request.files.get('logo')
             if file:
@@ -152,7 +156,6 @@ def teacher():
     if request.method == 'POST':
         data = request.json
         for entry in data.get('entries', []):
-            # Check if exists
             exists = db.execute("SELECT id FROM weekly_data WHERE class_id = ? AND week_number = ? AND day = ? AND period = ?",
                                (class_id, week, entry['day'], entry['period'])).fetchone()
             if exists:
@@ -187,7 +190,6 @@ def student(grade_id, class_id):
     settings = {row['key']: row['value'] for row in db.execute("SELECT * FROM settings").fetchall()}
     week = settings.get('current_week', '1')
     
-    # Get grade and class names
     grade = db.execute("SELECT name FROM grades WHERE id = ?", (grade_id,)).fetchone()
     cls = db.execute("SELECT name FROM classes WHERE id = ?", (class_id,)).fetchone()
     

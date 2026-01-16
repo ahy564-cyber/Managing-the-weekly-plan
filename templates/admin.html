@@ -16,6 +16,8 @@
         button:hover { background: #2563eb; transform: translateY(-1px); }
         .btn-danger { background: #ef4444; }
         .btn-danger:hover { background: #dc2626; }
+        .btn-success { background: #10b981; }
+        .btn-success:hover { background: #059669; }
         table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 15px; overflow: hidden; border-radius: 8px; border: 1px solid #e2e8f0; }
         th, td { padding: 12px 15px; text-align: center; border-bottom: 1px solid #e2e8f0; border-left: 1px solid #e2e8f0; }
         th { background: #f1f5f9; font-weight: 700; color: #334155; }
@@ -58,19 +60,55 @@
                 </div>
                 <div class="form-group">
                     <label>تاريخ اختبارات الفترة الأولى:</label>
-                    <input type="date" name="period1_date" value="{{ settings.period1_date }}">
+                    <div class="flex">
+                        <input type="date" name="period1_date" value="{{ settings.period1_date }}">
+                        <button type="submit" name="action" value="delete_exam_date" class="btn-danger" onclick="this.form.exam_key.value='period1_date'">حذف</button>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>تاريخ اختبارات الفترة الثانية:</label>
-                    <input type="date" name="period2_date" value="{{ settings.period2_date }}">
+                    <div class="flex">
+                        <input type="date" name="period2_date" value="{{ settings.period2_date }}">
+                        <button type="submit" name="action" value="delete_exam_date" class="btn-danger" onclick="this.form.exam_key.value='period2_date'">حذف</button>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>تاريخ الاختبار النهائي:</label>
-                    <input type="date" name="final_date" value="{{ settings.final_date }}">
+                    <div class="flex">
+                        <input type="date" name="final_date" value="{{ settings.final_date }}">
+                        <button type="submit" name="action" value="delete_exam_date" class="btn-danger" onclick="this.form.exam_key.value='final_date'">حذف</button>
+                    </div>
                 </div>
             </div>
+            <input type="hidden" name="exam_key" id="exam_key">
             <button type="submit">حفظ الإعدادات</button>
         </form>
+    </div>
+
+    <div class="card">
+        <h2>روابط الطلاب للفصول</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>الصف</th>
+                    <th>الفصل</th>
+                    <th>رابط الطالب</th>
+                    <th>الإجراء</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in classes %}
+                <tr>
+                    <td>{{ c.grade_name }}</td>
+                    <td>{{ c.name }}</td>
+                    <td><code id="link-{{ c.id }}">{{ request.host_url }}student/{{ c.grade_id }}/{{ c.id }}</code></td>
+                    <td>
+                        <button class="btn-success" onclick="copyLink('link-{{ c.id }}')">نسخ الرابط</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 25px;">
@@ -180,5 +218,14 @@
             </tbody>
         </table>
     </div>
+
+    <script>
+        function copyLink(id) {
+            const text = document.getElementById(id).innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('تم نسخ الرابط بنجاح!');
+            });
+        }
+    </script>
 </body>
 </html>
