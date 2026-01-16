@@ -6,6 +6,18 @@ from datetime import datetime
 app = Flask(__name__)
 DATABASE = 'school.db'
 
+# Mapping of English days to Arabic for backend/frontend consistency
+DAYS_AR = {
+    'Sunday': 'الأحد',
+    'Monday': 'الاثنين',
+    'Tuesday': 'الثلاثاء',
+    'Wednesday': 'الأربعاء',
+    'Thursday': 'الخميس'
+}
+
+# The user requested Sunday to Thursday (الأحد to الخميس)
+DAYS_ORDER = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday']
+
 def get_db():
     db = getattr(g, '_database', None)
     if db is None:
@@ -23,14 +35,12 @@ def init_db():
     with app.app_context():
         db = get_db()
         cursor = db.cursor()
-        # Configuration table (e.g., current week)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS config (
                 key TEXT PRIMARY KEY,
                 value TEXT
             )
         ''')
-        # Schedule table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS schedule (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,7 +52,6 @@ def init_db():
                 homework TEXT
             )
         ''')
-        # Default current week if not set
         cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('current_week', '1')")
         db.commit()
 
@@ -55,11 +64,13 @@ def index():
 @app.route('/student')
 def student():
     db = get_db()
-    current_week = int(db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()['value'])
+    current_week_row = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()
+    current_week = int(current_week_row['value']) if current_week_row else 1
+    
     rows = db.execute("SELECT * FROM schedule WHERE week_number = ?", (current_week,)).fetchall()
     
-    # Organize data for the template: schedule[day][period]
-    schedule_data = {day: {p: {} for p in range(1, 9)} for day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']}
+    # Organize data: schedule[day_eng][period]
+    schedule_data = {day: {p: {} for p in range(1, 9)} for day in DAYS_ORDER}
     for row in rows:
         if row['day'] in schedule_data and 1 <= row['period'] <= 8:
             schedule_data[row['day']][row['period']] = {
@@ -69,14 +80,22 @@ def student():
             }
             
     today = datetime.now()
+    # Basic Arabic translation for the current day display
+    days_map_full = {
+        'Sunday': 'الأحد', 'Monday': 'الاثنين', 'Tuesday': 'الثلاثاء',
+        'Wednesday': 'الأربعاء', 'Thursday': 'الخميس', 'Friday': 'الجمعة', 'Saturday': 'السبت'
+    }
+    day_str_en = today.strftime("%A")
+    day_str_ar = days_map_full.get(day_str_en, day_str_en)
     date_str = today.strftime("%Y-%m-%d")
-    day_str = today.strftime("%A")
     
     return render_template('student.html', 
                          week=current_week, 
                          schedule=schedule_data, 
+                         days_order=DAYS_ORDER,
+                         days_ar=DAYS_AR,
                          date=date_str, 
-                         day=day_str)
+                         day=day_str_ar)
 
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
@@ -94,7 +113,6 @@ def admin():
             topic = request.form.get('topic')
             homework = request.form.get('homework')
             
-            # Check if entry exists to update or insert
             existing = db.execute("SELECT id FROM schedule WHERE week_number = ? AND day = ? AND period = ?", 
                                 (week, day, period)).fetchone()
             if existing:
@@ -108,8 +126,9 @@ def admin():
             db.commit()
         return redirect(url_for('admin'))
 
-    current_week = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()['value']
-    return render_template('admin.html', current_week=current_week)
+    current_week_row = db.execute("SELECT value FROM config WHERE key = 'current_week'").fetchone()
+    current_week = current_week_row['value'] if current_week_row else '1'
+    return render_template('admin.html', current_week=current_week, days_ar=DAYS_AR, days_order=DAYS_ORDER)
 
 if __name__ == '__main__':
     if not os.path.exists(DATABASE):
