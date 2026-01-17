@@ -296,5 +296,10 @@ def student(grade_id, class_id):
                          week=week, grade_name=grade.name if grade else '', class_name=cls.name if cls else '')
 
 if __name__ == '__main__':
-    init_db()
+    with app.app_context():
+        try:
+            db.create_all()
+            print("Successfully connected to PostgreSQL and initialized schema.")
+        except Exception as e:
+            print(f"Error connecting to PostgreSQL: {e}")
     app.run(host='0.0.0.0', port=5000, debug=True)
