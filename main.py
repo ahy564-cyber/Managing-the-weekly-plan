@@ -15,6 +15,7 @@ if db_url and db_url.startswith("postgres://"):
 
 # Only add sslmode if not local replit dev DB
 engine_options = {"pool_pre_ping": True}
+# Neon requires sslmode=require for connection stability
 if db_url and "127.0.0.1" not in db_url and "localhost" not in db_url and "helium" not in db_url:
     if "sslmode" not in db_url:
         separator = "&" if "?" in db_url else "?"
@@ -203,8 +204,8 @@ def admin():
         db.session.commit()
         return redirect(url_for('admin'))
 
-    grades = Grade.query.all()
-    classes = Class.query.all()
+    grades = Grade.query.order_by(Grade.name).all()
+    classes = Class.query.join(Grade).order_by(Grade.name, Class.name).all()
     all_settings = Setting.query.all()
     settings_dict = {s.key: s.value for s in all_settings}
     subjects = Subject.query.all()
