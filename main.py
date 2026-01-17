@@ -7,7 +7,7 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SESSION_SECRET', 'super-secret-key-fast490')
-DATABASE = 'school.db'
+DATABASE = os.path.join('data', 'school.db')
 UPLOAD_FOLDER = 'static/uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
