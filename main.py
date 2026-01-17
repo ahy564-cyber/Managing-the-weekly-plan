@@ -9,7 +9,20 @@ app = Flask(__name__)
 app.secret_key = os.getenv('SESSION_SECRET', 'super-secret-key-fast490')
 
 # PostgreSQL Configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
+db_url = os.getenv('DATABASE_URL')
+if db_url and db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+# Only add sslmode if not local replit dev DB
+engine_options = {"pool_pre_ping": True}
+if db_url and "127.0.0.1" not in db_url and "localhost" not in db_url and "helium" not in db_url:
+    if "sslmode" not in db_url:
+        separator = "&" if "?" in db_url else "?"
+        db_url += f"{separator}sslmode=require"
+    engine_options["connect_args"] = {"sslmode": "require"}
+
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = engine_options
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
