@@ -15,12 +15,19 @@ if db_url and db_url.startswith("postgres://"):
 
 # Only add sslmode if not local replit dev DB
 engine_options = {"pool_pre_ping": True}
-# Neon requires sslmode=require for connection stability
+# Neon requires sslmode=require for connection stability in prod
+# Local helium DB does NOT support SSL
 if db_url and "127.0.0.1" not in db_url and "localhost" not in db_url and "helium" not in db_url:
     if "sslmode" not in db_url:
         separator = "&" if "?" in db_url else "?"
         db_url += f"{separator}sslmode=require"
     engine_options["connect_args"] = {"sslmode": "require"}
+else:
+    # Disable SSL for local dev DB
+    if db_url and "sslmode" not in db_url:
+        separator = "&" if "?" in db_url else "?"
+        db_url += f"{separator}sslmode=disable"
+    engine_options["connect_args"] = {"sslmode": "disable"}
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = engine_options
@@ -47,14 +54,14 @@ DAYS_ORDER = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday']
 class Grade(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
-    classes = db.relationship('Class', backref='grade', cascade="all, delete-orphan", lazy=True)
+    classes = db.relationship('Class', backref='grade_obj', cascade="all, delete-orphan", lazy=True)
 
 class Class(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     grade_id = db.Column(db.Integer, db.ForeignKey('grade.id'), nullable=False)
-    subjects = db.relationship('Subject', backref='class', cascade="all, delete-orphan", lazy=True)
-    weekly_data = db.relationship('WeeklyData', backref='class', cascade="all, delete-orphan", lazy=True)
+    subjects = db.relationship('Subject', backref='class_obj', cascade="all, delete-orphan", lazy=True)
+    weekly_data = db.relationship('WeeklyData', backref='class_obj', cascade="all, delete-orphan", lazy=True)
 
 class Subject(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -76,30 +83,6 @@ class WeeklyData(db.Model):
 class Setting(db.Model):
     key = db.Column(db.String(100), primary_key=True)
     value = db.Column(db.Text)
-
-def init_db():
-    with app.app_context():
-        db.create_all()
-        
-        # Initial settings
-        defaults = {
-            'admin_password': 'fast490',
-            'school_logo': '',
-            'school_name': 'مدرستي',
-            'period1_date': '',
-            'period2_date': '',
-            'final_date': '',
-            'current_week': '1'
-        }
-        for key, val in defaults.items():
-            if not Setting.query.get(key):
-                db.session.add(Setting(key=key, value=val))
-        
-        # Ensure password is correct
-        pwd = Setting.query.get('admin_password')
-        if pwd: pwd.value = 'fast490'
-        
-        db.session.commit()
 
 def admin_required(f):
     @wraps(f)
@@ -204,11 +187,24 @@ def admin():
         db.session.commit()
         return redirect(url_for('admin'))
 
+    # Reload logic to ensure all relationships are loaded
     grades = Grade.query.order_by(Grade.name).all()
-    classes = Class.query.join(Grade).order_by(Grade.name, Class.name).all()
+    # Manual query to get grade names for classes
+    classes_raw = db.session.query(Class, Grade.name).join(Grade, Class.grade_id == Grade.id).order_by(Grade.name, Class.name).all()
+    classes = []
+    for c, g_name in classes_raw:
+        c.grade_name = g_name # Dynamic attribute for template
+        classes.append(c)
+        
     all_settings = Setting.query.all()
     settings_dict = {s.key: s.value for s in all_settings}
-    subjects = Subject.query.all()
+    
+    # Subjects with class and grade names
+    subjects_raw = db.session.query(Subject, Class.name, Grade.name).join(Class, Subject.class_id == Class.id).join(Grade, Class.grade_id == Grade.id).all()
+    subjects = []
+    for s, c_name, g_name in subjects_raw:
+        s.class_name = f"{g_name} - {c_name}"
+        subjects.append(s)
     
     sel_class_id = request.args.get('class_id')
     sel_week = request.args.get('week', settings_dict.get('current_week', '1'))
