@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import joinedload
+from sqlalchemy import func
 import os
 import json
 from datetime import datetime
@@ -92,6 +93,21 @@ class LockedDay(db.Model):
     day_name = db.Column(db.String(20), nullable=False)
     __table_args__ = (db.UniqueConstraint('week_number', 'day_name', name='_week_day_uc'),)
 
+class ActivityLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_role = db.Column(db.String(50))
+    action = db.Column(db.Text)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+def log_activity(role, action):
+    try:
+        log = ActivityLog(user_role=role, action=action)
+        db.session.add(log)
+        db.session.commit()
+    except Exception as e:
+        print(f"Error logging activity: {e}")
+        db.session.rollback()
+
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -108,12 +124,14 @@ def login():
         if password == (stored.value if stored else 'fast490'):
             session.clear()
             session['user_role'] = 'admin'
+            log_activity('admin', 'تم تسجيل الدخول للوحة التحكم')
             return redirect(url_for('admin'))
         flash('كلمة المرور غير صحيحة')
     return render_template('login.html')
 
 @app.route('/logout')
 def logout():
+    log_activity(session.get('user_role', 'guest'), 'تم تسجيل الخروج')
     session.clear()
     return redirect(url_for('teacher'))
 
@@ -126,41 +144,45 @@ def admin():
             name = request.form.get('name')
             if name:
                 db.session.add(Grade(name=name))
+                log_activity('admin', f'إضافة صف جديد: {name}')
                 flash('تم إضافة الصف بنجاح')
         elif action == 'delete_grade':
             gid = request.form.get('grade_id')
             if gid and gid.isdigit():
                 grade = db.session.get(Grade, int(gid))
                 if grade:
+                    name = grade.name
                     db.session.delete(grade)
+                    log_activity('admin', f'حذف صف: {name}')
                     flash('تم حذف الصف بنجاح')
         elif action == 'add_class':
             name = request.form.get('name')
             gid = request.form.get('grade_id')
             if name and gid and gid.isdigit():
                 db.session.add(Class(name=name, grade_id=int(gid)))
+                log_activity('admin', f'إضافة فصل جديد: {name}')
                 flash('تم إضافة الفصل بنجاح')
         elif action == 'delete_class':
             cid = request.form.get('class_id')
             if cid and cid.isdigit():
                 cls = db.session.get(Class, int(cid))
                 if cls:
+                    name = cls.name
                     db.session.delete(cls)
+                    log_activity('admin', f'حذف فصل: {name}')
                     flash('تم حذف الفصل بنجاح')
         elif action == 'save_fixed_schedule':
             cid = request.form.get('class_id')
             if cid and cid.isdigit():
                 class_id = int(cid)
-                # Clear existing fixed schedule for this class
+                cls = db.session.get(Class, class_id)
                 Subject.query.filter_by(class_id=class_id).delete()
-                
-                # Get all inputs from form
                 for day in DAYS_ORDER:
                     for period in range(1, 9):
                         subject_name = request.form.get(f'fixed_{day}_{period}')
                         if subject_name and subject_name.strip():
                             db.session.add(Subject(class_id=class_id, day=day, period=period, name=subject_name.strip()))
-                
+                log_activity('admin', f'تحديث الجدول الأساسي للفصل: {cls.name if cls else cid}')
                 db.session.commit()
                 flash('تم حفظ الجدول الأساسي بنجاح')
         elif action == 'update_settings':
@@ -170,6 +192,7 @@ def admin():
                     s = Setting.query.get(key)
                     if s: s.value = val
                     else: db.session.add(Setting(key=key, value=val))
+            log_activity('admin', 'تحديث الإعدادات العامة')
             db.session.commit()
             flash('تم تحديث الإعدادات بنجاح')
         elif action == 'update_locked_days':
@@ -177,11 +200,10 @@ def admin():
             if week and week.isdigit():
                 week_int = int(week)
                 locked_days = request.form.getlist('locked_days')
-                # Clear existing for this week
                 LockedDay.query.filter_by(week_number=week_int).delete()
-                # Add new ones
                 for d in locked_days:
                     db.session.add(LockedDay(week_number=week_int, day_name=d))
+                log_activity('admin', f'تحديث الأيام المغلقة للأسبوع {week_int}')
                 db.session.commit()
                 flash(f'تم تحديث الأيام المغلقة للأسبوع {week_int}')
         elif action == 'upload_logo':
@@ -192,6 +214,7 @@ def admin():
                 s = Setting.query.get('school_logo')
                 if s: s.value = filename
                 else: db.session.add(Setting(key='school_logo', value=filename))
+                log_activity('admin', 'تحديث شعار المدرسة')
                 db.session.commit()
                 flash('تم رفع الشعار بنجاح')
         elif action == 'save_override':
@@ -206,6 +229,7 @@ def admin():
                     exists.subject_name = subject_name
                 else:
                     db.session.add(WeeklyData(class_id=int(cid), week_number=int(week), day=day, period=int(period), subject_name=subject_name))
+                log_activity('admin', f'تعديل أسبوعي (الأسبوع {week}, الفصل {cid})')
                 flash('تم حفظ التعديل الأسبوعي بنجاح')
         
         db.session.commit()
@@ -246,12 +270,38 @@ def admin():
             day_data.update({'topic': w.topic, 'homework': w.homework})
             if w.subject_name:
                 day_data['subject_name'] = w.subject_name
+
+    # Completion Stats
+    current_week_int = int(settings_dict.get('current_week', '1'))
+    all_classes_count = len(classes)
+    completed_classes = []
+    pending_classes = []
+    
+    for c in classes:
+        # A class is considered "Completed" if it has at least one topic filled in the current week
+        has_data = WeeklyData.query.filter(
+            WeeklyData.class_id == c.id,
+            WeeklyData.week_number == current_week_int,
+            WeeklyData.topic != ''
+        ).first()
+        if has_data:
+            completed_classes.append(c)
+        else:
+            pending_classes.append(c)
+    
+    completion_percent = (len(completed_classes) / all_classes_count * 100) if all_classes_count > 0 else 0
+    
+    # Activity Logs
+    logs = ActivityLog.query.order_by(ActivityLog.timestamp.desc()).limit(50).all()
     
     return render_template('admin.html', grades=grades, classes=classes, settings=settings_dict, subjects=subjects, 
                          days_ar=DAYS_AR, days_order=DAYS_ORDER, schedule=schedule, 
                          selected_class_id=sel_class_id, selected_week=sel_week,
                          locked_view_week=locked_view_week, current_locked_days=current_locked_days,
-                         sel_fixed_class_id=sel_fixed_class_id, fixed_schedule=fixed_schedule)
+                         sel_fixed_class_id=sel_fixed_class_id, fixed_schedule=fixed_schedule,
+                         completion_percent=round(completion_percent, 1),
+                         completed_classes=completed_classes, pending_classes=pending_classes,
+                         logs=logs)
 
 @app.route('/admin/delete_date/<date_type>', methods=['POST'])
 @admin_required
@@ -287,8 +337,8 @@ def teacher():
         data = request.json
         if class_id and class_id.isdigit() and week and week.isdigit():
             week_int = int(week)
+            cls = db.session.get(Class, int(class_id))
             for entry in data.get('entries', []):
-                # Verify not locked
                 if entry['day'] in locked_days:
                     return jsonify({'status': 'error', 'message': f"هذا اليوم مغلق في هذا الأسبوع محدد من قبل الإدارة"}), 403
                 
@@ -299,6 +349,8 @@ def teacher():
                 else:
                     db.session.add(WeeklyData(class_id=int(class_id), week_number=week_int, day=entry['day'], 
                                             period=int(entry['period']), topic=entry['topic'], homework=entry['homework']))
+            
+            log_activity('teacher', f'تحديث دروس وواجبات الفصل: {cls.name if cls else class_id} (الأسبوع {week})')
             db.session.commit()
             return jsonify({'status': 'success'})
         return jsonify({'status': 'error', 'message': 'Invalid input'}), 400
