@@ -129,7 +129,7 @@ def admin():
             name = request.form.get('name')
             gid = request.form.get('grade_id')
             if name and gid:
-                db.session.add(Class(name=name, grade_id=gid))
+                db.session.add(Class(name=name, grade_id=int(gid)))
                 flash('تم إضافة الفصل بنجاح')
         elif action == 'delete_class':
             cid = request.form.get('class_id')
@@ -143,7 +143,7 @@ def admin():
             period = request.form.get('period')
             name = request.form.get('name')
             if cid and day and period and name:
-                db.session.add(Subject(class_id=cid, day=day, period=period, name=name))
+                db.session.add(Subject(class_id=int(cid), day=day, period=int(period), name=name))
                 flash('تم حفظ المادة بنجاح')
         elif action == 'delete_subject':
             sid = request.form.get('subject_id')
@@ -176,30 +176,28 @@ def admin():
             day = request.form.get('day')
             period = request.form.get('period')
             subject_name = request.form.get('subject_name')
-            
-            exists = WeeklyData.query.filter_by(class_id=cid, week_number=week, day=day, period=period).first()
-            if exists:
-                exists.subject_name = subject_name
-            else:
-                db.session.add(WeeklyData(class_id=cid, week_number=week, day=day, period=period, subject_name=subject_name))
-            flash('تم حفظ التعديل الأسبوعي بنجاح')
+            if cid and week and day and period:
+                exists = WeeklyData.query.filter_by(class_id=int(cid), week_number=int(week), day=day, period=int(period)).first()
+                if exists:
+                    exists.subject_name = subject_name
+                else:
+                    db.session.add(WeeklyData(class_id=int(cid), week_number=int(week), day=day, period=int(period), subject_name=subject_name))
+                flash('تم حفظ التعديل الأسبوعي بنجاح')
         
         db.session.commit()
         return redirect(url_for('admin'))
 
-    # Reload logic to ensure all relationships are loaded
     grades = Grade.query.order_by(Grade.name).all()
-    # Manual query to get grade names for classes
+    # Explicitly query grade names to avoid template issues
     classes_raw = db.session.query(Class, Grade.name).join(Grade, Class.grade_id == Grade.id).order_by(Grade.name, Class.name).all()
     classes = []
     for c, g_name in classes_raw:
-        c.grade_name = g_name # Dynamic attribute for template
+        c.grade_name = g_name
         classes.append(c)
         
     all_settings = Setting.query.all()
     settings_dict = {s.key: s.value for s in all_settings}
     
-    # Subjects with class and grade names
     subjects_raw = db.session.query(Subject, Class.name, Grade.name).join(Class, Subject.class_id == Class.id).join(Grade, Class.grade_id == Grade.id).all()
     subjects = []
     for s, c_name, g_name in subjects_raw:
@@ -210,11 +208,12 @@ def admin():
     sel_week = request.args.get('week', settings_dict.get('current_week', '1'))
     
     schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
-    if sel_class_id:
-        fixed = Subject.query.filter_by(class_id=sel_class_id).all()
+    # Fix DataError by ensuring class_id is a valid integer string
+    if sel_class_id and sel_class_id.isdigit():
+        fixed = Subject.query.filter_by(class_id=int(sel_class_id)).all()
         for f in fixed: schedule[f.day][f.period]['subject_name'] = f.name
         
-        weekly = WeeklyData.query.filter_by(class_id=sel_class_id, week_number=sel_week).all()
+        weekly = WeeklyData.query.filter_by(class_id=int(sel_class_id), week_number=int(sel_week)).all()
         for w in weekly:
             day_data = schedule[w.day][w.period]
             day_data.update({'topic': w.topic, 'homework': w.homework})
@@ -252,26 +251,28 @@ def teacher():
     
     if request.method == 'POST':
         data = request.json
-        for entry in data.get('entries', []):
-            exists = WeeklyData.query.filter_by(class_id=class_id, week_number=week, day=entry['day'], period=entry['period']).first()
-            if exists:
-                exists.topic = entry['topic']
-                exists.homework = entry['homework']
-            else:
-                db.session.add(WeeklyData(class_id=class_id, week_number=week, day=entry['day'], 
-                                        period=entry['period'], topic=entry['topic'], homework=entry['homework']))
-        db.session.commit()
-        return jsonify({'status': 'success'})
+        if class_id and class_id.isdigit():
+            for entry in data.get('entries', []):
+                exists = WeeklyData.query.filter_by(class_id=int(class_id), week_number=int(week), day=entry['day'], period=int(entry['period'])).first()
+                if exists:
+                    exists.topic = entry['topic']
+                    exists.homework = entry['homework']
+                else:
+                    db.session.add(WeeklyData(class_id=int(class_id), week_number=int(week), day=entry['day'], 
+                                            period=int(entry['period']), topic=entry['topic'], homework=entry['homework']))
+            db.session.commit()
+            return jsonify({'status': 'success'})
+        return jsonify({'status': 'error', 'message': 'Invalid class_id'}), 400
 
     grades = Grade.query.all()
-    classes = Class.query.filter_by(grade_id=grade_id).all() if grade_id else []
+    classes = Class.query.filter_by(grade_id=int(grade_id)).all() if grade_id and grade_id.isdigit() else []
     
     schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
-    if class_id:
-        fixed = Subject.query.filter_by(class_id=class_id).all()
+    if class_id and class_id.isdigit():
+        fixed = Subject.query.filter_by(class_id=int(class_id)).all()
         for f in fixed: schedule[f.day][f.period]['subject_name'] = f.name
         
-        weekly = WeeklyData.query.filter_by(class_id=class_id, week_number=week).all()
+        weekly = WeeklyData.query.filter_by(class_id=int(class_id), week_number=int(week)).all()
         for w in weekly:
             day_data = schedule[w.day][w.period]
             day_data.update({'topic': w.topic, 'homework': w.homework})
@@ -295,7 +296,7 @@ def student(grade_id, class_id):
     fixed = Subject.query.filter_by(class_id=class_id).all()
     for f in fixed: schedule[f.day][f.period]['subject_name'] = f.name
     
-    weekly = WeeklyData.query.filter_by(class_id=class_id, week_number=week).all()
+    weekly = WeeklyData.query.filter_by(class_id=class_id, week_number=int(week)).all()
     for w in weekly:
         day_data = schedule[w.day][w.period]
         day_data.update({'topic': w.topic, 'homework': w.homework})
