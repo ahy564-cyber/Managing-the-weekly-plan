@@ -128,11 +128,24 @@
             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
                 <div class="form-group">
                     <label>اسم المدرسة:</label>
-                    <input type="text" name="school_name" value="{{ settings.school_name }}">
+                    <input type="text" name="school_name" value="{{ settings.get('school_name', '') }}">
+                </div>
+                <div class="form-group" style="grid-column: span 2;">
+                    <label>أيام الأسبوع المغلقة (يُمنع المعلمون من التعديل فيها):</label>
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap; background: #f1f5f9; padding: 10px; border-radius: 8px;">
+                        {% for en, ar in days_ar.items() %}
+                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                            <input type="checkbox" name="locked_days" value="{{ en }}" 
+                                   {% if en in settings.get('locked_days', []) %}checked{% endif %}
+                                   style="width: auto;">
+                            {{ ar }}
+                        </label>
+                        {% endfor %}
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>الأسبوع الدراسي الحالي:</label>
-                    <input type="number" name="current_week" value="{{ settings.current_week }}">
+                    <input type="number" name="current_week" value="{{ settings.get('current_week', '1') }}">
                 </div>
                 <div class="form-group">
                     <label>تاريخ اختبارات الفترة الأولى:</label>

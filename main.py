@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import joinedload
 import os
+import json
 from datetime import datetime
 from functools import wraps
 from werkzeug.utils import secure_filename
@@ -162,6 +163,13 @@ def admin():
                     s = Setting.query.get(key)
                     if s: s.value = val
                     else: db.session.add(Setting(key=key, value=val))
+            
+            # Handle locked days separately
+            locked_days = request.form.getlist('locked_days')
+            s_locked = Setting.query.get('locked_days')
+            if s_locked: s_locked.value = json.dumps(locked_days)
+            else: db.session.add(Setting(key='locked_days', value=json.dumps(locked_days)))
+            
             db.session.commit()
             flash('تم تحديث الإعدادات بنجاح')
         elif action == 'upload_logo':
@@ -195,6 +203,13 @@ def admin():
     classes = Class.query.options(joinedload(Class.grade)).order_by(Class.name).all()
     all_settings = Setting.query.all()
     settings_dict = {s.key: s.value for s in all_settings}
+    
+    # Parse locked days
+    try:
+        settings_dict['locked_days'] = json.loads(settings_dict.get('locked_days', '[]'))
+    except:
+        settings_dict['locked_days'] = []
+        
     subjects = Subject.query.options(joinedload(Subject.class_obj).joinedload(Class.grade)).all()
     
     sel_class_id = request.args.get('class_id')
@@ -241,10 +256,21 @@ def teacher():
     settings_dict = {s.key: s.value for s in all_settings}
     if not week: week = settings_dict.get('current_week', '1')
     
+    # Parse locked days
+    try:
+        settings_dict['locked_days'] = json.loads(settings_dict.get('locked_days', '[]'))
+    except:
+        settings_dict['locked_days'] = []
+    
     if request.method == 'POST':
         data = request.json
         if class_id and class_id.isdigit() and week and week.isdigit():
+            # Security check: Check if any of the entries are for a locked day
+            locked_days = settings_dict['locked_days']
             for entry in data.get('entries', []):
+                if entry['day'] in locked_days:
+                    return jsonify({'status': 'error', 'message': f"اليوم {DAYS_AR.get(entry['day'])} مغلق من قبل الإدارة"}), 403
+                
                 exists = WeeklyData.query.filter_by(class_id=int(class_id), week_number=int(week), day=entry['day'], period=int(entry['period'])).first()
                 if exists:
                     exists.topic = entry['topic']

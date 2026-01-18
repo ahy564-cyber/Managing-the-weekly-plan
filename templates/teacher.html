@@ -64,16 +64,24 @@
         </thead>
         <tbody>
             {% for d in days_order %}
-            <tr>
-                <td style="background: #f8fafc; font-weight: 700;">{{ days_ar[d] }}</td>
+            {% set is_locked = d in settings.get('locked_days', []) %}
+            <tr {% if is_locked %}style="background: #fff1f2;"{% endif %}>
+                <td style="background: #f8fafc; font-weight: 700;">
+                    {{ days_ar[d] }}
+                    {% if is_locked %}
+                    <br><span style="color: #e11d48; font-size: 0.7em;">(مغلق)</span>
+                    {% endif %}
+                </td>
                 {% for p in range(1, 9) %}
                 <td data-day="{{ d }}" data-period="{{ p }}">
-                    {% if schedule[d][p].subject_name %}
-                    <span class="fixed-sub">{{ schedule[d][p].subject_name }}</span>
-                    <input type="text" class="topic" value="{{ schedule[d][p].topic }}" placeholder="الدرس اليومي...">
-                    <input type="text" class="hw" value="{{ schedule[d][p].homework }}" placeholder="الواجب المنزلي...">
+                    {% if is_locked %}
+                        <span style="color: #94a3b8; font-size: 0.8em;">هذا اليوم مغلق من قبل الإدارة</span>
+                    {% elif schedule[d][p].subject_name %}
+                        <span class="fixed-sub">{{ schedule[d][p].subject_name }}</span>
+                        <input type="text" class="topic" value="{{ schedule[d][p].topic }}" placeholder="الدرس اليومي...">
+                        <input type="text" class="hw" value="{{ schedule[d][p].homework }}" placeholder="الواجب المنزلي...">
                     {% else %}
-                    <span style="color: #cbd5e1; font-size: 0.8em;">لا توجد مادة</span>
+                        <span style="color: #cbd5e1; font-size: 0.8em;">لا توجد مادة</span>
                     {% endif %}
                 </td>
                 {% endfor %}
