@@ -115,12 +115,12 @@
     </div>
 
     <div class="card">
-        <h2>إدارة التجاوز الأسبوعي (Weekly Overrides)</h2>
+        <h2>إدارة التجاوز الأسبوعي (Full Batch Grid)</h2>
         <div class="flex mb-2">
             <div style="flex:1">
                 <label>اختر الفصل:</label>
                 <select onchange="const w = document.getElementById('ovr-week').value; location.href='/admin?class_id='+this.value+'&week='+w">
-                    <option value="">-- اختر --</option>
+                    <option value="">-- اختر الفصل --</option>
                     {% for c in classes %}<option value="{{ c.id }}" {% if selected_class_id == c.id|string %}selected{% endif %}>{{ c.grade.name }} - {{ c.name }}</option>{% endfor %}
                 </select>
             </div>
@@ -131,32 +131,40 @@
                 </select>
             </div>
         </div>
+        
         {% if selected_class_id %}
-        <table>
-            <thead>
-                <tr><th>اليوم</th>{% for p in range(1, 9) %}<th>ح {{ p }}</th>{% endfor %}</tr>
-            </thead>
-            <tbody>
-                {% for d in days_order %}
-                <tr>
-                    <td>{{ days_ar[d] }}</td>
-                    {% for p in range(1, 9) %}
-                    <td>
-                        <form method="POST">
-                            <input type="hidden" name="action" value="save_override">
-                            <input type="hidden" name="class_id" value="{{ selected_class_id }}">
-                            <input type="hidden" name="week" value="{{ selected_week }}">
-                            <input type="hidden" name="day" value="{{ d }}">
-                            <input type="hidden" name="period" value="{{ p }}">
-                            <input type="text" name="subject_name" value="{{ schedule[d][p].subject_name }}" style="padding:5px; border-radius:4px; border:1px solid #ccc; width:80px; font-size:0.8em;">
-                            <button type="submit" style="padding:2px 5px; font-size:0.7em; background:#10b981; margin-top:2px;">حفظ</button>
-                        </form>
-                    </td>
+        <form method="POST">
+            <input type="hidden" name="action" value="save_override_batch">
+            <input type="hidden" name="class_id" value="{{ selected_class_id }}">
+            <input type="hidden" name="week" value="{{ selected_week }}">
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 100px;">اليوم</th>
+                        {% for p in range(1, 9) %}<th>ح {{ p }}</th>{% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in days_order %}
+                    <tr>
+                        <td style="background: #f1f5f9; font-weight: 700; color: #1e3a8a;">{{ days_ar[d] }}</td>
+                        {% for p in range(1, 9) %}
+                        <td>
+                            <div style="font-size: 0.8em; color: #64748b; margin-bottom: 2px;">{{ schedule[d][p].subject_name or 'أساسي' }}</div>
+                            <input type="text" name="override_{{ d }}_{{ p }}" value="{{ schedule[d][p].subject_name }}" 
+                                   placeholder="تغيير المادة..." 
+                                   style="width: 100%; padding: 5px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; text-align: center; font-size: 0.9em;">
+                        </td>
+                        {% endfor %}
+                    </tr>
                     {% endfor %}
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                </tbody>
+            </table>
+            <button type="submit" style="margin-top: 20px; width: 100%; background: #3b82f6; font-size: 1.1em;">حفظ التعديلات الأسبوعية بالكامل ✓</button>
+        </form>
+        {% else %}
+        <div style="text-align: center; padding: 20px; color: #94a3b8;">يرجى اختيار الفصل لعرض وتعديل التجاوزات الأسبوعية</div>
         {% endif %}
     </div>
 

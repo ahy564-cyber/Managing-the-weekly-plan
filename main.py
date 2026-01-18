@@ -217,20 +217,30 @@ def admin():
                 log_activity('admin', 'تحديث شعار المدرسة')
                 db.session.commit()
                 flash('تم رفع الشعار بنجاح')
-        elif action == 'save_override':
+        elif action == 'save_override_batch':
             cid = request.form.get('class_id')
             week = request.form.get('week')
-            day = request.form.get('day')
-            period = request.form.get('period')
-            subject_name = request.form.get('subject_name')
-            if cid and week and day and period and cid.isdigit() and week.isdigit():
-                exists = WeeklyData.query.filter_by(class_id=int(cid), week_number=int(week), day=day, period=int(period)).first()
-                if exists:
-                    exists.subject_name = subject_name
-                else:
-                    db.session.add(WeeklyData(class_id=int(cid), week_number=int(week), day=day, period=int(period), subject_name=subject_name))
-                log_activity('admin', f'تعديل أسبوعي (الأسبوع {week}, الفصل {cid})')
-                flash('تم حفظ التعديل الأسبوعي بنجاح')
+            if cid and week and cid.isdigit() and week.isdigit():
+                class_id = int(cid)
+                week_number = int(week)
+                cls = db.session.get(Class, class_id)
+                
+                # We update subject names while preserving topics and homework
+                for day in DAYS_ORDER:
+                    for period in range(1, 9):
+                        subject_name = request.form.get(f'override_{day}_{period}')
+                        if subject_name is not None:
+                            subject_name = subject_name.strip()
+                            exists = WeeklyData.query.filter_by(class_id=class_id, week_number=week_number, day=day, period=period).first()
+                            if exists:
+                                exists.subject_name = subject_name
+                            else:
+                                if subject_name:
+                                    db.session.add(WeeklyData(class_id=class_id, week_number=week_number, day=day, period=period, subject_name=subject_name))
+                
+                log_activity('admin', f'تحديث التجاوزات الأسبوعية بالكامل (الأسبوع {week_number}, الفصل {cls.name if cls else cid})')
+                db.session.commit()
+                flash('تم حفظ التعديلات الأسبوعية بالكامل بنجاح')
         
         db.session.commit()
         return redirect(url_for('admin', **request.args))
