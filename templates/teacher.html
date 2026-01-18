@@ -64,7 +64,7 @@
         </thead>
         <tbody>
             {% for d in days_order %}
-            {% set is_locked = d in settings.get('locked_days', []) %}
+            {% set is_locked = d in locked_days %}
             <tr {% if is_locked %}style="background: #fff1f2;"{% endif %}>
                 <td style="background: #f8fafc; font-weight: 700;">
                     {{ days_ar[d] }}
@@ -75,7 +75,7 @@
                 {% for p in range(1, 9) %}
                 <td data-day="{{ d }}" data-period="{{ p }}">
                     {% if is_locked %}
-                        <span style="color: #94a3b8; font-size: 0.8em;">هذا اليوم مغلق من قبل الإدارة</span>
+                        <span style="color: #94a3b8; font-size: 0.8em;">هذا اليوم مغلق في هذا الأسبوع محدد من قبل الإدارة</span>
                     {% elif schedule[d][p].subject_name %}
                         <span class="fixed-sub">{{ schedule[d][p].subject_name }}</span>
                         <input type="text" class="topic" value="{{ schedule[d][p].topic }}" placeholder="الدرس اليومي...">

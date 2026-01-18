@@ -86,6 +86,12 @@ class Setting(db.Model):
     key = db.Column(db.String(100), primary_key=True)
     value = db.Column(db.Text)
 
+class LockedDay(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    week_number = db.Column(db.Integer, nullable=False)
+    day_name = db.Column(db.String(20), nullable=False)
+    __table_args__ = (db.UniqueConstraint('week_number', 'day_name', name='_week_day_uc'),)
+
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -163,15 +169,20 @@ def admin():
                     s = Setting.query.get(key)
                     if s: s.value = val
                     else: db.session.add(Setting(key=key, value=val))
-            
-            # Handle locked days separately
-            locked_days = request.form.getlist('locked_days')
-            s_locked = Setting.query.get('locked_days')
-            if s_locked: s_locked.value = json.dumps(locked_days)
-            else: db.session.add(Setting(key='locked_days', value=json.dumps(locked_days)))
-            
             db.session.commit()
             flash('تم تحديث الإعدادات بنجاح')
+        elif action == 'update_locked_days':
+            week = request.form.get('week_number')
+            if week and week.isdigit():
+                week_int = int(week)
+                locked_days = request.form.getlist('locked_days')
+                # Clear existing for this week
+                LockedDay.query.filter_by(week_number=week_int).delete()
+                # Add new ones
+                for d in locked_days:
+                    db.session.add(LockedDay(week_number=week_int, day_name=d))
+                db.session.commit()
+                flash(f'تم تحديث الأيام المغلقة للأسبوع {week_int}')
         elif action == 'upload_logo':
             file = request.files.get('logo')
             if file:
@@ -197,24 +208,24 @@ def admin():
                 flash('تم حفظ التعديل الأسبوعي بنجاح')
         
         db.session.commit()
-        return redirect(url_for('admin'))
+        return redirect(url_for('admin', **request.args))
 
     grades = Grade.query.order_by(Grade.name).all()
     classes = Class.query.options(joinedload(Class.grade)).order_by(Class.name).all()
     all_settings = Setting.query.all()
     settings_dict = {s.key: s.value for s in all_settings}
-    
-    # Parse locked days
-    try:
-        settings_dict['locked_days'] = json.loads(settings_dict.get('locked_days', '[]'))
-    except:
-        settings_dict['locked_days'] = []
         
     subjects = Subject.query.options(joinedload(Subject.class_obj).joinedload(Class.grade)).all()
     
     sel_class_id = request.args.get('class_id')
     sel_week = request.args.get('week', settings_dict.get('current_week', '1'))
     
+    # Manage locked days view
+    locked_view_week = request.args.get('locked_week', settings_dict.get('current_week', '1'))
+    current_locked_days = []
+    if locked_view_week and locked_view_week.isdigit():
+        current_locked_days = [ld.day_name for ld in LockedDay.query.filter_by(week_number=int(locked_view_week)).all()]
+
     schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
     if sel_class_id and sel_class_id.isdigit():
         fixed = Subject.query.filter_by(class_id=int(sel_class_id)).all()
@@ -229,7 +240,8 @@ def admin():
     
     return render_template('admin.html', grades=grades, classes=classes, settings=settings_dict, subjects=subjects, 
                          days_ar=DAYS_AR, days_order=DAYS_ORDER, schedule=schedule, 
-                         selected_class_id=sel_class_id, selected_week=sel_week)
+                         selected_class_id=sel_class_id, selected_week=sel_week,
+                         locked_view_week=locked_view_week, current_locked_days=current_locked_days)
 
 @app.route('/admin/delete_date/<date_type>', methods=['POST'])
 @admin_required
@@ -256,27 +268,26 @@ def teacher():
     settings_dict = {s.key: s.value for s in all_settings}
     if not week: week = settings_dict.get('current_week', '1')
     
-    # Parse locked days
-    try:
-        settings_dict['locked_days'] = json.loads(settings_dict.get('locked_days', '[]'))
-    except:
-        settings_dict['locked_days'] = []
+    # Locked days check
+    locked_days = []
+    if week and week.isdigit():
+        locked_days = [ld.day_name for ld in LockedDay.query.filter_by(week_number=int(week)).all()]
     
     if request.method == 'POST':
         data = request.json
         if class_id and class_id.isdigit() and week and week.isdigit():
-            # Security check: Check if any of the entries are for a locked day
-            locked_days = settings_dict['locked_days']
+            week_int = int(week)
             for entry in data.get('entries', []):
+                # Verify not locked
                 if entry['day'] in locked_days:
-                    return jsonify({'status': 'error', 'message': f"اليوم {DAYS_AR.get(entry['day'])} مغلق من قبل الإدارة"}), 403
+                    return jsonify({'status': 'error', 'message': f"هذا اليوم مغلق في هذا الأسبوع محدد من قبل الإدارة"}), 403
                 
-                exists = WeeklyData.query.filter_by(class_id=int(class_id), week_number=int(week), day=entry['day'], period=int(entry['period'])).first()
+                exists = WeeklyData.query.filter_by(class_id=int(class_id), week_number=week_int, day=entry['day'], period=int(entry['period'])).first()
                 if exists:
                     exists.topic = entry['topic']
                     exists.homework = entry['homework']
                 else:
-                    db.session.add(WeeklyData(class_id=int(class_id), week_number=int(week), day=entry['day'], 
+                    db.session.add(WeeklyData(class_id=int(class_id), week_number=week_int, day=entry['day'], 
                                             period=int(entry['period']), topic=entry['topic'], homework=entry['homework']))
             db.session.commit()
             return jsonify({'status': 'success'})
@@ -299,7 +310,8 @@ def teacher():
 
     return render_template('teacher.html', grades=grades, classes=classes, schedule=schedule, 
                          selected_grade=grade_id, selected_class=class_id, selected_week=week, 
-                         days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings_dict)
+                         days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings_dict,
+                         locked_days=locked_days)
 
 @app.route('/student/<int:grade_id>/<int:class_id>')
 def student(grade_id, class_id):
