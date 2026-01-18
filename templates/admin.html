@@ -263,52 +263,48 @@
     </div>
 
     <div class="card">
-        <h2>إدارة الجدول الأساسي (Fixed Subjects)</h2>
-        <form method="POST" class="flex mb-2" style="flex-wrap: wrap;">
-            <input type="hidden" name="action" value="add_subject">
-            <div style="flex:1; min-width: 150px;">
-                <label>الفصل:</label>
-                <select name="class_id" required>
-                    {% for c in classes %}<option value="{{ c.id }}">{{ c.grade.name }} - {{ c.name }}</option>{% endfor %}
+        <h2>إدارة الجدول الأساسي (Full Grid View)</h2>
+        <div class="flex mb-2">
+            <div style="flex:1">
+                <label>اختر الفصل لتعديل جدوله الأساسي:</label>
+                <select onchange="location.href='/admin?fixed_class_id='+this.value">
+                    <option value="">-- اختر الفصل --</option>
+                    {% for c in classes %}
+                    <option value="{{ c.id }}" {% if sel_fixed_class_id == c.id|string %}selected{% endif %}>{{ c.grade.name }} - {{ c.name }}</option>
+                    {% endfor %}
                 </select>
             </div>
-            <div style="flex:1; min-width: 120px;">
-                <label>اليوم:</label>
-                <select name="day">
-                    {% for en, ar in days_ar.items() %}<option value="{{ en }}">{{ ar }}</option>{% endfor %}
-                </select>
-            </div>
-            <div style="width: 80px;">
-                <label>الحصة:</label>
-                <input type="number" name="period" min="1" max="8" required>
-            </div>
-            <div style="flex:2; min-width: 150px;">
-                <label>اسم المادة:</label>
-                <input type="text" name="name" required>
-            </div>
-            <button type="submit">حفظ المادة</button>
+        </div>
+
+        {% if sel_fixed_class_id %}
+        <form method="POST">
+            <input type="hidden" name="action" value="save_fixed_schedule">
+            <input type="hidden" name="class_id" value="{{ sel_fixed_class_id }}">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 100px;">اليوم</th>
+                        {% for p in range(1, 9) %}<th>ح {{ p }}</th>{% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in days_order %}
+                    <tr>
+                        <td style="background: #f1f5f9; font-weight: 700; color: #1e3a8a;">{{ days_ar[d] }}</td>
+                        {% for p in range(1, 9) %}
+                        <td>
+                            <input type="text" name="fixed_{{ d }}_{{ p }}" value="{{ fixed_schedule[d][p] }}" 
+                                   placeholder="المادة..." 
+                                   style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; text-align: center;">
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <button type="submit" style="margin-top: 20px; width: 100%; background: #1e3a8a; font-size: 1.1em;">حفظ الجدول بالكامل ✓</button>
         </form>
-        
-        <table>
-            <thead><tr><th>الفصل</th><th>اليوم</th><th>الحصة</th><th>المادة الأساسية</th><th>الإجراء</th></tr></thead>
-            <tbody>
-                {% for s in subjects %}
-                <tr>
-                    <td>{{ s.class_obj.grade.name }} - {{ s.class_obj.name }}</td>
-                    <td>{{ days_ar[s.day] }}</td>
-                    <td>{{ s.period }}</td>
-                    <td style="font-weight:700">{{ s.name }}</td>
-                    <td>
-                        <form method="POST">
-                            <input type="hidden" name="action" value="delete_subject">
-                            <input type="hidden" name="subject_id" value="{{ s.id }}">
-                            <button type="submit" class="btn-danger" style="padding:5px 12px; font-size:0.85em;">حذف</button>
-                        </form>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        {% endif %}
     </div>
 
     <script>

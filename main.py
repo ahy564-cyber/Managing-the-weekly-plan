@@ -147,21 +147,22 @@ def admin():
                 if cls:
                     db.session.delete(cls)
                     flash('تم حذف الفصل بنجاح')
-        elif action == 'add_subject':
+        elif action == 'save_fixed_schedule':
             cid = request.form.get('class_id')
-            day = request.form.get('day')
-            period = request.form.get('period')
-            name = request.form.get('name')
-            if cid and day and period and name and cid.isdigit():
-                db.session.add(Subject(class_id=int(cid), day=day, period=int(period), name=name))
-                flash('تم حفظ المادة بنجاح')
-        elif action == 'delete_subject':
-            sid = request.form.get('subject_id')
-            if sid and sid.isdigit():
-                sub = db.session.get(Subject, int(sid))
-                if sub:
-                    db.session.delete(sub)
-                    flash('تم حذف المادة بنجاح')
+            if cid and cid.isdigit():
+                class_id = int(cid)
+                # Clear existing fixed schedule for this class
+                Subject.query.filter_by(class_id=class_id).delete()
+                
+                # Get all inputs from form
+                for day in DAYS_ORDER:
+                    for period in range(1, 9):
+                        subject_name = request.form.get(f'fixed_{day}_{period}')
+                        if subject_name and subject_name.strip():
+                            db.session.add(Subject(class_id=class_id, day=day, period=period, name=subject_name.strip()))
+                
+                db.session.commit()
+                flash('تم حفظ الجدول الأساسي بنجاح')
         elif action == 'update_settings':
             for key in ['period1_date', 'period2_date', 'final_date', 'current_week', 'school_name']:
                 val = request.form.get(key)
@@ -226,6 +227,14 @@ def admin():
     if locked_view_week and locked_view_week.isdigit():
         current_locked_days = [ld.day_name for ld in LockedDay.query.filter_by(week_number=int(locked_view_week)).all()]
 
+    # Manage fixed schedule view
+    sel_fixed_class_id = request.args.get('fixed_class_id')
+    fixed_schedule = {day: {p: '' for p in range(1, 9)} for day in DAYS_ORDER}
+    if sel_fixed_class_id and sel_fixed_class_id.isdigit():
+        existing_fixed = Subject.query.filter_by(class_id=int(sel_fixed_class_id)).all()
+        for s in existing_fixed:
+            fixed_schedule[s.day][s.period] = s.name
+
     schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
     if sel_class_id and sel_class_id.isdigit():
         fixed = Subject.query.filter_by(class_id=int(sel_class_id)).all()
@@ -241,7 +250,8 @@ def admin():
     return render_template('admin.html', grades=grades, classes=classes, settings=settings_dict, subjects=subjects, 
                          days_ar=DAYS_AR, days_order=DAYS_ORDER, schedule=schedule, 
                          selected_class_id=sel_class_id, selected_week=sel_week,
-                         locked_view_week=locked_view_week, current_locked_days=current_locked_days)
+                         locked_view_week=locked_view_week, current_locked_days=current_locked_days,
+                         sel_fixed_class_id=sel_fixed_class_id, fixed_schedule=fixed_schedule)
 
 @app.route('/admin/delete_date/<date_type>', methods=['POST'])
 @admin_required
