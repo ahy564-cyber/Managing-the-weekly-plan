@@ -54,7 +54,7 @@
             <tbody>
                 {% for c in classes %}
                 <tr>
-                    <td>{{ c.grade_name }}</td>
+                    <td>{{ c.grade.name }}</td>
                     <td>{{ c.name }}</td>
                     <td><code id="link-{{ c.id }}">{{ request.host_url }}student/{{ c.grade_id }}/{{ c.id }}</code></td>
                     <td>
@@ -73,7 +73,7 @@
                 <label>اختر الفصل:</label>
                 <select onchange="const w = document.getElementById('ovr-week').value; location.href='/admin?class_id='+this.value+'&week='+w">
                     <option value="">-- اختر --</option>
-                    {% for c in classes %}<option value="{{ c.id }}" {% if selected_class_id == c.id|string %}selected{% endif %}>{{ c.grade_name }} - {{ c.name }}</option>{% endfor %}
+                    {% for c in classes %}<option value="{{ c.id }}" {% if selected_class_id == c.id|string %}selected{% endif %}>{{ c.grade.name }} - {{ c.name }}</option>{% endfor %}
                 </select>
             </div>
             <div style="flex:1">
@@ -214,7 +214,7 @@
                 <tbody>
                     {% for c in classes %}
                     <tr>
-                        <td>{{ c.grade_name }}</td>
+                        <td>{{ c.grade.name }}</td>
                         <td>{{ c.name }}</td>
                         <td>
                             <form method="POST" onsubmit="return confirm('هل أنت متأكد من حذف الفصل؟')">
@@ -237,7 +237,7 @@
             <div style="flex:1; min-width: 150px;">
                 <label>الفصل:</label>
                 <select name="class_id" required>
-                    {% for c in classes %}<option value="{{ c.id }}">{{ c.grade_name }} - {{ c.name }}</option>{% endfor %}
+                    {% for c in classes %}<option value="{{ c.id }}">{{ c.grade.name }} - {{ c.name }}</option>{% endfor %}
                 </select>
             </div>
             <div style="flex:1; min-width: 120px;">
@@ -262,7 +262,7 @@
             <tbody>
                 {% for s in subjects %}
                 <tr>
-                    <td>{{ s.class_name }}</td>
+                    <td>{{ s.class_obj.grade.name }} - {{ s.class_obj.name }}</td>
                     <td>{{ days_ar[s.day] }}</td>
                     <td>{{ s.period }}</td>
                     <td style="font-weight:700">{{ s.name }}</td>

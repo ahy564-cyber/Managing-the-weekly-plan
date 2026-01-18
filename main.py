@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.orm import joinedload
 import os
 from datetime import datetime
 from functools import wraps
@@ -13,21 +14,21 @@ db_url = os.getenv('DATABASE_URL')
 if db_url and db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
-# Only add sslmode if not local replit dev DB
+# Dynamic SSL Mode Handling
 engine_options = {"pool_pre_ping": True}
-# Neon requires sslmode=require for connection stability in prod
-# Local helium DB does NOT support SSL
-if db_url and "127.0.0.1" not in db_url and "localhost" not in db_url and "helium" not in db_url:
-    if "sslmode" not in db_url:
-        separator = "&" if "?" in db_url else "?"
-        db_url += f"{separator}sslmode=require"
-    engine_options["connect_args"] = {"sslmode": "require"}
-else:
-    # Disable SSL for local dev DB
-    if db_url and "sslmode" not in db_url:
-        separator = "&" if "?" in db_url else "?"
-        db_url += f"{separator}sslmode=disable"
-    engine_options["connect_args"] = {"sslmode": "disable"}
+if db_url:
+    # Neon/Prod DBs usually require SSL
+    if "127.0.0.1" not in db_url and "localhost" not in db_url and "helium" not in db_url:
+        if "sslmode" not in db_url:
+            separator = "&" if "?" in db_url else "?"
+            db_url += f"{separator}sslmode=require"
+        engine_options["connect_args"] = {"sslmode": "require"}
+    else:
+        # Replit Local Dev DB (Helium) does NOT support SSL
+        if "sslmode" not in db_url:
+            separator = "&" if "?" in db_url else "?"
+            db_url += f"{separator}sslmode=disable"
+        engine_options["connect_args"] = {"sslmode": "disable"}
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = engine_options
@@ -54,7 +55,7 @@ DAYS_ORDER = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday']
 class Grade(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
-    classes = db.relationship('Class', backref='grade_obj', cascade="all, delete-orphan", lazy=True)
+    classes = db.relationship('Class', backref='grade', cascade="all, delete-orphan", lazy=True)
 
 class Class(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -121,36 +122,39 @@ def admin():
                 flash('تم إضافة الصف بنجاح')
         elif action == 'delete_grade':
             gid = request.form.get('grade_id')
-            grade = Grade.query.get(gid)
-            if grade:
-                db.session.delete(grade)
-                flash('تم حذف الصف بنجاح')
+            if gid and gid.isdigit():
+                grade = db.session.get(Grade, int(gid))
+                if grade:
+                    db.session.delete(grade)
+                    flash('تم حذف الصف بنجاح')
         elif action == 'add_class':
             name = request.form.get('name')
             gid = request.form.get('grade_id')
-            if name and gid:
+            if name and gid and gid.isdigit():
                 db.session.add(Class(name=name, grade_id=int(gid)))
                 flash('تم إضافة الفصل بنجاح')
         elif action == 'delete_class':
             cid = request.form.get('class_id')
-            cls = Class.query.get(cid)
-            if cls:
-                db.session.delete(cls)
-                flash('تم حذف الفصل بنجاح')
+            if cid and cid.isdigit():
+                cls = db.session.get(Class, int(cid))
+                if cls:
+                    db.session.delete(cls)
+                    flash('تم حذف الفصل بنجاح')
         elif action == 'add_subject':
             cid = request.form.get('class_id')
             day = request.form.get('day')
             period = request.form.get('period')
             name = request.form.get('name')
-            if cid and day and period and name:
+            if cid and day and period and name and cid.isdigit():
                 db.session.add(Subject(class_id=int(cid), day=day, period=int(period), name=name))
                 flash('تم حفظ المادة بنجاح')
         elif action == 'delete_subject':
             sid = request.form.get('subject_id')
-            sub = Subject.query.get(sid)
-            if sub:
-                db.session.delete(sub)
-                flash('تم حذف المادة بنجاح')
+            if sid and sid.isdigit():
+                sub = db.session.get(Subject, int(sid))
+                if sub:
+                    db.session.delete(sub)
+                    flash('تم حذف المادة بنجاح')
         elif action == 'update_settings':
             for key in ['period1_date', 'period2_date', 'final_date', 'current_week', 'school_name']:
                 val = request.form.get(key)
@@ -176,7 +180,7 @@ def admin():
             day = request.form.get('day')
             period = request.form.get('period')
             subject_name = request.form.get('subject_name')
-            if cid and week and day and period:
+            if cid and week and day and period and cid.isdigit() and week.isdigit():
                 exists = WeeklyData.query.filter_by(class_id=int(cid), week_number=int(week), day=day, period=int(period)).first()
                 if exists:
                     exists.subject_name = subject_name
@@ -188,27 +192,15 @@ def admin():
         return redirect(url_for('admin'))
 
     grades = Grade.query.order_by(Grade.name).all()
-    # Explicitly query grade names to avoid template issues
-    classes_raw = db.session.query(Class, Grade.name).join(Grade, Class.grade_id == Grade.id).order_by(Grade.name, Class.name).all()
-    classes = []
-    for c, g_name in classes_raw:
-        c.grade_name = g_name
-        classes.append(c)
-        
+    classes = Class.query.options(joinedload(Class.grade)).order_by(Class.name).all()
     all_settings = Setting.query.all()
     settings_dict = {s.key: s.value for s in all_settings}
-    
-    subjects_raw = db.session.query(Subject, Class.name, Grade.name).join(Class, Subject.class_id == Class.id).join(Grade, Class.grade_id == Grade.id).all()
-    subjects = []
-    for s, c_name, g_name in subjects_raw:
-        s.class_name = f"{g_name} - {c_name}"
-        subjects.append(s)
+    subjects = Subject.query.options(joinedload(Subject.class_obj).joinedload(Class.grade)).all()
     
     sel_class_id = request.args.get('class_id')
     sel_week = request.args.get('week', settings_dict.get('current_week', '1'))
     
     schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
-    # Fix DataError by ensuring class_id is a valid integer string
     if sel_class_id and sel_class_id.isdigit():
         fixed = Subject.query.filter_by(class_id=int(sel_class_id)).all()
         for f in fixed: schedule[f.day][f.period]['subject_name'] = f.name
@@ -251,7 +243,7 @@ def teacher():
     
     if request.method == 'POST':
         data = request.json
-        if class_id and class_id.isdigit():
+        if class_id and class_id.isdigit() and week and week.isdigit():
             for entry in data.get('entries', []):
                 exists = WeeklyData.query.filter_by(class_id=int(class_id), week_number=int(week), day=entry['day'], period=int(entry['period'])).first()
                 if exists:
@@ -262,7 +254,7 @@ def teacher():
                                             period=int(entry['period']), topic=entry['topic'], homework=entry['homework']))
             db.session.commit()
             return jsonify({'status': 'success'})
-        return jsonify({'status': 'error', 'message': 'Invalid class_id'}), 400
+        return jsonify({'status': 'error', 'message': 'Invalid input'}), 400
 
     grades = Grade.query.all()
     classes = Class.query.filter_by(grade_id=int(grade_id)).all() if grade_id and grade_id.isdigit() else []
@@ -289,8 +281,8 @@ def student(grade_id, class_id):
     settings_dict = {s.key: s.value for s in all_settings}
     week = settings_dict.get('current_week', '1')
     
-    grade = Grade.query.get(grade_id)
-    cls = Class.query.get(class_id)
+    grade = db.session.get(Grade, grade_id)
+    cls = db.session.get(Class, class_id)
     
     schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
     fixed = Subject.query.filter_by(class_id=class_id).all()
