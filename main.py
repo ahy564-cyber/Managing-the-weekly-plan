@@ -201,7 +201,7 @@ def admin(school_slug):
                 flash('تم إضافة الصف بنجاح')
         elif action == 'delete_grade':
             gid = request.form.get('grade_id')
-            if gid and str(gid).strip().isdigit():
+            if gid and str(gid).strip().isdigit() and gid != 'None':
                 grade = Grade.query.filter_by(id=int(gid), school_id=school.id).first()
                 if grade:
                     name = grade.name
@@ -211,13 +211,13 @@ def admin(school_slug):
         elif action == 'add_class':
             name = request.form.get('name')
             gid = request.form.get('grade_id')
-            if name and gid and str(gid).strip().isdigit():
+            if name and gid and str(gid).strip().isdigit() and gid != 'None':
                 db.session.add(Class(name=name, grade_id=int(gid), school_id=school.id))
                 log_activity(school.id, 'admin', f'إضافة فصل جديد: {name}')
                 flash('تم إضافة الفصل بنجاح')
         elif action == 'delete_class':
             cid = request.form.get('class_id')
-            if cid and str(cid).strip().isdigit():
+            if cid and str(cid).strip().isdigit() and cid != 'None':
                 cls = Class.query.filter_by(id=int(cid), school_id=school.id).first()
                 if cls:
                     name = cls.name
@@ -226,7 +226,7 @@ def admin(school_slug):
                     flash('تم حذف الفصل بنجاح')
         elif action == 'save_fixed_schedule':
             cid = request.form.get('class_id')
-            if cid and str(cid).strip().isdigit():
+            if cid and str(cid).strip().isdigit() and cid != 'None':
                 class_id = int(cid)
                 cls = Class.query.filter_by(id=class_id, school_id=school.id).first()
                 if cls:
