@@ -201,7 +201,7 @@ def admin(school_slug):
                 flash('تم إضافة الصف بنجاح')
         elif action == 'delete_grade':
             gid = request.form.get('grade_id')
-            if gid and gid.isdigit():
+            if gid and str(gid).strip().isdigit():
                 grade = Grade.query.filter_by(id=int(gid), school_id=school.id).first()
                 if grade:
                     name = grade.name
@@ -211,13 +211,13 @@ def admin(school_slug):
         elif action == 'add_class':
             name = request.form.get('name')
             gid = request.form.get('grade_id')
-            if name and gid and gid.isdigit():
+            if name and gid and str(gid).strip().isdigit():
                 db.session.add(Class(name=name, grade_id=int(gid), school_id=school.id))
                 log_activity(school.id, 'admin', f'إضافة فصل جديد: {name}')
                 flash('تم إضافة الفصل بنجاح')
         elif action == 'delete_class':
             cid = request.form.get('class_id')
-            if cid and cid.isdigit():
+            if cid and str(cid).strip().isdigit():
                 cls = Class.query.filter_by(id=int(cid), school_id=school.id).first()
                 if cls:
                     name = cls.name
@@ -226,7 +226,7 @@ def admin(school_slug):
                     flash('تم حذف الفصل بنجاح')
         elif action == 'save_fixed_schedule':
             cid = request.form.get('class_id')
-            if cid and cid.isdigit():
+            if cid and str(cid).strip().isdigit():
                 class_id = int(cid)
                 cls = Class.query.filter_by(id=class_id, school_id=school.id).first()
                 if cls:
@@ -251,7 +251,7 @@ def admin(school_slug):
             flash('تم تحديث الإعدادات بنجاح')
         elif action == 'update_locked_days':
             week = request.form.get('week_number')
-            if week and week.isdigit():
+            if week and str(week).strip().isdigit():
                 week_int = int(week)
                 locked_days = request.form.getlist('locked_days')
                 LockedDay.query.filter_by(week_number=week_int, school_id=school.id).delete()
@@ -274,7 +274,7 @@ def admin(school_slug):
         elif action == 'save_override_batch':
             cid = request.form.get('class_id')
             week = request.form.get('week')
-            if cid and week and cid.strip().isdigit() and week.strip().isdigit():
+            if cid and week and str(cid).strip().isdigit() and str(week).strip().isdigit():
                 class_id = int(cid)
                 week_number = int(week)
                 cls = Class.query.filter_by(id=class_id, school_id=school.id).first()
@@ -304,25 +304,26 @@ def admin(school_slug):
     sel_class_id = request.args.get('class_id')
     sel_week = request.args.get('week', settings_dict.get('current_week', '1'))
     locked_view_week = request.args.get('locked_week', settings_dict.get('current_week', '1'))
-    current_locked_days = [ld.day_name for ld in LockedDay.query.filter_by(week_number=int(locked_view_week) if locked_view_week.isdigit() else 1, school_id=school.id).all()]
+    current_locked_days = [ld.day_name for ld in LockedDay.query.filter_by(week_number=int(locked_view_week) if (locked_view_week and str(locked_view_week).strip().isdigit()) else 1, school_id=school.id).all()]
     
     sel_fixed_class_id = request.args.get('fixed_class_id')
     fixed_schedule = {day: {p: '' for p in range(1, 9)} for day in DAYS_ORDER}
-    if sel_fixed_class_id and sel_fixed_class_id.isdigit():
+    if sel_fixed_class_id and str(sel_fixed_class_id).strip().isdigit():
         existing_fixed = Subject.query.filter_by(class_id=int(sel_fixed_class_id), school_id=school.id).all()
         for s in existing_fixed: fixed_schedule[s.day][s.period] = s.name
 
     schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
-    if sel_class_id and sel_class_id.isdigit():
+    if sel_class_id and str(sel_class_id).strip().isdigit():
         fixed = Subject.query.filter_by(class_id=int(sel_class_id), school_id=school.id).all()
         for f in fixed: schedule[f.day][f.period]['subject_name'] = f.name
-        weekly = WeeklyData.query.filter_by(class_id=int(sel_class_id), week_number=int(sel_week), school_id=school.id).all()
+        weekly = WeeklyData.query.filter_by(class_id=int(sel_class_id), week_number=int(sel_week) if (sel_week and str(sel_week).strip().isdigit()) else 1, school_id=school.id).all()
         for w in weekly:
             day_data = schedule[w.day][w.period]
             day_data.update({'topic': w.topic, 'homework': w.homework})
             if w.subject_name: day_data['subject_name'] = w.subject_name
 
-    current_week_int = int(settings_dict.get('current_week', '1'))
+    current_week_str = settings_dict.get('current_week', '1')
+    current_week_int = int(current_week_str) if (current_week_str and current_week_str.strip().isdigit()) else 1
     all_classes_count = len(classes)
     completed_classes = []
     pending_classes = []
@@ -351,11 +352,11 @@ def teacher(school_slug):
     all_settings = Setting.query.filter_by(school_id=school.id).all()
     settings_dict = {s.key: s.value for s in all_settings}
     if not week: week = settings_dict.get('current_week', '1')
-    locked_days = [ld.day_name for ld in LockedDay.query.filter_by(week_number=int(week) if week.isdigit() else 1, school_id=school.id).all()]
+    locked_days = [ld.day_name for ld in LockedDay.query.filter_by(week_number=int(week) if (week and str(week).strip().isdigit()) else 1, school_id=school.id).all()]
     
     if request.method == 'POST':
         data = request.json
-        if class_id and class_id.isdigit() and week and week.isdigit():
+        if class_id and str(class_id).strip().isdigit() and week and str(week).strip().isdigit():
             week_int = int(week)
             cls = Class.query.filter_by(id=int(class_id), school_id=school.id).first()
             if cls:
@@ -374,12 +375,12 @@ def teacher(school_slug):
         return jsonify({'status': 'error', 'message': 'Invalid input'}), 400
 
     grades = Grade.query.filter_by(school_id=school.id).all()
-    classes = Class.query.filter_by(grade_id=int(grade_id), school_id=school.id).all() if grade_id and grade_id.isdigit() else []
+    classes = Class.query.filter_by(grade_id=int(grade_id), school_id=school.id).all() if grade_id and str(grade_id).strip().isdigit() else []
     schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
-    if class_id and class_id.isdigit():
+    if class_id and str(class_id).strip().isdigit():
         fixed = Subject.query.filter_by(class_id=int(class_id), school_id=school.id).all()
         for f in fixed: schedule[f.day][f.period]['subject_name'] = f.name
-        weekly = WeeklyData.query.filter_by(class_id=int(class_id), week_number=int(week), school_id=school.id).all()
+        weekly = WeeklyData.query.filter_by(class_id=int(class_id), week_number=int(week) if (week and str(week).strip().isdigit()) else 1, school_id=school.id).all()
         for w in weekly:
             day_data = schedule[w.day][w.period]
             day_data.update({'topic': w.topic, 'homework': w.homework})
@@ -400,7 +401,7 @@ def student(school_slug, grade_id, class_id):
     if cls:
         fixed = Subject.query.filter_by(class_id=cls.id, school_id=school.id).all()
         for f in fixed: schedule[f.day][f.period]['subject_name'] = f.name
-        weekly = WeeklyData.query.filter_by(class_id=cls.id, week_number=int(week), school_id=school.id).all()
+        weekly = WeeklyData.query.filter_by(class_id=cls.id, week_number=int(week) if (week and str(week).strip().isdigit()) else 1, school_id=school.id).all()
         for w in weekly:
             day_data = schedule[w.day][w.period]
             day_data.update({'topic': w.topic, 'homework': w.homework})
