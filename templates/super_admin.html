@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>لوحة المدير العام</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Cairo', sans-serif; margin: 20px; background: #f8fafc; }
+        .card { background: white; padding: 25px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        h1, h2 { color: #1e3a8a; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: center; border-bottom: 1px solid #e2e8f0; }
+        th { background: #f1f5f9; }
+        .btn-active { background: #10b981; color: white; padding: 5px 10px; border-radius: 5px; text-decoration: none; }
+        .btn-inactive { background: #ef4444; color: white; padding: 5px 10px; border-radius: 5px; text-decoration: none; }
+        form input { padding: 8px; margin: 5px; border-radius: 5px; border: 1px solid #ccc; }
+        button { padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>لوحة تحكم المنصة المتعددة</h1>
+    
+    <div class="card">
+        <h2>إضافة مدرسة جديدة</h2>
+        <form action="/super-admin/add-school" method="POST">
+            <input type="text" name="name" placeholder="اسم المدرسة" required>
+            <input type="text" name="slug" placeholder="معرف الرابط (slug)" required>
+            <input type="text" name="username" placeholder="اسم مستخدم المدير" required>
+            <input type="password" name="password" placeholder="كلمة مرور المدير" required>
+            <button type="submit">إضافة مدرسة</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>المدارس المسجلة</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>المدرسة</th>
+                    <th>الرابط</th>
+                    <th>الحالة</th>
+                    <th>الإجراء</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in schools %}
+                <tr>
+                    <td>{{ s.name }}</td>
+                    <td>/{{ s.slug }}</td>
+                    <td>{{ 'نشطة' if s.is_active else 'معطلة' }}</td>
+                    <td>
+                        <a href="/super-admin/toggle-school/{{ s.id }}" class="{{ 'btn-inactive' if s.is_active else 'btn-active' }}">
+                            {{ 'تعطيل' if s.is_active else 'تنشيط' }}
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <footer style="text-align: center; padding: 20px; color: #64748b; font-size: 0.85em; margin-top: 40px; border-top: 1px solid #e2e8f0;">
+        أنشئ هذا الموقع بواسطة أحمد الفيفي
+    </footer>
+</body>
+</html>

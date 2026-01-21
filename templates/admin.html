@@ -32,7 +32,7 @@
 </head>
 <body>
     <div class="header-actions">
-        <h1>لوحة تحكم المدير</h1>
+        <h1>لوحة تحكم المدير - {{ school.name }}</h1>
         <a href="/logout"><button class="logout-btn">تسجيل الخروج</button></a>
     </div>
 
@@ -104,7 +104,7 @@
                 <tr>
                     <td>{{ c.grade.name }}</td>
                     <td>{{ c.name }}</td>
-                    <td><code id="link-{{ c.id }}">{{ request.host_url }}student/{{ c.grade_id }}/{{ c.id }}</code></td>
+                    <td><code id="link-{{ c.id }}">{{ request.host_url }}{{ school.slug }}/student/{{ c.grade_id }}/{{ c.id }}</code></td>
                     <td>
                         <button class="btn-success" onclick="copyLink('link-{{ c.id }}')">نسخ الرابط</button>
                     </td>
@@ -119,14 +119,14 @@
         <div class="flex mb-2">
             <div style="flex:1">
                 <label>اختر الفصل:</label>
-                <select onchange="const w = document.getElementById('ovr-week').value; location.href='/admin?class_id='+this.value+'&week='+w">
+                <select onchange="const w = document.getElementById('ovr-week').value; location.href='/{{ school.slug }}/admin?class_id='+this.value+'&week='+w">
                     <option value="">-- اختر الفصل --</option>
                     {% for c in classes %}<option value="{{ c.id }}" {% if selected_class_id == c.id|string %}selected{% endif %}>{{ c.grade.name }} - {{ c.name }}</option>{% endfor %}
                 </select>
             </div>
             <div style="flex:1">
                 <label>اختر الأسبوع:</label>
-                <select id="ovr-week" onchange="const c = '{{ selected_class_id }}'; if(c) location.href='/admin?class_id='+c+'&week='+this.value">
+                <select id="ovr-week" onchange="const c = '{{ selected_class_id }}'; if(c) location.href='/{{ school.slug }}/admin?class_id='+c+'&week='+this.value">
                     {% for w in range(1, 20) %}<option value="{{ w }}" {% if selected_week == w|string %}selected{% endif %}>أسبوع {{ w }}</option>{% endfor %}
                 </select>
             </div>
@@ -219,7 +219,7 @@
             <div class="flex mb-2" style="margin-bottom: 15px;">
                 <div style="flex:1">
                     <label style="font-weight: 700; color: #991b1b;">اختر الأسبوع لإدارته:</label>
-                    <select onchange="location.href='/admin?locked_week='+this.value" style="border-color: #fca5a5;">
+                    <select onchange="location.href='/{{ school.slug }}/admin?locked_week='+this.value" style="border-color: #fca5a5;">
                         {% for w in range(1, 20) %}
                         <option value="{{ w }}" {% if locked_view_week == w|string %}selected{% endif %}>أسبوع {{ w }}</option>
                         {% endfor %}
@@ -323,7 +323,7 @@
         <div class="flex mb-2">
             <div style="flex:1">
                 <label>اختر الفصل لتعديل جدوله الأساسي:</label>
-                <select onchange="location.href='/admin?fixed_class_id='+this.value">
+                <select onchange="location.href='/{{ school.slug }}/admin?fixed_class_id='+this.value">
                     <option value="">-- اختر الفصل --</option>
                     {% for c in classes %}
                     <option value="{{ c.id }}" {% if sel_fixed_class_id == c.id|string %}selected{% endif %}>{{ c.grade.name }} - {{ c.name }}</option>
