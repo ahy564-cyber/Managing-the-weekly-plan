@@ -274,7 +274,7 @@ def admin(school_slug):
         elif action == 'save_override_batch':
             cid = request.form.get('class_id')
             week = request.form.get('week')
-            if cid and week and cid.isdigit() and week.isdigit():
+            if cid and week and cid.strip().isdigit() and week.strip().isdigit():
                 class_id = int(cid)
                 week_number = int(week)
                 cls = Class.query.filter_by(id=class_id, school_id=school.id).first()
