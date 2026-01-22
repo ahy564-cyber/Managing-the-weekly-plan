@@ -17,7 +17,7 @@
 </head>
 <body>
     <div class="login-card">
-        <h1>تسجيل دخول المشرف</h1>
+        <h1>تسجيل الدخول</h1>
         {% with messages = get_flashed_messages() %}
           {% if messages %}
             {% for message in messages %}
@@ -26,8 +26,7 @@
           {% endif %}
         {% endwith %}
         <form method="POST">
-            <input type="text" name="username" placeholder="اسم المستخدم" required>
-            <input type="password" name="password" placeholder="كلمة المرور" required>
+            <input type="password" name="password" placeholder="أدخل كلمة المرور" required>
             <button type="submit">دخول</button>
         </form>
         <a href="/" class="back">العودة للقائمة الرئيسية</a>
