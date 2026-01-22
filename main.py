@@ -37,9 +37,7 @@ if not os.path.exists(UPLOAD_FOLDER):
 DAYS_AR = {'Sunday': 'الأحد', 'Monday': 'الاثنين', 'Tuesday': 'الثلاثاء', 'Wednesday': 'الأربعاء', 'Thursday': 'الخميس'}
 DAYS_ORDER = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday']
 
-# Database Models (Reverting to Single-School logic)
-# We keep the columns in DB but ignore school_id in logic for stability
-
+# Database Models (Single-School state)
 class Grade(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
@@ -106,7 +104,6 @@ def login():
     if request.method == 'POST':
         user = request.form.get('username')
         password = request.form.get('password')
-        # Hardcoded admin check for single-school stability for now
         if user == 'admin' and password == 'admin123':
             session.clear()
             session['user_role'] = 'admin'
@@ -167,7 +164,8 @@ def admin():
                     db.session.commit()
                     flash('تم حفظ الجدول الأساسي بنجاح')
         elif action == 'update_settings':
-            for key in ['period1_date', 'period2_date', 'final_date', 'current_week', 'school_name']:
+            keys = ['period1_date', 'period2_date', 'final_date', 'current_week', 'school_name', 'principal_name', 'week_start_date', 'week_end_date']
+            for key in keys:
                 val = request.form.get(key)
                 if val is not None:
                     s = Setting.query.filter_by(key=key).first()
@@ -209,15 +207,26 @@ def admin():
                     for day in DAYS_ORDER:
                         for period in range(1, 9):
                             subject_name = request.form.get(f'override_{day}_{period}')
-                            if subject_name is not None:
-                                subject_name = subject_name.strip()
-                                exists = WeeklyData.query.filter_by(class_id=class_id, week_number=week_number, day=day, period=period).first()
-                                if exists:
-                                    exists.subject_name = subject_name
-                                else:
-                                    if subject_name:
-                                        db.session.add(WeeklyData(class_id=class_id, week_number=week_number, day=day, period=period, subject_name=subject_name))
-                    log_activity('admin', f'تحديث التجاوزات الأسبوعية بالكامل (الأسبوع {week_number}, الفصل {cls.name})')
+                            topic = request.form.get(f'topic_{day}_{period}')
+                            homework = request.form.get(f'homework_{day}_{period}')
+                            
+                            exists = WeeklyData.query.filter_by(class_id=class_id, week_number=week_number, day=day, period=period).first()
+                            if exists:
+                                if subject_name is not None: exists.subject_name = subject_name.strip()
+                                if topic is not None: exists.topic = topic.strip()
+                                if homework is not None: exists.homework = homework.strip()
+                            else:
+                                if (subject_name and subject_name.strip()) or (topic and topic.strip()) or (homework and homework.strip()):
+                                    db.session.add(WeeklyData(
+                                        class_id=class_id, 
+                                        week_number=week_number, 
+                                        day=day, 
+                                        period=period, 
+                                        subject_name=subject_name.strip() if subject_name else '',
+                                        topic=topic.strip() if topic else '',
+                                        homework=homework.strip() if homework else ''
+                                    ))
+                    log_activity('admin', f'تحديث البيانات الأسبوعية بالكامل (الأسبوع {week_number}, الفصل {cls.name})')
                     db.session.commit()
                     flash('تم حفظ التعديلات الأسبوعية بالكامل بنجاح')
         db.session.commit()
@@ -350,7 +359,23 @@ def student(grade_id, class_id):
             day_data = schedule[w.day][w.period]
             day_data.update({'topic': w.topic, 'homework': w.homework})
             if w.subject_name: day_data['subject_name'] = w.subject_name
-    return render_template('student.html', schedule=schedule, days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings_dict, 
+            
+    # Group by subject for the new UI
+    subject_groups = {}
+    for day in DAYS_ORDER:
+        for p in range(1, 9):
+            data = schedule[day][p]
+            s_name = data['subject_name'] or 'بدون عنوان'
+            if s_name not in subject_groups:
+                subject_groups[s_name] = []
+            subject_groups[s_name].append({
+                'day': day,
+                'period': p,
+                'topic': data['topic'],
+                'homework': data['homework']
+            })
+
+    return render_template('student.html', schedule=schedule, subject_groups=subject_groups, days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings_dict, 
                          week=week, grade_name=grade.name if grade else '', class_name=cls.name if cls else '')
 
 @app.route('/')
@@ -359,7 +384,6 @@ def index():
 
 if __name__ == '__main__':
     with app.app_context():
-        # Avoid create_all if it might cause issues, or use it to ensure non-existing columns are fine
         try:
             db.create_all()
             print("Successfully connected to PostgreSQL.")
