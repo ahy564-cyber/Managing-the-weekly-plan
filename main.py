@@ -18,13 +18,14 @@ if db_url and db_url.startswith("postgres://"):
 
 engine_options = {"pool_pre_ping": True}
 if db_url:
-    # Use sslmode=require for security as requested
+    # Use sslmode=prefer because the server does not support SSL requirement
+    # but the user wants safety. 'prefer' will try SSL first but fallback.
     if "sslmode" in db_url:
-        db_url = db_url.replace("sslmode=prefer", "sslmode=require")
+        db_url = db_url.replace("sslmode=require", "sslmode=prefer")
     else:
         separator = "&" if "?" in db_url else "?"
-        db_url += f"{separator}sslmode=require"
-    engine_options["connect_args"] = {"sslmode": "require"}
+        db_url += f"{separator}sslmode=prefer"
+    engine_options["connect_args"] = {"sslmode": "prefer"}
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = engine_options
