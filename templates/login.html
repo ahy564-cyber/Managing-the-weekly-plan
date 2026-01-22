@@ -17,7 +17,7 @@
 </head>
 <body>
     <div class="login-card">
-        <h1>تسجيل دخول المدرسة</h1>
+        <h1>تسجيل دخول المشرف</h1>
         {% with messages = get_flashed_messages() %}
           {% if messages %}
             {% for message in messages %}
@@ -26,13 +26,10 @@
           {% endif %}
         {% endwith %}
         <form method="POST">
-            <input type="text" name="username" placeholder="اسم مستخدم المدرسة" required>
+            <input type="text" name="username" placeholder="اسم المستخدم" required>
             <input type="password" name="password" placeholder="كلمة المرور" required>
             <button type="submit">دخول</button>
         </form>
-        <div style="margin-top: 20px;">
-            <a href="/super-admin/login" style="color: #64748b; font-size: 0.8em; text-decoration: none;">دخول النظام العام</a>
-        </div>
         <a href="/" class="back">العودة للقائمة الرئيسية</a>
     </div>
 </body>

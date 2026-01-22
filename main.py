@@ -363,7 +363,7 @@ def student(grade_id, class_id):
             day_data.update({'topic': w.topic, 'homework': w.homework})
             if w.subject_name: day_data['subject_name'] = w.subject_name
             
-    # Group by subject for the new UI
+    # Group by subject for the UI
     subject_groups = {}
     for day in DAYS_ORDER:
         for p in range(1, 9):
