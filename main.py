@@ -186,13 +186,25 @@ def admin():
                 db.session.commit()
                 flash('تم حفظ الجدول الأساسي بنجاح')
         elif action == 'update_settings':
-            for key in ['period1_date', 'period2_date', 'final_date', 'current_week', 'school_name']:
+            # Basic settings
+            for key in ['period1_date', 'period2_date', 'final_date', 'current_week', 'school_name', 'principal_name']:
                 val = request.form.get(key)
                 if val is not None:
                     s = Setting.query.get(key)
                     if s: s.value = val
                     else: db.session.add(Setting(key=key, value=val))
-            log_activity('admin', 'تحديث الإعدادات العامة')
+            
+            # Week-specific dates
+            week_num = request.form.get('current_week', '1')
+            for day in DAYS_ORDER:
+                date_key = f'week_{week_num}_date_{day}'
+                date_val = request.form.get(date_key)
+                if date_val is not None:
+                    s = Setting.query.get(date_key)
+                    if s: s.value = date_val
+                    else: db.session.add(Setting(key=date_key, value=date_val))
+            
+            log_activity('admin', 'تحديث الإعدادات العامة والتواريخ')
             db.session.commit()
             flash('تم تحديث الإعدادات بنجاح')
         elif action == 'update_locked_days':
@@ -225,7 +237,6 @@ def admin():
                 week_number = int(week)
                 cls = db.session.get(Class, class_id)
                 
-                # We update subject names while preserving topics and homework
                 for day in DAYS_ORDER:
                     for period in range(1, 9):
                         subject_name = request.form.get(f'override_{day}_{period}')
@@ -255,13 +266,11 @@ def admin():
     sel_class_id = request.args.get('class_id')
     sel_week = request.args.get('week', settings_dict.get('current_week', '1'))
     
-    # Manage locked days view
     locked_view_week = request.args.get('locked_week', settings_dict.get('current_week', '1'))
     current_locked_days = []
     if locked_view_week and locked_view_week.isdigit():
         current_locked_days = [ld.day_name for ld in LockedDay.query.filter_by(week_number=int(locked_view_week)).all()]
 
-    # Manage fixed schedule view
     sel_fixed_class_id = request.args.get('fixed_class_id')
     fixed_schedule = {day: {p: '' for p in range(1, 9)} for day in DAYS_ORDER}
     if sel_fixed_class_id and sel_fixed_class_id.isdigit():
@@ -281,14 +290,12 @@ def admin():
             if w.subject_name:
                 day_data['subject_name'] = w.subject_name
 
-    # Completion Stats
     current_week_int = int(settings_dict.get('current_week', '1'))
     all_classes_count = len(classes)
     completed_classes = []
     pending_classes = []
     
     for c in classes:
-        # A class is considered "Completed" if it has at least one topic filled in the current week
         has_data = WeeklyData.query.filter(
             WeeklyData.class_id == c.id,
             WeeklyData.week_number == current_week_int,
@@ -300,8 +307,6 @@ def admin():
             pending_classes.append(c)
     
     completion_percent = (len(completed_classes) / all_classes_count * 100) if all_classes_count > 0 else 0
-    
-    # Activity Logs
     logs = ActivityLog.query.order_by(ActivityLog.timestamp.desc()).limit(50).all()
     
     return render_template('admin.html', grades=grades, classes=classes, settings=settings_dict, subjects=subjects, 
@@ -338,7 +343,6 @@ def teacher():
     settings_dict = {s.key: s.value for s in all_settings}
     if not week: week = settings_dict.get('current_week', '1')
     
-    # Locked days check
     locked_days = []
     if week and week.isdigit():
         locked_days = [ld.day_name for ld in LockedDay.query.filter_by(week_number=int(week)).all()]
@@ -368,19 +372,35 @@ def teacher():
     grades = Grade.query.all()
     classes = Class.query.filter_by(grade_id=int(grade_id)).all() if grade_id and grade_id.isdigit() else []
     
-    schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
+    # Process schedule grouped by subject
+    subjects_order = []
+    schedule_by_subject = {}
+    
     if class_id and class_id.isdigit():
-        fixed = Subject.query.filter_by(class_id=int(class_id)).all()
-        for f in fixed: schedule[f.day][f.period]['subject_name'] = f.name
-        
+        fixed = Subject.query.filter_by(class_id=int(class_id)).order_by(Subject.period).all()
         weekly = WeeklyData.query.filter_by(class_id=int(class_id), week_number=int(week)).all()
-        for w in weekly:
-            day_data = schedule[w.day][w.period]
-            day_data.update({'topic': w.topic, 'homework': w.homework})
-            if w.subject_name:
-                day_data['subject_name'] = w.subject_name
+        
+        # Organize weekly data
+        weekly_map = {(w.day, w.period): w for w in weekly}
+        
+        for f in fixed:
+            sub_name = f.name
+            if sub_name not in schedule_by_subject:
+                schedule_by_subject[sub_name] = {d: [] for d in DAYS_ORDER}
+                subjects_order.append(sub_name)
+            
+            w_data = weekly_map.get((f.day, f.period))
+            # Handle override subject name if it exists in WeeklyData
+            actual_sub_name = w_data.subject_name if w_data and w_data.subject_name else f.name
+            
+            schedule_by_subject[sub_name][f.day].append({
+                'period': f.period,
+                'topic': w_data.topic if w_data else '',
+                'homework': w_data.homework if w_data else ''
+            })
 
-    return render_template('teacher.html', grades=grades, classes=classes, schedule=schedule, 
+    return render_template('teacher.html', grades=grades, classes=classes, 
+                         schedule_by_subject=schedule_by_subject, subjects_order=subjects_order,
                          selected_grade=grade_id, selected_class=class_id, selected_week=week, 
                          days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings_dict,
                          locked_days=locked_days)
@@ -394,25 +414,36 @@ def student(grade_id, class_id):
     grade = db.session.get(Grade, grade_id)
     cls = db.session.get(Class, class_id)
     
-    schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
-    fixed = Subject.query.filter_by(class_id=class_id).all()
-    for f in fixed: schedule[f.day][f.period]['subject_name'] = f.name
+    # Group schedule by subject for dynamic grid
+    subjects_order = []
+    schedule_by_subject = {}
     
+    fixed = Subject.query.filter_by(class_id=class_id).order_by(Subject.period).all()
     weekly = WeeklyData.query.filter_by(class_id=class_id, week_number=int(week)).all()
-    for w in weekly:
-        day_data = schedule[w.day][w.period]
-        day_data.update({'topic': w.topic, 'homework': w.homework})
-        if w.subject_name:
-            day_data['subject_name'] = w.subject_name
+    weekly_map = {(w.day, w.period): w for w in weekly}
+    
+    for f in fixed:
+        sub_name = f.name
+        if sub_name not in schedule_by_subject:
+            schedule_by_subject[sub_name] = {d: [] for d in DAYS_ORDER}
+            subjects_order.append(sub_name)
+        
+        w_data = weekly_map.get((f.day, f.period))
+        schedule_by_subject[sub_name][f.day].append({
+            'period': f.period,
+            'topic': w_data.topic if w_data else '',
+            'homework': w_data.homework if w_data else ''
+        })
 
-    return render_template('student.html', schedule=schedule, days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings_dict, 
+    return render_template('student.html', schedule_by_subject=schedule_by_subject, subjects_order=subjects_order,
+                         days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings_dict, 
                          week=week, grade_name=grade.name if grade else '', class_name=cls.name if cls else '')
 
 if __name__ == '__main__':
     with app.app_context():
         try:
             db.create_all()
-            print("Successfully connected to PostgreSQL and initialized schema.")
+            print("Successfully connected to PostgreSQL.")
         except Exception as e:
             print(f"Error connecting to PostgreSQL: {e}")
     app.run(host='0.0.0.0', port=5000, debug=True)

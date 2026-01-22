@@ -9,160 +9,128 @@
     <style>
         body { font-family: 'Cairo', sans-serif; margin: 0; padding: 20px; background: #f8fafc; color: #1e293b; }
         .container { max-width: 1200px; margin: 0 auto; }
-        .header { background: white; padding: 25px; border-radius: 16px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); border-bottom: 5px solid #3b82f6; display: flex; align-items: center; position: relative; min-height: 150px; }
-        .logo-container { position: absolute; left: 25px; top: 50%; transform: translateY(-50%); z-index: 10; }
-        .logo { width: 150px; height: auto; display: block; max-width: 150px; }
-        .header-text { text-align: center; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 160px; }
+        .official-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; padding: 15px; border-bottom: 2px solid #1e3a8a; }
+        .header-right { text-align: right; }
+        .header-center { text-align: center; flex-grow: 1; }
+        .header-left { text-align: left; }
+        .logo { width: 100px; height: auto; }
         
-        @media (max-width: 900px) {
-            .header { flex-direction: column; padding: 20px; min-height: auto; }
-            .logo-container { position: static; transform: none; margin-bottom: 15px; }
-            .logo { width: 120px; }
-            .header-text { padding: 0; }
-        }
+        .title-box { border: 2px solid #1e3a8a; padding: 10px 30px; display: inline-block; border-radius: 50px; margin-bottom: 10px; background: white; }
+        .week-info { font-weight: 700; color: #1e3a8a; }
         
-        .timers { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px; width: 100%; }
-        .timer { background: #1e293b; color: white; padding: 15px; border-radius: 12px; text-align: center; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); }
-        .timer h4 { margin: 0 0 5px 0; font-size: 0.9em; color: #94a3b8; }
-        .timer span { font-size: 1.4em; font-weight: 700; color: #3b82f6; }
+        .alert-box { background: #eff6ff; border: 2px solid #3b82f6; border-radius: 12px; padding: 15px; margin-bottom: 25px; text-align: center; }
+        .alert-text { margin: 0; color: #1e3a8a; font-size: 1.05em; font-weight: 700; line-height: 1.6; }
         
-        table { width: 100%; border-collapse: separate; border-spacing: 0; background: white; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); border-radius: 16px; overflow: hidden; }
-        th, td { border: 1px solid #e2e8f0; padding: 12px 8px; text-align: center; }
-        th { background: #3b82f6; color: white; font-weight: 700; font-size: 1.1em; }
-        .day-cell { background: #f1f5f9; font-weight: 700; color: #1e3a8a; width: 100px; }
-        .subject-box { margin-bottom: 5px; }
-        .subject-name { font-weight: 700; color: #1e40af; display: block; font-size: 1.05em; margin-bottom: 4px; }
-        .topic-text { color: #475569; font-size: 0.9em; line-height: 1.4; display: block; }
-        .hw-text { color: #dc2626; font-size: 0.85em; font-weight: 600; margin-top: 5px; display: block; border-top: 1px dashed #fee2e2; padding-top: 3px; }
+        .subject-table { width: 100%; border-collapse: collapse; margin-bottom: 25px; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .subject-table th, .subject-table td { border: 1px solid #e2e8f0; padding: 10px; text-align: center; }
+        .subject-table th { background: #1e3a8a; color: white; }
+        .subject-name-header { background: #3b82f6 !important; font-size: 1.2em; }
+        .day-column { width: 120px; font-weight: 700; background: #f1f5f9; }
+        .period-cell { width: 80px; }
         
-        .actions { text-align: center; margin-top: 30px; display: flex; justify-content: center; gap: 15px; }
-        .btn { padding: 12px 25px; border-radius: 10px; border: none; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
-        .btn-pdf { background: #ef4444; color: white; }
-        .btn-img { background: #10b981; color: white; }
-        .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .footer-info { margin-top: 30px; display: flex; justify-content: space-between; padding: 20px; border-top: 2px solid #1e3a8a; }
         
-        @media print { .actions { display: none; } }
+        @media print { .no-print { display: none; } }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div style="background: #eff6ff; border: 2px solid #3b82f6; border-radius: 12px; padding: 20px; margin-bottom: 25px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-            <p style="margin: 0; color: #1e3a8a; font-size: 1.1em; font-weight: 700; line-height: 1.6;">
-                أعزاءنا أولياء الأمور والطلاب الكرام.. نرحب بكم في منصة (الجدول الذكي)؛ وجهتكم المعتمدة للاطلاع على الخطة الأسبوعية، والتي نوافيكم بها بدقة وموعد ثابت كل يوم خميس بنهاية دوامنا الدراسي، لنعينكم على التخطيط المبكر لأسبوعكم القادم.
-            </p>
+    <div class="container" id="capture">
+        <div class="official-header">
+            <div class="header-right">
+                <p>المملكة العربية السعودية</p>
+                <p>وزارة التعليم</p>
+                <p>مدارس الثقافة الرقمية</p>
+            </div>
+            <div class="header-center">
+                <div class="title-box">
+                    <h1 style="margin:0; font-size: 1.5em; color: #1e3a8a;">الخطة الدراسية للأسبوع ( {{ week }} )</h1>
+                </div>
+                <div class="week-info">
+                    {{ settings.get('week_' ~ week ~ '_date_Sunday', '-') }} هـ  إلى  {{ settings.get('week_' ~ week ~ '_date_Thursday', '-') }} هـ
+                </div>
+            </div>
+            <div class="header-left">
+                {% if settings.school_logo %}
+                <img src="/static/uploads/{{ settings.school_logo }}" class="logo">
+                {% else %}
+                <div style="width:100px; height:100px; border:1px dashed #ccc; display:flex; align-items:center; justify-content:center;">شعار</div>
+                {% endif %}
+            </div>
         </div>
-        <div id="capture">
-            <div class="header">
-                <div class="logo-container">
-                    {% if settings.school_logo %}
-                    <img src="/static/uploads/{{ settings.school_logo }}" class="logo">
-                    {% endif %}
-                </div>
-                <div class="header-text">
-                    <h1 style="margin:0; color:#1e3a8a; font-size: 1.8em;">{{ settings.school_name or 'الخطة الدراسية الأسبوعية' }}</h1>
-                    <h2 style="margin:5px 0; color:#3b82f6; font-size: 1.4em;">{{ grade_name }} - {{ class_name }}</h2>
-                    <span style="background: #eff6ff; color: #1e40af; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 0.9em; display: inline-block; margin-top: 5px;">الأسبوع الدراسي: {{ week }}</span>
-                    
-                    <div class="timers" style="margin-top: 20px; margin-bottom: 0; box-shadow: none;">
-                        <div class="timer" id="t1" style="box-shadow: none; background: transparent; color: #1e293b; padding: 5px;">
-                            <h4 style="color: #475569; display: inline;">اختبارات الفترة الأولى:</h4> <span style="font-size: 1.1em;">-</span>
-                        </div>
-                        <div class="timer" id="t2" style="box-shadow: none; background: transparent; color: #1e293b; padding: 5px;">
-                            <h4 style="color: #475569; display: inline;">اختبارات الفترة الثانية:</h4> <span style="font-size: 1.1em;">-</span>
-                        </div>
-                        <div class="timer" id="tf" style="box-shadow: none; background: transparent; color: #1e293b; padding: 5px;">
-                            <h4 style="color: #475569; display: inline;">الاختبار النهائي:</h4> <span style="font-size: 1.1em;">-</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
-            <div class="timers" style="display: none;">
-                <div class="timer" id="t1_old"><h4>اختبارات الفترة الأولى</h4><span>-</span></div>
-                <div class="timer" id="t2_old"><h4>اختبارات الفترة الثانية</h4><span>-</span></div>
-                <div class="timer" id="tf_old"><h4>الاختبار النهائي</h4><span>-</span></div>
-            </div>
+        <div class="alert-box no-print">
+            <p class="alert-text">أعزاءنا أولياء الأمور والطلاب الكرام.. نرحب بكم في منصة (الجدول الذكي)؛ وجهتكم المعتمدة للاطلاع على الخطة الأسبوعية.</p>
+        </div>
 
-            <table>
-                <thead>
+        <div style="text-align: right; margin-bottom: 10px;">
+            <span style="font-weight: 700;">الصف: {{ grade_name }} - {{ class_name }}</span>
+        </div>
+
+        {% for subject in subjects_order %}
+        <table class="subject-table">
+            <thead>
+                <tr>
+                    <th colspan="4" class="subject-name-header">{{ subject }}</th>
+                </tr>
+                <tr>
+                    <th>اليوم</th>
+                    <th>الحصص</th>
+                    <th>موضوع الدرس</th>
+                    <th>الواجب</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for day in days_order %}
+                {% set periods = schedule_by_subject[subject][day] %}
+                {% if periods %}
+                    {% for p in periods %}
                     <tr>
-                        <th>اليوم</th>
-                        {% for p in range(1, 9) %}<th>ح {{ p }}</th>{% endfor %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for d in days_order %}
-                    <tr>
-                        <td class="day-cell">{{ days_ar[d] }}</td>
-                        {% for p in range(1, 9) %}
-                        <td>
-                            {% if schedule[d][p].subject_name %}
-                            <div class="subject-box">
-                                <span class="subject-name">{{ schedule[d][p].subject_name }}</span>
-                                <span class="topic-text">{{ schedule[d][p].topic }}</span>
-                                {% if schedule[d][p].homework %}
-                                <span class="hw-text">📝 {{ schedule[d][p].homework }}</span>
-                                {% endif %}
-                            </div>
-                            {% else %}
-                            <span style="color: #cbd5e1;">-</span>
-                            {% endif %}
-                        </td>
-                        {% endfor %}
+                        {% if loop.first %}<td class="day-column" rowspan="{{ periods|length }}">{{ days_ar[day] }}</td>{% endif %}
+                        <td class="period-cell">حصة {{ p.period }}</td>
+                        <td>{{ p.topic or '-' }}</td>
+                        <td style="color: #dc2626; font-weight: 600;">{{ p.homework or '-' }}</td>
                     </tr>
                     {% endfor %}
-                </tbody>
-            </table>
-        </div>
+                {% else %}
+                <tr>
+                    <td class="day-column">{{ days_ar[day] }}</td>
+                    <td colspan="3" style="color: #94a3b8;">-</td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endfor %}
 
-        <div class="actions">
-            <button class="btn btn-pdf" onclick="exportPDF()">📥 تحميل بصيغة PDF</button>
-            <button class="btn btn-img" onclick="exportImage()">🖼️ حفظ كصورة</button>
+        <div class="footer-info">
+            <div>رائدة الصف / مديرة المدرسة: {{ settings.get('principal_name', '') }}</div>
+            <div>التاريخ: {{ datetime.now().strftime('%Y/%m/%d') }}</div>
         </div>
     </div>
 
-    <script>
-        function updateTimer(id, dateStr) {
-            const el = document.getElementById(id);
-            if (!dateStr) { el.style.display = 'none'; return; }
-            const target = new Date(dateStr).getTime();
-            const now = new Date().getTime();
-            const diff = target - now;
-            if (diff > 0) {
-                const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-                el.querySelector('span').textContent = days + ' يوم متبقي';
-            } else {
-                el.style.display = 'none';
-            }
-        }
-        updateTimer('t1', '{{ settings.period1_date }}');
-        updateTimer('t2', '{{ settings.period2_date }}');
-        updateTimer('tf', '{{ settings.final_date }}');
+    <div style="text-align: center; margin: 20px;" class="no-print">
+        <button onclick="exportPDF()" style="padding: 10px 20px; background: #ef4444; color: white; border: none; border-radius: 8px; cursor: pointer;">تحميل PDF</button>
+        <button onclick="exportImage()" style="padding: 10px 20px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer;">حفظ كصورة</button>
+    </div>
 
+    <footer style="text-align: center; padding: 20px; color: #64748b; font-size: 0.85em; margin-top: 40px; border-top: 1px solid #e2e8f0;">
+        أنشئ هذا الموقع بواسطة أحمد الفيفي
+    </footer>
+
+    <script>
         function exportPDF() {
             const element = document.getElementById('capture');
-            const opt = {
-                margin: 10,
-                filename: 'Weekly_Schedule_{{ class_name }}.pdf',
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
-            };
-            html2pdf().set(opt).from(element).save();
+            html2pdf().from(element).save('خطة_{{ class_name }}_أسبوع_{{ week }}.pdf');
         }
-
         function exportImage() {
             const element = document.getElementById('capture');
-            html2canvas(element, { useCORS: true, scale: 2 }).then(canvas => {
+            html2canvas(element).then(canvas => {
                 const link = document.createElement('a');
-                link.download = 'Weekly_Schedule_{{ class_name }}.png';
-                link.href = canvas.toDataURL('image/png');
+                link.download = 'خطة_{{ class_name }}_أسبوع_{{ week }}.png';
+                link.href = canvas.toDataURL();
                 link.click();
             });
         }
     </script>
-    <footer style="text-align: center; padding: 20px; color: #64748b; font-size: 0.85em; margin-top: 40px; border-top: 1px solid #e2e8f0;">
-        أنشئ هذا الموقع بواسطة أحمد الفيفي
-    </footer>
 </body>
 </html>

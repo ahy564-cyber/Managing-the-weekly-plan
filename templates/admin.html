@@ -203,13 +203,24 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>تاريخ الاختبار النهائي:</label>
-                    <div class="flex">
-                        <input type="date" name="final_date" value="{{ settings.final_date }}">
-                    </div>
+                    <label>اسم مديرة المدرسة / رائدة الصف:</label>
+                    <input type="text" name="principal_name" value="{{ settings.get('principal_name', '') }}">
                 </div>
             </div>
-            <button type="submit" style="margin-top: 15px;">حفظ الإعدادات</button>
+            
+            <h3 style="margin-top: 20px; color: #1e3a8a;">تواريخ أيام الأسبوع الحالي (الأسبوع {{ settings.current_week }}):</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; background: #f1f5f9; padding: 15px; border-radius: 8px;">
+                {% for day in days_order %}
+                <div class="form-group">
+                    <label>{{ days_ar[day] }}:</label>
+                    <input type="text" name="week_{{ settings.current_week }}_date_{{ day }}" 
+                           value="{{ settings.get('week_' ~ settings.current_week ~ '_date_' ~ day, '') }}" 
+                           placeholder="مثال: 1445/01/01">
+                </div>
+                {% endfor %}
+            </div>
+            
+            <button type="submit" style="margin-top: 15px;">حفظ الإعدادات والتواريخ</button>
         </form>
 
         <hr style="margin: 25px 0; border: none; border-top: 1px solid #e2e8f0;">
