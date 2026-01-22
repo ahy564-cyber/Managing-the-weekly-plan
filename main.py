@@ -316,7 +316,7 @@ def admin():
                          sel_fixed_class_id=sel_fixed_class_id, fixed_schedule=fixed_schedule,
                          completion_percent=round(completion_percent, 1),
                          completed_classes=completed_classes, pending_classes=pending_classes,
-                         logs=logs)
+                         logs=logs, datetime=datetime)
 
 @app.route('/admin/delete_date/<date_type>', methods=['POST'])
 @admin_required
@@ -390,8 +390,6 @@ def teacher():
                 subjects_order.append(sub_name)
             
             w_data = weekly_map.get((f.day, f.period))
-            # Handle override subject name if it exists in WeeklyData
-            actual_sub_name = w_data.subject_name if w_data and w_data.subject_name else f.name
             
             schedule_by_subject[sub_name][f.day].append({
                 'period': f.period,
@@ -403,7 +401,7 @@ def teacher():
                          schedule_by_subject=schedule_by_subject, subjects_order=subjects_order,
                          selected_grade=grade_id, selected_class=class_id, selected_week=week, 
                          days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings_dict,
-                         locked_days=locked_days)
+                         locked_days=locked_days, datetime=datetime)
 
 @app.route('/student/<int:grade_id>/<int:class_id>')
 def student(grade_id, class_id):
@@ -437,7 +435,7 @@ def student(grade_id, class_id):
 
     return render_template('student.html', schedule_by_subject=schedule_by_subject, subjects_order=subjects_order,
                          days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings_dict, 
-                         week=week, grade_name=grade.name if grade else '', class_name=cls.name if cls else '')
+                         week=week, grade_name=grade.name if grade else '', class_name=cls.name if cls else '', datetime=datetime)
 
 if __name__ == '__main__':
     with app.app_context():
