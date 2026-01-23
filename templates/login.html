@@ -2,30 +2,34 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>تسجيل الدخول - النظام الأكاديمي</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تسجيل الدخول - نظام الخطة الدراسية</title>
     <style>
-        body { font-family: 'Cairo', sans-serif; background: #f1f5f9; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .login-card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
-        h2 { color: #1e3a8a; margin-bottom: 25px; }
-        input { width: 100%; padding: 12px; margin-bottom: 20px; border: 1.5px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; font-family: inherit; }
-        button { width: 100%; padding: 12px; background: #1e3a8a; color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; }
-        .flash { color: #dc2626; margin-bottom: 15px; font-size: 0.9em; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #ecf0f1; }
+        .login-card { background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 100%; }
+        h1 { color: #2c3e50; margin-bottom: 30px; }
+        input { width: 100%; padding: 12px; margin-bottom: 20px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 1em; text-align: center; }
+        button { background: #3498db; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; width: 100%; font-weight: bold; font-size: 1.1em; transition: background 0.3s; }
+        button:hover { background: #2980b9; }
+        .error { color: #e74c3c; margin-bottom: 20px; font-weight: bold; }
+        .back { margin-top: 20px; display: block; color: #7f8c8d; text-decoration: none; }
     </style>
 </head>
 <body>
     <div class="login-card">
-        <h2>تسجيل دخول الإدارة والمعلمين</h2>
+        <h1>تسجيل الدخول</h1>
         {% with messages = get_flashed_messages() %}
           {% if messages %}
-            {% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}
+            {% for message in messages %}
+              <div class="error">{{ message }}</div>
+            {% endfor %}
           {% endif %}
         {% endwith %}
         <form method="POST">
             <input type="password" name="password" placeholder="أدخل كلمة المرور" required>
             <button type="submit">دخول</button>
         </form>
-        <p style="margin-top: 20px; font-size: 0.8em; color: #64748b;">أنشئ هذا الموقع بواسطة أحمد الفيفي</p>
+        <a href="/" class="back">العودة للقائمة الرئيسية</a>
     </div>
 </body>
 </html>
