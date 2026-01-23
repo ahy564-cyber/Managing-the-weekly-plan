@@ -8,37 +8,43 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body { font-family: 'Cairo', sans-serif; margin: 0; padding: 20px; background: #f8fafc; color: #1e293b; }
-        .container { max-width: 1200px; margin: 0 auto; }
-        .header { background: white; padding: 25px; border-radius: 16px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); border-bottom: 5px solid #3b82f6; display: flex; align-items: center; position: relative; min-height: 150px; }
+        .container { width: 100%; max-width: 100%; margin: 0 auto; }
+        .header { background: white; padding: 25px; border-radius: 16px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); border-bottom: 5px solid #0d9488; display: flex; align-items: center; position: relative; min-height: 150px; }
         .logo-container { position: absolute; left: 25px; top: 50%; transform: translateY(-50%); z-index: 10; }
         .logo { width: 150px; height: auto; display: block; max-width: 150px; }
         .header-text { text-align: center; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 160px; }
         
+        .gov-info { position: absolute; right: 25px; top: 25px; text-align: right; font-size: 0.85em; font-weight: 700; color: #0d9488; }
+
         @media (max-width: 900px) {
             .header { flex-direction: column; padding: 20px; min-height: auto; }
             .logo-container { position: static; transform: none; margin-bottom: 15px; }
             .logo { width: 120px; }
             .header-text { padding: 0; }
+            .gov-info { position: static; text-align: center; margin-bottom: 10px; }
         }
         
         .timers { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px; width: 100%; }
         .timer { background: #1e293b; color: white; padding: 15px; border-radius: 12px; text-align: center; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); }
         .timer h4 { margin: 0 0 5px 0; font-size: 0.9em; color: #94a3b8; }
-        .timer span { font-size: 1.4em; font-weight: 700; color: #3b82f6; }
+        .timer span { font-size: 1.4em; font-weight: 700; color: #0d9488; }
         
-        table { width: 100%; border-collapse: separate; border-spacing: 0; background: white; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); border-radius: 16px; overflow: hidden; }
-        th, td { border: 1px solid #e2e8f0; padding: 12px 8px; text-align: center; }
-        th { background: #3b82f6; color: white; font-weight: 700; font-size: 1.1em; }
-        .day-cell { background: #f1f5f9; font-weight: 700; color: #1e3a8a; width: 100px; }
-        .subject-box { margin-bottom: 5px; }
-        .subject-name { font-weight: 700; color: #1e40af; display: block; font-size: 1.05em; margin-bottom: 4px; }
-        .topic-text { color: #475569; font-size: 0.9em; line-height: 1.4; display: block; }
-        .hw-text { color: #dc2626; font-size: 0.85em; font-weight: 600; margin-top: 5px; display: block; border-top: 1px dashed #fee2e2; padding-top: 3px; }
+        .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 16px; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); }
+        table { width: 100%; border-collapse: separate; border-spacing: 0; background: white; min-width: 1000px; }
+        th, td { border: 1px solid #e2e8f0; padding: 15px 10px; text-align: center; }
+        th { background: #0d9488; color: white; font-weight: 700; font-size: 1em; white-space: nowrap; }
+        .day-cell { background: #f1f5f9; font-weight: 700; color: #134e4a; width: 80px; min-width: 80px; }
+        .period-header { width: 60px; min-width: 60px; }
+        
+        .subject-box { text-align: right; }
+        .subject-name { font-weight: 800; color: #0f766e; display: block; font-size: 0.95em; margin-bottom: 6px; border-bottom: 1px solid #f0fdfa; padding-bottom: 4px; }
+        .topic-text { color: #334155; font-size: 0.85em; line-height: 1.5; display: block; min-width: 150px; }
+        .hw-text { color: #be123c; font-size: 0.82em; font-weight: 700; margin-top: 8px; display: block; border-top: 1px dashed #fecdd3; padding-top: 6px; }
         
         .actions { text-align: center; margin-top: 30px; display: flex; justify-content: center; gap: 15px; }
         .btn { padding: 12px 25px; border-radius: 10px; border: none; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
-        .btn-pdf { background: #ef4444; color: white; }
-        .btn-img { background: #10b981; color: white; }
+        .btn-pdf { background: #0d9488; color: white; }
+        .btn-img { background: #14b8a6; color: white; }
         .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         
         @media print { .actions { display: none; } }
@@ -46,22 +52,26 @@
 </head>
 <body>
     <div class="container">
-        <div style="background: #eff6ff; border: 2px solid #3b82f6; border-radius: 12px; padding: 20px; margin-bottom: 25px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-            <p style="margin: 0; color: #1e3a8a; font-size: 1.1em; font-weight: 700; line-height: 1.6;">
+        <div style="background: #f0fdfa; border: 2px solid #0d9488; border-radius: 12px; padding: 20px; margin-bottom: 25px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+            <p style="margin: 0; color: #134e4a; font-size: 1.1em; font-weight: 700; line-height: 1.6;">
                 أعزاءنا أولياء الأمور والطلاب الكرام.. نرحب بكم في منصة (الجدول الذكي)؛ وجهتكم المعتمدة للاطلاع على الخطة الأسبوعية، والتي نوافيكم بها بدقة وموعد ثابت كل يوم خميس بنهاية دوامنا الدراسي، لنعينكم على التخطيط المبكر لأسبوعكم القادم.
             </p>
         </div>
         <div id="capture">
             <div class="header">
+                <div class="gov-info">
+                    المملكة العربية السعودية<br>
+                    وزارة التعليم
+                </div>
                 <div class="logo-container">
                     {% if settings.school_logo %}
                     <img src="/static/uploads/{{ settings.school_logo }}" class="logo">
                     {% endif %}
                 </div>
                 <div class="header-text">
-                    <h1 style="margin:0; color:#1e3a8a; font-size: 1.8em;">{{ settings.school_name or 'الخطة الدراسية الأسبوعية' }}</h1>
-                    <h2 style="margin:5px 0; color:#3b82f6; font-size: 1.4em;">{{ grade_name }} - {{ class_name }}</h2>
-                    <span style="background: #eff6ff; color: #1e40af; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 0.9em; display: inline-block; margin-top: 5px;">الأسبوع الدراسي: {{ week }}</span>
+                    <h1 style="margin:0; color:#134e4a; font-size: 1.8em;">{{ settings.school_name or 'مدارس ثقافة الجيل' }}</h1>
+                    <h2 style="margin:5px 0; color:#0d9488; font-size: 1.4em;">{{ grade_name }} - {{ class_name }}</h2>
+                    <span style="background: #f0fdfa; color: #0f766e; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 0.9em; display: inline-block; margin-top: 5px;">الأسبوع الدراسي: {{ week }}</span>
                     
                     <div class="timers" style="margin-top: 20px; margin-bottom: 0; box-shadow: none;">
                         <div class="timer" id="t1" style="box-shadow: none; background: transparent; color: #1e293b; padding: 5px;">
@@ -83,36 +93,38 @@
                 <div class="timer" id="tf_old"><h4>الاختبار النهائي</h4><span>-</span></div>
             </div>
 
-            <table>
-                <thead>
-                    <tr>
-                        <th>اليوم</th>
-                        {% for p in range(1, 9) %}<th>ح {{ p }}</th>{% endfor %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for d in days_order %}
-                    <tr>
-                        <td class="day-cell">{{ days_ar[d] }}</td>
-                        {% for p in range(1, 9) %}
-                        <td>
-                            {% if schedule[d][p].subject_name %}
-                            <div class="subject-box">
-                                <span class="subject-name">{{ schedule[d][p].subject_name }}</span>
-                                <span class="topic-text">{{ schedule[d][p].topic }}</span>
-                                {% if schedule[d][p].homework %}
-                                <span class="hw-text">📝 {{ schedule[d][p].homework }}</span>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="day-cell">اليوم</th>
+                            {% for p in range(1, 9) %}<th class="period-header">ح {{ p }}</th>{% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in days_order %}
+                        <tr>
+                            <td class="day-cell">{{ days_ar[d] }}</td>
+                            {% for p in range(1, 9) %}
+                            <td>
+                                {% if schedule[d][p].subject_name %}
+                                <div class="subject-box">
+                                    <span class="subject-name">{{ schedule[d][p].subject_name }}</span>
+                                    <span class="topic-text">{{ schedule[d][p].topic }}</span>
+                                    {% if schedule[d][p].homework %}
+                                    <span class="hw-text">📝 {{ schedule[d][p].homework }}</span>
+                                    {% endif %}
+                                </div>
+                                {% else %}
+                                <span style="color: #cbd5e1;">-</span>
                                 {% endif %}
-                            </div>
-                            {% else %}
-                            <span style="color: #cbd5e1;">-</span>
-                            {% endif %}
-                        </td>
+                            </td>
+                            {% endfor %}
+                        </tr>
                         {% endfor %}
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <div class="actions">
