@@ -101,7 +101,8 @@ class ActivityLog(db.Model):
 
 def log_activity(role, action):
     try:
-        log = ActivityLog(user_role=role, action=action)
+        # Use timezone-aware UTC or standard datetime
+        log = ActivityLog(user_role=role, action=action, timestamp=datetime.utcnow())
         db.session.add(log)
         db.session.commit()
     except Exception as e:
