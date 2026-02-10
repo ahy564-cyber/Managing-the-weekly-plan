@@ -19,18 +19,11 @@ if db_url and db_url.startswith("postgres://"):
 # Dynamic SSL Mode Handling
 engine_options = {"pool_pre_ping": True}
 if db_url:
-    # Neon/Prod DBs usually require SSL
-    if "127.0.0.1" not in db_url and "localhost" not in db_url and "helium" not in db_url:
-        if "sslmode" not in db_url:
-            separator = "&" if "?" in db_url else "?"
-            db_url += f"{separator}sslmode=require"
-        engine_options["connect_args"] = {"sslmode": "require"}
-    else:
-        # Replit Local Dev DB (Helium) does NOT support SSL
-        if "sslmode" not in db_url:
-            separator = "&" if "?" in db_url else "?"
-            db_url += f"{separator}sslmode=disable"
-        engine_options["connect_args"] = {"sslmode": "disable"}
+    # Always use sslmode=require for stability and safety as requested
+    if "sslmode" not in db_url:
+        separator = "&" if "?" in db_url else "?"
+        db_url += f"{separator}sslmode=require"
+    engine_options["connect_args"] = {"sslmode": "require"}
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = engine_options
@@ -195,10 +188,12 @@ def admin():
             elif action == 'update_settings':
                 for key in ['period1_date', 'period2_date', 'final_date', 'current_week', 'school_name']:
                     val = request.form.get(key)
-                    if val is not None:
-                        s = db.session.get(Setting, key)
-                        if s: s.value = val
-                        else: db.session.add(Setting(key=key, value=val))
+                    # We treat None or empty string as valid but handle it safely
+                    s = db.session.get(Setting, key)
+                    if s:
+                        s.value = val if val is not None else ''
+                    else:
+                        db.session.add(Setting(key=key, value=val if val is not None else ''))
                 log_activity('admin', 'تحديث الإعدادات العامة')
                 db.session.commit()
                 flash('تم تحديث الإعدادات بنجاح')
@@ -435,6 +430,8 @@ def student(grade_id, class_id):
 if __name__ == '__main__':
     with app.app_context():
         try:
+            # We use create_all() which only creates tables if they don't exist
+            # It does NOT drop existing data.
             db.create_all()
             print("Successfully connected to PostgreSQL and initialized schema.")
         except Exception as e:
