@@ -174,7 +174,7 @@ def admin():
                     flash('تم حذف الفصل بنجاح')
         elif action == 'save_fixed_schedule':
             cid = request.form.get('class_id')
-            if cid and cid.strip() != 'None' and cid.isdigit():
+            if cid and str(cid).strip().lower() != 'none' and str(cid).isdigit():
                 class_id = int(cid)
                 cls = db.session.get(Class, class_id)
                 if cls:
@@ -226,7 +226,7 @@ def admin():
         elif action == 'save_override_batch':
             cid = request.form.get('class_id')
             week = request.form.get('week')
-            if cid and week and cid.strip() != 'None' and week.strip() != 'None' and cid.isdigit() and week.isdigit():
+            if cid and week and str(cid).strip().lower() != 'none' and str(week).strip().lower() != 'none' and str(cid).isdigit() and str(week).isdigit():
                 class_id = int(cid)
                 week_number = int(week)
                 cls = db.session.get(Class, class_id)

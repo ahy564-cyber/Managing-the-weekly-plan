@@ -18,8 +18,9 @@
         .btn-danger:hover { background: #dc2626; }
         .btn-success { background: #10b981; }
         .btn-success:hover { background: #059669; }
-        table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 15px; overflow: hidden; border-radius: 8px; border: 1px solid #e2e8f0; }
-        th, td { padding: 12px 15px; text-align: center; border-bottom: 1px solid #e2e8f0; border-left: 1px solid #e2e8f0; }
+        .table-container { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 15px; background: white; min-width: 1200px; border: 1px solid #e2e8f0; }
+        th, td { padding: 15px; text-align: center; border-bottom: 1px solid #e2e8f0; border-left: 1px solid #e2e8f0; }
         th { background: #f1f5f9; font-weight: 700; color: #334155; }
         tr:last-child td { border-bottom: none; }
         td:last-child { border-left: none; }
@@ -114,7 +115,8 @@
         </table>
     </div>
 
-    <div class="card">
+        <div id="toast" style="visibility: hidden; min-width: 250px; background-color: #059669; color: #fff; text-align: center; border-radius: 8px; padding: 16px; position: fixed; z-index: 1000; left: 50%; bottom: 30px; transform: translateX(-50%); font-weight: 700;">تم الحفظ بنجاح ✓</div>
+        <div class="card">
         <h2>إدارة التجاوز الأسبوعي (Full Batch Grid)</h2>
         <div class="flex mb-2">
             <div style="flex:1">
@@ -138,6 +140,7 @@
             <input type="hidden" name="class_id" value="{{ selected_class_id }}">
             <input type="hidden" name="week" value="{{ selected_week }}">
             
+            <div class="table-container">
             <table>
                 <thead>
                     <tr>
@@ -154,13 +157,14 @@
                             <div style="font-size: 0.8em; color: #64748b; margin-bottom: 2px;">{{ schedule[d][p].subject_name or 'أساسي' }}</div>
                             <input type="text" name="override_{{ d }}_{{ p }}" value="{{ schedule[d][p].subject_name }}" 
                                    placeholder="تغيير المادة..." 
-                                   style="width: 100%; padding: 5px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; text-align: center; font-size: 0.9em;">
+                                   style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; text-align: center; font-size: 0.9em; min-width: 120px;">
                         </td>
                         {% endfor %}
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+            </div>
             <button type="submit" style="margin-top: 20px; width: 100%; background: #3b82f6; font-size: 1.1em;">حفظ التعديلات الأسبوعية بالكامل ✓</button>
         </form>
         {% else %}
@@ -318,7 +322,7 @@
         </div>
     </div>
 
-    <div class="card">
+        <div class="card">
         <h2>إدارة الجدول الأساسي (Full Grid View)</h2>
         <div class="flex mb-2">
             <div style="flex:1">
@@ -336,6 +340,7 @@
         <form method="POST">
             <input type="hidden" name="action" value="save_fixed_schedule">
             <input type="hidden" name="class_id" value="{{ sel_fixed_class_id }}">
+            <div class="table-container">
             <table>
                 <thead>
                     <tr>
@@ -351,13 +356,14 @@
                         <td>
                             <input type="text" name="fixed_{{ d }}_{{ p }}" value="{{ fixed_schedule[d][p] }}" 
                                    placeholder="المادة..." 
-                                   style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; text-align: center;">
+                                   style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; text-align: center; min-width: 120px;">
                         </td>
                         {% endfor %}
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+            </div>
             <button type="submit" style="margin-top: 20px; width: 100%; background: #1e3a8a; font-size: 1.1em;">حفظ الجدول بالكامل ✓</button>
         </form>
         {% endif %}
