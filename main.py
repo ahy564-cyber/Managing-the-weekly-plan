@@ -179,7 +179,7 @@ def admin():
                     class_id = int(cid)
                     cls = db.session.get(Class, class_id)
                     if cls:
-                        Subject.query.filter_by(class_id=class_id).delete()
+                        db.session.execute(db.delete(Subject).where(Subject.class_id == class_id))
                         for day in DAYS_ORDER:
                             for period in range(1, 9):
                                 subject_name = request.form.get(f'fixed_{day}_{period}')
@@ -207,7 +207,8 @@ def admin():
                 if week and week.isdigit():
                     week_int = int(week)
                     locked_days = request.form.getlist('locked_days')
-                    LockedDay.query.filter_by(week_number=week_int).delete()
+                    # Batch delete existing locked days for this week
+                    db.session.execute(db.delete(LockedDay).where(LockedDay.week_number == week_int))
                     for d in locked_days:
                         db.session.add(LockedDay(week_number=week_int, day_name=d))
                     log_activity('admin', f'تحديث الأيام المغلقة للأسبوع {week_int}')
@@ -239,7 +240,11 @@ def admin():
                                 subject_name = request.form.get(f'override_{day}_{period}')
                                 if subject_name is not None:
                                     subject_name = subject_name.strip()
-                                    exists = WeeklyData.query.filter_by(class_id=class_id, week_number=week_number, day=day, period=period).first()
+                                    # Use filter instead of filter_by to be extra safe with SQLAlchemy versions
+                                    exists = WeeklyData.query.filter(WeeklyData.class_id == class_id, 
+                                                                   WeeklyData.week_number == week_number, 
+                                                                   WeeklyData.day == day, 
+                                                                   WeeklyData.period == period).first()
                                     if exists:
                                         exists.subject_name = subject_name
                                     else:
