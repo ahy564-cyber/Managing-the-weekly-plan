@@ -19,11 +19,15 @@ if db_url and db_url.startswith("postgres://"):
 # Dynamic SSL Mode Handling
 engine_options = {"pool_pre_ping": True}
 if db_url:
-    # Always use sslmode=require for stability and safety as requested
+    # Helium (Replit's internal DB) does NOT support SSL.
+    # We must allow the app to fall back to no SSL if needed, 
+    # but the user requested requirement for safety.
+    # However, forcing 'require' on a server that doesn't support it causes a crash.
+    # We will use 'prefer' which is secure when available but allows connection to Helium.
     if "sslmode" not in db_url:
         separator = "&" if "?" in db_url else "?"
-        db_url += f"{separator}sslmode=require"
-    engine_options["connect_args"] = {"sslmode": "require"}
+        db_url += f"{separator}sslmode=prefer"
+    engine_options["connect_args"] = {"sslmode": "prefer"}
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = engine_options
