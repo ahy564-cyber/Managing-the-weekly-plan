@@ -121,7 +121,7 @@ def admin_required(f):
 def login():
     if request.method == 'POST':
         password = request.form.get('password')
-        stored = Setting.query.get('admin_password')
+        stored = db.session.get(Setting, 'admin_password')
         if password == (stored.value if stored else 'fast490'):
             session.clear()
             session['user_role'] = 'admin'
@@ -140,120 +140,128 @@ def logout():
 @admin_required
 def admin():
     if request.method == 'POST':
-        action = request.form.get('action')
-        if action == 'add_grade':
-            name = request.form.get('name')
-            if name:
-                db.session.add(Grade(name=name))
-                log_activity('admin', f'إضافة صف جديد: {name}')
-                flash('تم إضافة الصف بنجاح')
-        elif action == 'delete_grade':
-            gid = request.form.get('grade_id')
-            if gid and gid.isdigit():
-                grade = db.session.get(Grade, int(gid))
-                if grade:
-                    name = grade.name
-                    db.session.delete(grade)
-                    log_activity('admin', f'حذف صف: {name}')
-                    flash('تم حذف الصف بنجاح')
-        elif action == 'add_class':
-            name = request.form.get('name')
-            gid = request.form.get('grade_id')
-            if name and gid and gid.isdigit():
-                db.session.add(Class(name=name, grade_id=int(gid)))
-                log_activity('admin', f'إضافة فصل جديد: {name}')
-                flash('تم إضافة الفصل بنجاح')
-        elif action == 'delete_class':
-            cid = request.form.get('class_id')
-            if cid and cid.isdigit():
-                cls = db.session.get(Class, int(cid))
-                if cls:
-                    name = cls.name
-                    db.session.delete(cls)
-                    log_activity('admin', f'حذف فصل: {name}')
-                    flash('تم حذف الفصل بنجاح')
-        elif action == 'save_fixed_schedule':
-            cid = request.form.get('class_id')
-            if cid and str(cid).strip().lower() != 'none' and str(cid).isdigit():
-                class_id = int(cid)
-                cls = db.session.get(Class, class_id)
-                if cls:
-                    Subject.query.filter_by(class_id=class_id).delete()
-                    for day in DAYS_ORDER:
-                        for period in range(1, 9):
-                            subject_name = request.form.get(f'fixed_{day}_{period}')
-                            if subject_name and subject_name.strip():
-                                db.session.add(Subject(class_id=class_id, day=day, period=period, name=subject_name.strip()))
-                    log_activity('admin', f'تحديث الجدول الأساسي للفصل: {cls.name}')
-                    db.session.commit()
-                    flash('تم حفظ الجدول الأساسي بنجاح')
+        try:
+            action = request.form.get('action')
+            if action == 'add_grade':
+                name = request.form.get('name')
+                if name:
+                    db.session.add(Grade(name=name))
+                    log_activity('admin', f'إضافة صف جديد: {name}')
+                    flash('تم إضافة الصف بنجاح')
+            elif action == 'delete_grade':
+                gid = request.form.get('grade_id')
+                if gid and gid.isdigit():
+                    grade = db.session.get(Grade, int(gid))
+                    if grade:
+                        name = grade.name
+                        db.session.delete(grade)
+                        log_activity('admin', f'حذف صف: {name}')
+                        flash('تم حذف الصف بنجاح')
+            elif action == 'add_class':
+                name = request.form.get('name')
+                gid = request.form.get('grade_id')
+                if name and gid and gid.isdigit():
+                    db.session.add(Class(name=name, grade_id=int(gid)))
+                    log_activity('admin', f'إضافة فصل جديد: {name}')
+                    flash('تم إضافة الفصل بنجاح')
+            elif action == 'delete_class':
+                cid = request.form.get('class_id')
+                if cid and cid.isdigit():
+                    cls = db.session.get(Class, int(cid))
+                    if cls:
+                        name = cls.name
+                        db.session.delete(cls)
+                        log_activity('admin', f'حذف فصل: {name}')
+                        flash('تم حذف الفصل بنجاح')
+            elif action == 'save_fixed_schedule':
+                cid = request.form.get('class_id')
+                if cid and str(cid).strip().lower() != 'none' and str(cid).isdigit():
+                    class_id = int(cid)
+                    cls = db.session.get(Class, class_id)
+                    if cls:
+                        Subject.query.filter_by(class_id=class_id).delete()
+                        for day in DAYS_ORDER:
+                            for period in range(1, 9):
+                                subject_name = request.form.get(f'fixed_{day}_{period}')
+                                if subject_name and subject_name.strip():
+                                    db.session.add(Subject(class_id=class_id, day=day, period=period, name=subject_name.strip()))
+                        log_activity('admin', f'تحديث الجدول الأساسي للفصل: {cls.name}')
+                        db.session.commit()
+                        flash('تم حفظ الجدول الأساسي بنجاح')
+                    else:
+                        flash('الفصل غير موجود')
                 else:
-                    flash('الفصل غير موجود')
-            else:
-                flash('يرجى اختيار فصل صحيح')
-        elif action == 'update_settings':
-            for key in ['period1_date', 'period2_date', 'final_date', 'current_week', 'school_name']:
-                val = request.form.get(key)
-                if val is not None:
-                    s = Setting.query.get(key)
-                    if s: s.value = val
-                    else: db.session.add(Setting(key=key, value=val))
-            log_activity('admin', 'تحديث الإعدادات العامة')
-            db.session.commit()
-            flash('تم تحديث الإعدادات بنجاح')
-        elif action == 'update_locked_days':
-            week = request.form.get('week_number')
-            if week and week.isdigit():
-                week_int = int(week)
-                locked_days = request.form.getlist('locked_days')
-                LockedDay.query.filter_by(week_number=week_int).delete()
-                for d in locked_days:
-                    db.session.add(LockedDay(week_number=week_int, day_name=d))
-                log_activity('admin', f'تحديث الأيام المغلقة للأسبوع {week_int}')
+                    flash('يرجى اختيار فصل صحيح')
+            elif action == 'update_settings':
+                for key in ['period1_date', 'period2_date', 'final_date', 'current_week', 'school_name']:
+                    val = request.form.get(key)
+                    if val is not None:
+                        s = db.session.get(Setting, key)
+                        if s: s.value = val
+                        else: db.session.add(Setting(key=key, value=val))
+                log_activity('admin', 'تحديث الإعدادات العامة')
                 db.session.commit()
-                flash(f'تم تحديث الأيام المغلقة للأسبوع {week_int}')
-        elif action == 'upload_logo':
-            file = request.files.get('logo')
-            if file:
-                filename = secure_filename(file.filename)
-                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-                s = Setting.query.get('school_logo')
-                if s: s.value = filename
-                else: db.session.add(Setting(key='school_logo', value=filename))
-                log_activity('admin', 'تحديث شعار المدرسة')
-                db.session.commit()
-                flash('تم رفع الشعار بنجاح')
-        elif action == 'save_override_batch':
-            cid = request.form.get('class_id')
-            week = request.form.get('week')
-            if cid and week and str(cid).strip().lower() != 'none' and str(week).strip().lower() != 'none' and str(cid).isdigit() and str(week).isdigit():
-                class_id = int(cid)
-                week_number = int(week)
-                cls = db.session.get(Class, class_id)
-                
-                if cls:
-                    # We update subject names while preserving topics and homework
-                    for day in DAYS_ORDER:
-                        for period in range(1, 9):
-                            subject_name = request.form.get(f'override_{day}_{period}')
-                            if subject_name is not None:
-                                subject_name = subject_name.strip()
-                                exists = WeeklyData.query.filter_by(class_id=class_id, week_number=week_number, day=day, period=period).first()
-                                if exists:
-                                    exists.subject_name = subject_name
-                                else:
-                                    if subject_name:
-                                        db.session.add(WeeklyData(class_id=class_id, week_number=week_number, day=day, period=period, subject_name=subject_name))
+                flash('تم تحديث الإعدادات بنجاح')
+            elif action == 'update_locked_days':
+                week = request.form.get('week_number')
+                if week and week.isdigit():
+                    week_int = int(week)
+                    locked_days = request.form.getlist('locked_days')
+                    LockedDay.query.filter_by(week_number=week_int).delete()
+                    for d in locked_days:
+                        db.session.add(LockedDay(week_number=week_int, day_name=d))
+                    log_activity('admin', f'تحديث الأيام المغلقة للأسبوع {week_int}')
+                    db.session.commit()
+                    flash(f'تم تحديث الأيام المغلقة للأسبوع {week_int}')
+            elif action == 'upload_logo':
+                file = request.files.get('logo')
+                if file:
+                    filename = secure_filename(file.filename)
+                    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                    s = db.session.get(Setting, 'school_logo')
+                    if s: s.value = filename
+                    else: db.session.add(Setting(key='school_logo', value=filename))
+                    log_activity('admin', 'تحديث شعار المدرسة')
+                    db.session.commit()
+                    flash('تم رفع الشعار بنجاح')
+            elif action == 'save_override_batch':
+                cid = request.form.get('class_id')
+                week = request.form.get('week')
+                if cid and week and str(cid).strip().lower() != 'none' and str(week).strip().lower() != 'none' and str(cid).isdigit() and str(week).isdigit():
+                    class_id = int(cid)
+                    week_number = int(week)
+                    cls = db.session.get(Class, class_id)
                     
-                    log_activity('admin', f'تحديث التجاوزات الأسبوعية بالكامل (الأسبوع {week_number}, الفصل {cls.name})')
-                    db.session.commit()
-                    flash('تم حفظ التعديلات الأسبوعية بالكامل بنجاح')
+                    if cls:
+                        # We update subject names while preserving topics and homework
+                        for day in DAYS_ORDER:
+                            for period in range(1, 9):
+                                subject_name = request.form.get(f'override_{day}_{period}')
+                                if subject_name is not None:
+                                    subject_name = subject_name.strip()
+                                    exists = WeeklyData.query.filter_by(class_id=class_id, week_number=week_number, day=day, period=period).first()
+                                    if exists:
+                                        exists.subject_name = subject_name
+                                    else:
+                                        if subject_name:
+                                            db.session.add(WeeklyData(class_id=class_id, week_number=week_number, day=day, period=period, subject_name=subject_name))
+                        
+                        log_activity('admin', f'تحديث التجاوزات الأسبوعية بالكامل (الأسبوع {week_number}, الفصل {cls.name})')
+                        db.session.commit()
+                        flash('تم حفظ التعديلات الأسبوعية بالكامل بنجاح')
+                    else:
+                        flash('الفصل غير موجود')
                 else:
-                    flash('الفصل غير موجود')
-            else:
-                flash('بيانات غير مكتملة للحفظ')
+                    flash('بيانات غير مكتملة للحفظ')
+            
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"CRITICAL ERROR in admin POST: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            flash(f"حدث خطأ أثناء الحفظ: {str(e)}")
         
-        db.session.commit()
         return redirect(url_for('admin', **request.args))
 
     grades = Grade.query.order_by(Grade.name).all()
@@ -328,7 +336,7 @@ def admin():
 @admin_required
 def delete_date(date_type):
     if date_type in ['period1_date', 'period2_date', 'final_date']:
-        s = Setting.query.get(date_type)
+        s = db.session.get(Setting, date_type)
         if s:
             s.value = ''
             db.session.commit()
