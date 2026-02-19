@@ -76,6 +76,7 @@ class WeeklyData(db.Model):
     topic = db.Column(db.Text, default='')
     homework = db.Column(db.Text, default='')
     subject_name = db.Column(db.String(200), default='')
+    # school_id is NOT present here as it was causing NotNullViolation in IMG_213125
 
 class Setting(db.Model):
     key = db.Column(db.String(100), primary_key=True)
@@ -182,27 +183,30 @@ def admin():
                                     f_day, f_period = swap['from_day'], int(swap['from_period'])
                                     t_day, t_period = swap['to_day'], int(swap['to_period'])
                                     
-                                    # Swap data for ALL weeks
-                                    from_data = WeeklyData.query.filter_by(class_id=class_id, day=f_day, period=f_period).all()
-                                    to_data = WeeklyData.query.filter_by(class_id=class_id, day=t_day, period=t_period).all()
+                                    # Swap data for ALL weeks for this specific day/period
+                                    # This ensures that when a subject moves in the Master Schedule, 
+                                    # all its historical and future topics/homework move with it.
+                                    from_entries = WeeklyData.query.filter_by(class_id=class_id, day=f_day, period=f_period).all()
+                                    to_entries = WeeklyData.query.filter_by(class_id=class_id, day=t_day, period=t_period).all()
                                     
-                                    # Simple swap logic for linked data
-                                    temp_from_entries = []
-                                    for entry in from_data:
-                                        temp_from_entries.append({'week': entry.week_number, 'topic': entry.topic, 'hw': entry.homework})
-                                        db.session.delete(entry)
+                                    # Temporary storage to avoid unique constraint or logic issues during swap
+                                    temp_from = []
+                                    for e in from_entries:
+                                        temp_from.append({'week': e.week_number, 'topic': e.topic, 'hw': e.homework})
+                                        db.session.delete(e)
                                         
-                                    temp_to_entries = []
-                                    for entry in to_data:
-                                        temp_to_entries.append({'week': entry.week_number, 'topic': entry.topic, 'hw': entry.homework})
-                                        db.session.delete(entry)
-                                        
-                                    db.session.flush() # Ensure deletes are processed
+                                    temp_to = []
+                                    for e in to_entries:
+                                        temp_to.append({'week': e.week_number, 'topic': e.topic, 'hw': e.homework})
+                                        db.session.delete(e)
                                     
-                                    for entry in temp_from_entries:
-                                        db.session.add(WeeklyData(class_id=class_id, week_number=entry['week'], day=t_day, period=t_period, topic=entry['topic'], homework=entry['hw']))
-                                    for entry in temp_to_entries:
-                                        db.session.add(WeeklyData(class_id=class_id, week_number=entry['week'], day=f_day, period=f_period, topic=entry['topic'], homework=entry['hw']))
+                                    db.session.flush() # Commit deletions before re-inserting
+                                    
+                                    for e in temp_from:
+                                        db.session.add(WeeklyData(class_id=class_id, week_number=e['week'], day=t_day, period=t_period, topic=e['topic'], homework=e['hw']))
+                                    for e in temp_to:
+                                        db.session.add(WeeklyData(class_id=class_id, week_number=e['week'], day=f_day, period=f_period, topic=e['topic'], homework=e['hw']))
+                                        
                                 except (json.JSONDecodeError, KeyError, ValueError) as e:
                                     print(f"Error processing master swap: {e}")
                             
@@ -429,16 +433,18 @@ def audit_report_view():
     report = []
     
     for c in classes_list:
-        # Get all subjects for this class
+        # Get all subjects for this class from Master Schedule
         subjects = Subject.query.filter_by(class_id=c.id).all()
         for s in subjects:
-            # Check if there is an override for this subject in the current week
+            # Check for current week's completion
             override = WeeklyData.query.filter_by(class_id=c.id, week_number=week_int, day=s.day, period=s.period).first()
             
             subject_name = override.subject_name if (override and override.subject_name) else s.name
             topic = override.topic if override else ''
+            homework = override.homework if override else ''
             
-            if not topic or not topic.strip() or (override and (not override.homework or not override.homework.strip())):
+            # Missing if topic OR homework is empty for a scheduled master subject
+            if not topic or not topic.strip() or not homework or not homework.strip():
                 report.append({
                     'subject': subject_name,
                     'grade': f"{c.grade.name} - {c.name}",
