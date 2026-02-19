@@ -22,24 +22,28 @@
     </div>
     <div id="capture">
         <div class="card">
-            <h1>تقرير المواد التي لم يتم تحضيرها - الأسبوع {{ week }}</h1>
+            <h1>تقرير المتابعة والتدقيق - الأسبوع {{ week }}</h1>
             {% if report %}
             <table>
                 <thead>
-                    <tr>
-                        <th>المادة</th>
-                        <th>الصف والفصل</th>
-                        <th>اليوم</th>
-                        <th>الحصة</th>
+                    <tr style="background: #0d9488; color: white;">
+                        <th style="padding: 15px; border: 1px solid #0d9488;">المادة</th>
+                        <th style="padding: 15px; border: 1px solid #0d9488;">الصف والفصل</th>
+                        <th style="padding: 15px; border: 1px solid #0d9488;">اليوم</th>
+                        <th style="padding: 15px; border: 1px solid #0d9488;">الحصة</th>
+                        <th style="padding: 15px; border: 1px solid #0d9488;">الحالة</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for item in report %}
                     <tr>
-                        <td>{{ item.subject }}</td>
-                        <td>{{ item.grade }}</td>
-                        <td>{{ item.day }}</td>
-                        <td>{{ item.period }}</td>
+                        <td style="padding: 15px; border: 1px solid #0d9488;">{{ item.subject }}</td>
+                        <td style="padding: 15px; border: 1px solid #0d9488;">{{ item.grade }}</td>
+                        <td style="padding: 15px; border: 1px solid #0d9488;">{{ item.day }}</td>
+                        <td style="padding: 15px; border: 1px solid #0d9488;">{{ item.period }}</td>
+                        <td style="padding: 15px; border: 1px solid #0d9488;">
+                            <span style="background: #fee2e2; color: #b91c1c; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85em;">بيانات ناقصة</span>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>

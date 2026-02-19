@@ -563,4 +563,7 @@ if __name__ == '__main__':
             print("Successfully connected to PostgreSQL and initialized schema.")
         except Exception as e:
             print(f"Error connecting to PostgreSQL: {e}")
+    # If using in-memory SQLite, recreate tables
+    with app.app_context():
+        db.create_all()
     app.run(host='0.0.0.0', port=5000, debug=True)
