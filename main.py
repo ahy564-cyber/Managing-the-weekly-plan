@@ -257,13 +257,15 @@ def admin():
                                         entry_from.topic = t_topic
                                         entry_from.homework = t_hw
                                     elif t_topic or t_hw:
-                                        db.session.add(WeeklyData(class_id=class_id, week_number=week_number, day=f_day, period=f_period, topic=t_topic, homework=t_hw))
+                                        new_entry_f = WeeklyData(class_id=class_id, week_number=week_number, day=f_day, period=f_period, topic=t_topic, homework=t_hw)
+                                        db.session.add(new_entry_f)
                                         
                                     if entry_to:
                                         entry_to.topic = f_topic
                                         entry_to.homework = f_hw
                                     elif f_topic or f_hw:
-                                        db.session.add(WeeklyData(class_id=class_id, week_number=week_number, day=t_day, period=t_period, topic=f_topic, homework=f_hw))
+                                        new_entry_t = WeeklyData(class_id=class_id, week_number=week_number, day=t_day, period=t_period, topic=f_topic, homework=f_hw)
+                                        db.session.add(new_entry_t)
 
                             # We update subject names while preserving topics and homework
                             for day in DAYS_ORDER:
@@ -345,16 +347,13 @@ def admin():
     
     for c in classes:
         # A class is considered "Completed" if it has at least one topic filled in the current week
-        # We must also check that topics exist for ALL subjects in the fixed schedule
-        total_subjects = Subject.query.filter_by(class_id=c.id).count()
-        completed_topics = WeeklyData.query.filter(
+        has_data = WeeklyData.query.filter(
             WeeklyData.class_id == c.id,
             WeeklyData.week_number == current_week_int,
             WeeklyData.topic != '',
             WeeklyData.topic != None
-        ).count()
-        
-        if total_subjects > 0 and completed_topics >= total_subjects:
+        ).first()
+        if has_data:
             completed_classes.append(c)
         else:
             pending_classes.append(c)
@@ -490,7 +489,7 @@ def audit_report():
             subject_name = override.subject_name if (override and override.subject_name) else s.name
             topic = override.topic if override else ''
             
-            if not topic or not topic.strip():
+            if not topic or not topic.strip() or (override and (not override.homework or not override.homework.strip())):
                 report.append({
                     'subject': subject_name,
                     'grade': f"{c.grade.name} - {c.name}",
