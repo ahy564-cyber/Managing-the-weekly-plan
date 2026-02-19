@@ -48,7 +48,6 @@ DAYS_AR = {
 
 DAYS_ORDER = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday']
 
-# Database Models
 class Grade(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
@@ -211,8 +210,19 @@ def admin():
                             for day in DAYS_ORDER:
                                 for period in range(1, 9):
                                     subject_name = request.form.get(f'fixed_{day}_{period}')
-                                    if subject_name and subject_name.strip():
-                                        db.session.add(Subject(class_id=class_id, day=day, period=period, name=subject_name.strip()))
+                                    if subject_name is not None:
+                                        subject_name = subject_name.strip()
+                                        
+                                        # When updating master schedule, we also update subject_name in WeeklyData
+                                        # to keep the labels consistent across all weeks.
+                                        db.session.query(WeeklyData).filter(
+                                            WeeklyData.class_id == class_id,
+                                            WeeklyData.day == day,
+                                            WeeklyData.period == period
+                                        ).update({"subject_name": subject_name}, synchronize_session=False)
+                                        
+                                        if subject_name:
+                                            db.session.add(Subject(class_id=class_id, day=day, period=period, name=subject_name))
                             log_activity('admin', f'تحديث الجدول الأساسي للفصل: {cls.name}')
                             db.session.commit()
                             flash('تم حفظ الجدول الأساسي بنجاح')
@@ -378,12 +388,14 @@ def admin():
     pending_classes = []
     
     for c in classes:
-        # A class is considered "Completed" if it has at least one topic filled in the current week
+        # A class is considered "Completed" if it has at least one topic AND homework filled in the current week
         has_data = WeeklyData.query.filter(
             WeeklyData.class_id == c.id,
             WeeklyData.week_number == current_week_int,
             WeeklyData.topic != '',
-            WeeklyData.topic != None
+            WeeklyData.topic != None,
+            WeeklyData.homework != '',
+            WeeklyData.homework != None
         ).first()
         if has_data:
             completed_classes.append(c)
@@ -403,6 +415,38 @@ def admin():
                          completion_percent=round(completion_percent, 1),
                          completed_classes=completed_classes, pending_classes=pending_classes,
                          logs=logs)
+
+@app.route('/admin/audit_report')
+@admin_required
+def audit_report_view():
+    week = request.args.get('week', db.session.get(Setting, 'current_week').value if db.session.get(Setting, 'current_week') else '1')
+    try:
+        week_int = int(week)
+    except ValueError:
+        week_int = 1
+        
+    classes_list = Class.query.options(joinedload(Class.grade)).all()
+    report = []
+    
+    for c in classes_list:
+        # Get all subjects for this class
+        subjects = Subject.query.filter_by(class_id=c.id).all()
+        for s in subjects:
+            # Check if there is an override for this subject in the current week
+            override = WeeklyData.query.filter_by(class_id=c.id, week_number=week_int, day=s.day, period=s.period).first()
+            
+            subject_name = override.subject_name if (override and override.subject_name) else s.name
+            topic = override.topic if override else ''
+            
+            if not topic or not topic.strip() or (override and (not override.homework or not override.homework.strip())):
+                report.append({
+                    'subject': subject_name,
+                    'grade': f"{c.grade.name} - {c.name}",
+                    'day': DAYS_AR.get(s.day, s.day),
+                    'period': s.period
+                })
+                
+    return render_template('audit_report.html', report=report, week=week_int)
 
 @app.route('/admin/delete_date/<date_type>', methods=['POST'])
 @admin_required
@@ -485,6 +529,9 @@ def student(grade_id, class_id):
     grade = db.session.get(Grade, grade_id)
     cls = db.session.get(Class, class_id)
     
+    if not grade or not cls:
+        return "الصف أو الفصل غير موجود", 404
+        
     schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
     fixed = Subject.query.filter_by(class_id=class_id).all()
     for f in fixed: schedule[f.day][f.period]['subject_name'] = f.name
@@ -499,37 +546,7 @@ def student(grade_id, class_id):
     return render_template('student.html', schedule=schedule, days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings_dict, 
                          week=week, grade_name=grade.name if grade else '', class_name=cls.name if cls else '')
 
-@app.route('/admin/audit_report')
-@admin_required
-def audit_report():
-    week = request.args.get('week', db.session.get(Setting, 'current_week').value if db.session.get(Setting, 'current_week') else '1')
-    try:
-        week_int = int(week)
-    except ValueError:
-        week_int = 1
-        
-    classes = Class.query.options(joinedload(Class.grade)).all()
-    report = []
-    
-    for c in classes:
-        # Get all subjects for this class
-        subjects = Subject.query.filter_by(class_id=c.id).all()
-        for s in subjects:
-            # Check if there is an override for this subject in the current week
-            override = WeeklyData.query.filter_by(class_id=c.id, week_number=week_int, day=s.day, period=s.period).first()
-            
-            subject_name = override.subject_name if (override and override.subject_name) else s.name
-            topic = override.topic if override else ''
-            
-            if not topic or not topic.strip() or (override and (not override.homework or not override.homework.strip())):
-                report.append({
-                    'subject': subject_name,
-                    'grade': f"{c.grade.name} - {c.name}",
-                    'day': DAYS_AR.get(s.day, s.day),
-                    'period': s.period
-                })
-                
-    return render_template('audit_report.html', report=report, week=week_int)
+# Audit report logic moved to audit_report_view
 
 if __name__ == '__main__':
     with app.app_context():

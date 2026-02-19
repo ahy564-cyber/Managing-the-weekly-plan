@@ -19,7 +19,7 @@
         .btn-success { background: #0d9488; }
         .btn-success:hover { background: #0f766e; }
         .table-container { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
-        table { width: 100% !important; border-collapse: separate; border-spacing: 0; margin-top: 15px; background: white; min-width: 1000px; border: 1px solid #0d9488; }
+        table { width: 100% !important; border-collapse: separate; border-spacing: 0; margin-top: 15px; background: white; min-width: 1000px; border: 1px solid #0d9488; table-layout: fixed; }
         th, td { padding: 20px; text-align: center; border-bottom: 1px solid #f0fdfa; border-left: 1px solid #f0fdfa; word-wrap: break-word; }
         th { background: #0d9488; font-weight: 700; color: white; }
         tr:last-child td { border-bottom: none; }
@@ -29,8 +29,9 @@
         .mb-2 { margin-bottom: 10px; }
         .header-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
         .logout-btn { background: #64748b; font-size: 0.9em; }
-        .gov-info { display: none; }
-        .table-container table { width: 100% !important; }
+        .gov-info, h3, h4 { display: none !important; }
+        .table-container table { width: 100% !important; table-layout: fixed; border-collapse: collapse; }
+        .table-container th, .table-container td { min-width: 120px; overflow-wrap: break-word; }
     </style>
 </head>
 <body>
