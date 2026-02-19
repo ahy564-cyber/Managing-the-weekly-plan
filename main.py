@@ -175,6 +175,38 @@ def admin():
                         class_id = int(cid)
                         cls = db.session.get(Class, class_id)
                         if cls:
+                            # Handle master swaps first (topic/homework migration)
+                            master_swaps = request.form.getlist('master_swaps[]')
+                            for swap_json in master_swaps:
+                                try:
+                                    swap = json.loads(swap_json)
+                                    f_day, f_period = swap['from_day'], int(swap['from_period'])
+                                    t_day, t_period = swap['to_day'], int(swap['to_period'])
+                                    
+                                    # Swap data for ALL weeks
+                                    from_data = WeeklyData.query.filter_by(class_id=class_id, day=f_day, period=f_period).all()
+                                    to_data = WeeklyData.query.filter_by(class_id=class_id, day=t_day, period=t_period).all()
+                                    
+                                    # Simple swap logic for linked data
+                                    temp_from_entries = []
+                                    for entry in from_data:
+                                        temp_from_entries.append({'week': entry.week_number, 'topic': entry.topic, 'hw': entry.homework})
+                                        db.session.delete(entry)
+                                        
+                                    temp_to_entries = []
+                                    for entry in to_data:
+                                        temp_to_entries.append({'week': entry.week_number, 'topic': entry.topic, 'hw': entry.homework})
+                                        db.session.delete(entry)
+                                        
+                                    db.session.flush() # Ensure deletes are processed
+                                    
+                                    for entry in temp_from_entries:
+                                        db.session.add(WeeklyData(class_id=class_id, week_number=entry['week'], day=t_day, period=t_period, topic=entry['topic'], homework=entry['hw']))
+                                    for entry in temp_to_entries:
+                                        db.session.add(WeeklyData(class_id=class_id, week_number=entry['week'], day=f_day, period=f_period, topic=entry['topic'], homework=entry['hw']))
+                                except (json.JSONDecodeError, KeyError, ValueError) as e:
+                                    print(f"Error processing master swap: {e}")
+                            
                             db.session.execute(db.delete(Subject).where(Subject.class_id == class_id))
                             for day in DAYS_ORDER:
                                 for period in range(1, 9):

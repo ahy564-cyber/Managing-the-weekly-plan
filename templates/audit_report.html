@@ -16,33 +16,53 @@
     </style>
 </head>
 <body>
-    <a href="/admin" class="btn-back">العودة للوحة التحكم</a>
-    <div class="card">
-        <h1>تقرير المواد التي لم يتم تحضيرها - الأسبوع {{ week }}</h1>
-        {% if report %}
-        <table>
-            <thead>
-                <tr>
-                    <th>المادة</th>
-                    <th>الصف والفصل</th>
-                    <th>اليوم</th>
-                    <th>الحصة</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in report %}
-                <tr>
-                    <td>{{ item.subject }}</td>
-                    <td>{{ item.grade }}</td>
-                    <td>{{ item.day }}</td>
-                    <td>{{ item.period }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <div class="no-data">جميع المواد تم تحضيرها لهذا الأسبوع! ✓</div>
-        {% endif %}
+    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+        <a href="/admin" class="btn-back" style="margin-bottom: 0;">العودة للوحة التحكم</a>
+        <button class="btn-back" style="background: #14b8a6; margin-bottom: 0;" onclick="exportPDF()">تحميل بصيغة PDF 📥</button>
     </div>
+    <div id="capture">
+        <div class="card">
+            <h1>تقرير المواد التي لم يتم تحضيرها - الأسبوع {{ week }}</h1>
+            {% if report %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>المادة</th>
+                        <th>الصف والفصل</th>
+                        <th>اليوم</th>
+                        <th>الحصة</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in report %}
+                    <tr>
+                        <td>{{ item.subject }}</td>
+                        <td>{{ item.grade }}</td>
+                        <td>{{ item.day }}</td>
+                        <td>{{ item.period }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="no-data">جميع المواد تم تحضيرها لهذا الأسبوع! ✓</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script>
+        function exportPDF() {
+            const element = document.getElementById('capture');
+            const opt = {
+                margin: 10,
+                filename: 'Audit_Report_Week_{{ week }}.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+            html2pdf().set(opt).from(element).save();
+        }
+    </script>
 </body>
 </html>
