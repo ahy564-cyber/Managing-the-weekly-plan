@@ -19,15 +19,11 @@ if db_url and db_url.startswith("postgres://"):
 # Dynamic SSL Mode Handling
 engine_options = {"pool_pre_ping": True}
 if db_url:
-    # Helium (Replit's internal DB) does NOT support SSL.
-    # We must allow the app to fall back to no SSL if needed, 
-    # but the user requested requirement for safety.
-    # However, forcing 'require' on a server that doesn't support it causes a crash.
-    # We will use 'prefer' which is secure when available but allows connection to Helium.
+    # Forces sslmode=require for all environments as strictly required by the user
     if "sslmode" not in db_url:
         separator = "&" if "?" in db_url else "?"
-        db_url += f"{separator}sslmode=prefer"
-    engine_options["connect_args"] = {"sslmode": "prefer"}
+        db_url += f"{separator}sslmode=require"
+    engine_options["connect_args"] = {"sslmode": "require"}
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = engine_options
@@ -172,21 +168,24 @@ def admin():
                         flash('تم حذف الفصل بنجاح')
             elif action == 'save_fixed_schedule':
                 cid = request.form.get('class_id')
-                if cid and str(cid).strip().lower() != 'none' and str(cid).isdigit():
-                    class_id = int(cid)
-                    cls = db.session.get(Class, class_id)
-                    if cls:
-                        db.session.execute(db.delete(Subject).where(Subject.class_id == class_id))
-                        for day in DAYS_ORDER:
-                            for period in range(1, 9):
-                                subject_name = request.form.get(f'fixed_{day}_{period}')
-                                if subject_name and subject_name.strip():
-                                    db.session.add(Subject(class_id=class_id, day=day, period=period, name=subject_name.strip()))
-                        log_activity('admin', f'تحديث الجدول الأساسي للفصل: {cls.name}')
-                        db.session.commit()
-                        flash('تم حفظ الجدول الأساسي بنجاح')
-                    else:
-                        flash('الفصل غير موجود')
+                if cid and str(cid).strip().lower() != 'none':
+                    try:
+                        class_id = int(cid)
+                        cls = db.session.get(Class, class_id)
+                        if cls:
+                            db.session.execute(db.delete(Subject).where(Subject.class_id == class_id))
+                            for day in DAYS_ORDER:
+                                for period in range(1, 9):
+                                    subject_name = request.form.get(f'fixed_{day}_{period}')
+                                    if subject_name and subject_name.strip():
+                                        db.session.add(Subject(class_id=class_id, day=day, period=period, name=subject_name.strip()))
+                            log_activity('admin', f'تحديث الجدول الأساسي للفصل: {cls.name}')
+                            db.session.commit()
+                            flash('تم حفظ الجدول الأساسي بنجاح')
+                        else:
+                            flash('الفصل غير موجود')
+                    except ValueError:
+                        flash('معرف الفصل غير صالح')
                 else:
                     flash('يرجى اختيار فصل صحيح')
             elif action == 'update_settings':
@@ -227,34 +226,37 @@ def admin():
             elif action == 'save_override_batch':
                 cid = request.form.get('class_id')
                 week = request.form.get('week')
-                if cid and week and str(cid).strip().lower() != 'none' and str(week).strip().lower() != 'none' and str(cid).isdigit() and str(week).isdigit():
-                    class_id = int(cid)
-                    week_number = int(week)
-                    cls = db.session.get(Class, class_id)
-                    
-                    if cls:
-                        # We update subject names while preserving topics and homework
-                        for day in DAYS_ORDER:
-                            for period in range(1, 9):
-                                subject_name = request.form.get(f'override_{day}_{period}')
-                                if subject_name is not None:
-                                    subject_name = subject_name.strip()
-                                    # Use filter instead of filter_by to be extra safe with SQLAlchemy versions
-                                    exists = WeeklyData.query.filter(WeeklyData.class_id == class_id, 
-                                                                   WeeklyData.week_number == week_number, 
-                                                                   WeeklyData.day == day, 
-                                                                   WeeklyData.period == period).first()
-                                    if exists:
-                                        exists.subject_name = subject_name
-                                    else:
-                                        if subject_name:
-                                            db.session.add(WeeklyData(class_id=class_id, week_number=week_number, day=day, period=period, subject_name=subject_name))
+                if cid and week and str(cid).strip().lower() != 'none' and str(week).strip().lower() != 'none':
+                    try:
+                        class_id = int(cid)
+                        week_number = int(week)
+                        cls = db.session.get(Class, class_id)
                         
-                        log_activity('admin', f'تحديث التجاوزات الأسبوعية بالكامل (الأسبوع {week_number}, الفصل {cls.name})')
-                        db.session.commit()
-                        flash('تم حفظ التعديلات الأسبوعية بالكامل بنجاح')
-                    else:
-                        flash('الفصل غير موجود')
+                        if cls:
+                            # We update subject names while preserving topics and homework
+                            for day in DAYS_ORDER:
+                                for period in range(1, 9):
+                                    subject_name = request.form.get(f'override_{day}_{period}')
+                                    if subject_name is not None:
+                                        subject_name = subject_name.strip()
+                                        # Use filter instead of filter_by to be extra safe with SQLAlchemy versions
+                                        exists = WeeklyData.query.filter(WeeklyData.class_id == class_id, 
+                                                                       WeeklyData.week_number == week_number, 
+                                                                       WeeklyData.day == day, 
+                                                                       WeeklyData.period == period).first()
+                                        if exists:
+                                            exists.subject_name = subject_name
+                                        else:
+                                            if subject_name:
+                                                db.session.add(WeeklyData(class_id=class_id, week_number=week_number, day=day, period=period, subject_name=subject_name))
+                            
+                            log_activity('admin', f'تحديث التجاوزات الأسبوعية بالكامل (الأسبوع {week_number}, الفصل {cls.name})')
+                            db.session.commit()
+                            flash('تم حفظ التعديلات الأسبوعية بالكامل بنجاح')
+                        else:
+                            flash('الفصل غير موجود')
+                    except ValueError:
+                        flash('بيانات غير صالحة للحفظ')
                 else:
                     flash('بيانات غير مكتملة للحفظ')
             
