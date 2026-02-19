@@ -235,6 +235,36 @@ def admin():
                         cls = db.session.get(Class, class_id)
                         
                         if cls:
+                            # Handle swaps if any
+                            swaps = request.form.getlist('swaps[]')
+                            for swap_json in swaps:
+                                swap = json.loads(swap_json)
+                                f_day, f_period = swap['from_day'], int(swap['from_period'])
+                                t_day, t_period = swap['to_day'], int(swap['to_period'])
+                                
+                                # Find both entries
+                                entry_from = WeeklyData.query.filter_by(class_id=class_id, week_number=week_number, day=f_day, period=f_period).first()
+                                entry_to = WeeklyData.query.filter_by(class_id=class_id, week_number=week_number, day=t_day, period=t_period).first()
+                                
+                                if entry_from or entry_to:
+                                    # Swap topics and homework
+                                    f_topic = entry_from.topic if entry_from else ''
+                                    f_hw = entry_from.homework if entry_from else ''
+                                    t_topic = entry_to.topic if entry_to else ''
+                                    t_hw = entry_to.homework if entry_to else ''
+                                    
+                                    if entry_from:
+                                        entry_from.topic = t_topic
+                                        entry_from.homework = t_hw
+                                    elif t_topic or t_hw:
+                                        db.session.add(WeeklyData(class_id=class_id, week_number=week_number, day=f_day, period=f_period, topic=t_topic, homework=t_hw))
+                                        
+                                    if entry_to:
+                                        entry_to.topic = f_topic
+                                        entry_to.homework = f_hw
+                                    elif f_topic or f_hw:
+                                        db.session.add(WeeklyData(class_id=class_id, week_number=week_number, day=t_day, period=t_period, topic=f_topic, homework=f_hw))
+
                             # We update subject names while preserving topics and homework
                             for day in DAYS_ORDER:
                                 for period in range(1, 9):
@@ -308,7 +338,6 @@ def admin():
             if w.subject_name:
                 day_data['subject_name'] = w.subject_name
 
-    # Completion Stats
     current_week_int = int(settings_dict.get('current_week', '1'))
     all_classes_count = len(classes)
     completed_classes = []
@@ -316,12 +345,16 @@ def admin():
     
     for c in classes:
         # A class is considered "Completed" if it has at least one topic filled in the current week
-        has_data = WeeklyData.query.filter(
+        # We must also check that topics exist for ALL subjects in the fixed schedule
+        total_subjects = Subject.query.filter_by(class_id=c.id).count()
+        completed_topics = WeeklyData.query.filter(
             WeeklyData.class_id == c.id,
             WeeklyData.week_number == current_week_int,
-            WeeklyData.topic != ''
-        ).first()
-        if has_data:
+            WeeklyData.topic != '',
+            WeeklyData.topic != None
+        ).count()
+        
+        if total_subjects > 0 and completed_topics >= total_subjects:
             completed_classes.append(c)
         else:
             pending_classes.append(c)
@@ -434,6 +467,38 @@ def student(grade_id, class_id):
 
     return render_template('student.html', schedule=schedule, days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings_dict, 
                          week=week, grade_name=grade.name if grade else '', class_name=cls.name if cls else '')
+
+@app.route('/admin/audit_report')
+@admin_required
+def audit_report():
+    week = request.args.get('week', db.session.get(Setting, 'current_week').value if db.session.get(Setting, 'current_week') else '1')
+    try:
+        week_int = int(week)
+    except ValueError:
+        week_int = 1
+        
+    classes = Class.query.options(joinedload(Class.grade)).all()
+    report = []
+    
+    for c in classes:
+        # Get all subjects for this class
+        subjects = Subject.query.filter_by(class_id=c.id).all()
+        for s in subjects:
+            # Check if there is an override for this subject in the current week
+            override = WeeklyData.query.filter_by(class_id=c.id, week_number=week_int, day=s.day, period=s.period).first()
+            
+            subject_name = override.subject_name if (override and override.subject_name) else s.name
+            topic = override.topic if override else ''
+            
+            if not topic or not topic.strip():
+                report.append({
+                    'subject': subject_name,
+                    'grade': f"{c.grade.name} - {c.name}",
+                    'day': DAYS_AR.get(s.day, s.day),
+                    'period': s.period
+                })
+                
+    return render_template('audit_report.html', report=report, week=week_int)
 
 if __name__ == '__main__':
     with app.app_context():

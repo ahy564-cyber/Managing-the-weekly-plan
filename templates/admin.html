@@ -44,9 +44,14 @@
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 25px;">
         <div class="card" style="border-right: 6px solid #10b981;">
             <h2 style="color: #065f46;">إحصائيات الإنجاز (للأسبوع {{ settings.current_week }})</h2>
-            <div style="text-align: center; margin-bottom: 20px;">
-                <div style="font-size: 3em; font-weight: 800; color: #10b981;">{{ completion_percent }}%</div>
-                <div style="color: #64748b; font-weight: 600;">نسبة اكتمال الخطط الأسبوعية</div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div style="text-align: center; flex: 1;">
+                    <div style="font-size: 3em; font-weight: 800; color: #10b981;">{{ completion_percent }}%</div>
+                    <div style="color: #64748b; font-weight: 600;">نسبة اكتمال الخطط الأسبوعية</div>
+                </div>
+                <div style="flex: 1; text-align: left;">
+                    <a href="/admin/audit_report?week={{ settings.current_week }}"><button class="btn-success">تقرير التدقيق (Audit Report) 📋</button></a>
+                </div>
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                 <div>
@@ -157,7 +162,9 @@
                             <div style="font-size: 0.8em; color: #64748b; margin-bottom: 2px;">{{ schedule[d][p].subject_name or 'أساسي' }}</div>
                             <input type="text" name="override_{{ d }}_{{ p }}" value="{{ schedule[d][p].subject_name }}" 
                                    placeholder="تغيير المادة..." 
-                                   style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; text-align: center; font-size: 0.9em; min-width: 120px;">
+                                   draggable="true" ondragstart="drag(event)" ondrop="drop(event)" ondragover="allowDrop(event)"
+                                   data-day="{{ d }}" data-period="{{ p }}"
+                                   style="width: 100%; padding: 10px; border: 1px solid #0d9488; border-radius: 4px; box-sizing: border-box; text-align: center; font-size: 0.9em; min-width: 120px; cursor: move;">
                         </td>
                         {% endfor %}
                     </tr>
@@ -370,6 +377,54 @@
     </div>
 
     <script>
+        function allowDrop(ev) {
+            ev.preventDefault();
+        }
+
+        function drag(ev) {
+            ev.dataTransfer.setData("text", ev.target.name);
+            ev.dataTransfer.setData("day", ev.target.dataset.day);
+            ev.dataTransfer.setData("period", ev.target.dataset.period);
+            ev.dataTransfer.setData("value", ev.target.value);
+        }
+
+        function drop(ev) {
+            ev.preventDefault();
+            var sourceName = ev.dataTransfer.getData("text");
+            var sourceDay = ev.dataTransfer.getData("day");
+            var sourcePeriod = ev.dataTransfer.getData("period");
+            var sourceValue = ev.dataTransfer.getData("value");
+            
+            var target = ev.target;
+            if (target.tagName === 'INPUT') {
+                var targetDay = target.dataset.day;
+                var targetPeriod = target.dataset.period;
+                var targetValue = target.value;
+                
+                // Swap values in UI
+                target.value = sourceValue;
+                document.getElementsByName(sourceName)[0].value = targetValue;
+                
+                // We also need to notify the server about the topic/homework move
+                // but since this is a batch save form, the user will click 'Save'
+                // and we should handle the topic/homework swap on the server side
+                // during the save_override_batch action.
+                
+                // Add hidden inputs to track the swap for the server
+                var form = target.closest('form');
+                var swapInput = document.createElement('input');
+                swapInput.type = 'hidden';
+                swapInput.name = 'swaps[]';
+                swapInput.value = JSON.stringify({
+                    from_day: sourceDay,
+                    from_period: sourcePeriod,
+                    to_day: targetDay,
+                    to_period: targetPeriod
+                });
+                form.appendChild(swapInput);
+            }
+        }
+
         function copyLink(id) {
             const text = document.getElementById(id).innerText;
             navigator.clipboard.writeText(text).then(() => {

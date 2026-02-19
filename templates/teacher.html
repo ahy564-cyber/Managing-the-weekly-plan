@@ -109,7 +109,11 @@
                             <span style="color: #94a3b8; font-size: 0.8em;">هذا اليوم مغلق</span>
                         {% elif schedule[d][p].subject_name %}
                             <span class="fixed-sub">{{ schedule[d][p].subject_name }}</span>
-                            <input type="text" class="topic" value="{{ schedule[d][p].topic }}" placeholder="الدرس اليومي..." style="min-width: 150px;">
+                            <input type="text" class="topic" value="{{ schedule[d][p].topic }}" 
+                                   placeholder="الدرس اليومي..." 
+                                   draggable="true" ondragstart="dragTeacher(event)" ondrop="dropTeacher(event)" ondragover="allowDrop(event)"
+                                   data-day="{{ d }}" data-period="{{ p }}"
+                                   style="min-width: 150px; cursor: move;">
                             <input type="text" class="hw" value="{{ schedule[d][p].homework }}" placeholder="الواجب المنزلي..." style="min-width: 150px;">
                         {% else %}
                             <span style="color: #cbd5e1; font-size: 0.8em;">لا توجد مادة</span>
@@ -128,6 +132,45 @@
     {% endif %}
 
     <script>
+        function allowDrop(ev) {
+            ev.preventDefault();
+        }
+
+        function dragTeacher(ev) {
+            const td = ev.target.closest('td');
+            ev.dataTransfer.setData("day", td.dataset.day);
+            ev.dataTransfer.setData("period", td.dataset.period);
+            ev.dataTransfer.setData("topic", td.querySelector('.topic').value);
+            ev.dataTransfer.setData("hw", td.querySelector('.hw').value);
+        }
+
+        function dropTeacher(ev) {
+            ev.preventDefault();
+            const targetTd = ev.target.closest('td');
+            if (!targetTd || !targetTd.querySelector('.topic')) return;
+
+            const sourceDay = ev.dataTransfer.getData("day");
+            const sourcePeriod = ev.dataTransfer.getData("period");
+            const sourceTopic = ev.dataTransfer.getData("topic");
+            const sourceHw = ev.dataTransfer.getData("hw");
+
+            const sourceTd = document.querySelector(`td[data-day="${sourceDay}"][data-period="${sourcePeriod}"]`);
+            if (!sourceTd) return;
+
+            const targetTopicInput = targetTd.querySelector('.topic');
+            const targetHwInput = targetTd.querySelector('.hw');
+            
+            const targetTopicValue = targetTopicInput.value;
+            const targetHwValue = targetHwInput.value;
+
+            // Swap values
+            targetTopicInput.value = sourceTopic;
+            targetHwInput.value = sourceHw;
+            
+            sourceTd.querySelector('.topic').value = targetTopicValue;
+            sourceTd.querySelector('.hw').value = targetHwValue;
+        }
+
         function showToast() {
             const toast = document.getElementById("toast");
             toast.className = "show";
