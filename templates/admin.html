@@ -35,16 +35,33 @@
     </style>
 </head>
 <body>
-    <div class="header-actions">
-        <h1>لوحة تحكم المدير</h1>
-        <a href="/logout"><button class="logout-btn">تسجيل الخروج</button></a>
-    </div>
+    <div class="container" style="max-width: 100%; width: 100%; padding: 20px;">
+        <div class="header-actions">
+            <h1>لوحة تحكم المدير</h1>
+            <a href="/logout"><button class="logout-btn">تسجيل الخروج</button></a>
+        </div>
 
-    {% with messages = get_flashed_messages() %}
-      {% if messages %}{% for message in messages %}<div class="alert">{{ message }}</div>{% endfor %}{% endif %}
-    {% endwith %}
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}{% for message in messages %}<div class="alert">{{ message }}</div>{% endfor %}{% endif %}
+        {% endwith %}
 
-    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 25px;">
+        <div class="card mb-4" style="background: #f0fdfa; border: 1px dashed #0d9488;">
+            <h2 class="text-xl font-bold text-teal-800 mb-4">استيراد الجدول المدرسي من Excel</h2>
+            <form action="/admin/upload_master" method="POST" enctype="multipart/form-data" class="flex items-center gap-4">
+                <div class="flex-1">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">اختر ملف Excel (.xlsx) أو CSV</label>
+                    <input type="file" name="file" accept=".xlsx, .csv" required class="w-full p-2 border border-teal-200 rounded-md bg-white">
+                </div>
+                <button type="submit" class="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-md font-bold transition-colors">
+                    رفع واستيراد
+                </button>
+            </form>
+            <p class="text-xs text-gray-500 mt-2">
+                * يجب أن يحتوي الملف على عمود للصف (مثلاً: "الصف - الفصل") وأعمدة للحصص مسمى بـ "اليوم الرقم" (مثلاً: "الأحد 1").
+            </p>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 25px;">
         <div class="card" style="border-right: 6px solid #10b981;">
             <h2 style="color: #065f46;">إحصائيات الإنجاز (للأسبوع {{ settings.current_week }})</h2>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
@@ -476,6 +493,8 @@
             });
         }
     </script>
+        </div>
+    </div>
     <footer style="text-align: center; padding: 20px; color: #64748b; font-size: 0.85em; margin-top: 40px; border-top: 1px solid #e2e8f0;">
         أنشئ هذا الموقع بواسطة أحمد الفيفي
     </footer>
