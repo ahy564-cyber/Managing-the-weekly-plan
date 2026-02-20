@@ -460,22 +460,22 @@
                 var targetPeriod = target.dataset.period;
                 var targetValue = target.value;
                 
-                // Swap values in UI
-                target.value = sourceValue;
-                document.getElementsByName(sourceName)[0].value = targetValue;
-                
-                // Track master swap for server
-                var form = target.closest('form');
-                var swapInput = document.createElement('input');
-                swapInput.type = 'hidden';
-                swapInput.name = 'master_swaps[]';
-                swapInput.value = JSON.stringify({
-                    from_day: sourceDay,
-                    from_period: sourcePeriod,
-                    to_day: targetDay,
-                    to_period: targetPeriod
-                });
-                form.appendChild(swapInput);
+                            // Track master swap for server
+                            var form = target.closest('form');
+                            var swapInput = document.createElement('input');
+                            swapInput.type = 'hidden';
+                            swapInput.name = 'master_swaps[]';
+                            swapInput.value = JSON.stringify({
+                                from_day: sourceDay,
+                                from_period: sourcePeriod,
+                                to_day: targetDay,
+                                to_period: targetPeriod
+                            });
+                            form.appendChild(swapInput);
+                            
+                            // Swap values in UI
+                            target.value = sourceValue;
+                            document.getElementsByName(sourceName)[0].value = targetValue;
             }
         }
 

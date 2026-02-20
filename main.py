@@ -634,10 +634,10 @@ def upload_master():
                     db.session.query(Subject).filter_by(class_id=cls.id, day=target_day, period=target_period).delete()
                     if subject_name:
                         db.session.add(Subject(class_id=cls.id, day=target_day, period=target_period, name=subject_name))
-                        # Sync subject_name in WeeklyData for existing entries
-                        db.session.query(WeeklyData).filter_by(class_id=cls.id, day=target_day, period=target_period).update({"subject_name": subject_name})
+                    # Sync subject_name in WeeklyData for existing entries
+                    db.session.query(WeeklyData).filter_by(class_id=cls.id, day=target_day, period=target_period).update({"subject_name": subject_name})
                     import_count += 1
-                    
+                
         db.session.commit()
         log_activity('admin', f'تم استيراد الجدول من Excel ({import_count} حصة)')
         flash(f'تم استيراد {import_count} حصة بنجاح')
