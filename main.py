@@ -4,6 +4,8 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy import func
 import os
 import json
+import pandas as pd
+import io
 from datetime import datetime
 from functools import wraps
 from werkzeug.utils import secure_filename
@@ -553,6 +555,99 @@ def student(grade_id, class_id):
                          week=week, grade_name=grade.name if grade else '', class_name=cls.name if cls else '')
 
 # Audit report logic moved to audit_report_view
+
+@app.route('/admin/upload_master', methods=['POST'])
+@admin_required
+def upload_master():
+    file = request.files.get('file')
+    if not file or file.filename == '':
+        flash('لم يتم اختيار ملف')
+        return redirect(url_for('admin'))
+    
+    try:
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(file)
+        else:
+            df = pd.read_excel(file)
+        
+        # Mapping Logic: Rows are Grade/Class, Columns are Day/Period
+        # Expected Format: First column is Grade/Class name
+        # Other columns should match Day_Period pattern or be identified by order
+        
+        # Clean column names
+        df.columns = [str(c).strip() for c in df.columns]
+        
+        # Find the class column (usually the first one or named 'الصف', 'الفصل', 'Grade', 'Class')
+        class_col = df.columns[0]
+        for col in df.columns:
+            if any(kw in col for kw in ['صف', 'فصل', 'grade', 'class']):
+                class_col = col
+                break
+        
+        import_count = 0
+        for _, row in df.iterrows():
+            class_full_name = str(row[class_col]).strip()
+            if not class_full_name or class_full_name.lower() == 'nan':
+                continue
+                
+            # Try to find class. Format could be "Grade - Class" or just "Class"
+            cls = None
+            if ' - ' in class_full_name:
+                g_name, c_name = class_full_name.split(' - ', 1)
+                cls = Class.query.join(Grade).filter(Grade.name == g_name, Class.name == c_name).first()
+            
+            if not cls:
+                cls = Class.query.filter(Class.name == class_full_name).first()
+                
+            if not cls:
+                # If class doesn't exist, skip or handle (here we skip for safety)
+                continue
+                
+            # Map periods
+            # We look for columns that might indicate day and period
+            # Common patterns: "الأحد 1", "Sunday 1", "1", etc.
+            for col in df.columns:
+                if col == class_col: continue
+                
+                subject_name = str(row[col]).strip()
+                if not subject_name or subject_name.lower() == 'nan':
+                    subject_name = "" # Empty slot
+                
+                # Try to parse day and period from column name
+                target_day = None
+                target_period = None
+                
+                # Check for day name in column
+                for day_en, day_ar in DAYS_AR.items():
+                    if day_ar in col or day_en.lower() in col.lower():
+                        target_day = day_en
+                        break
+                
+                # Check for period number in column
+                import re
+                nums = re.findall(r'\d+', col)
+                if nums:
+                    target_period = int(nums[0])
+                
+                if target_day and target_period and 1 <= target_period <= 8:
+                    # Clear existing and add new
+                    db.session.query(Subject).filter_by(class_id=cls.id, day=target_day, period=target_period).delete()
+                    if subject_name:
+                        db.session.add(Subject(class_id=cls.id, day=target_day, period=target_period, name=subject_name))
+                        # Sync subject_name in WeeklyData for existing entries
+                        db.session.query(WeeklyData).filter_by(class_id=cls.id, day=target_day, period=target_period).update({"subject_name": subject_name})
+                    import_count += 1
+                    
+        db.session.commit()
+        log_activity('admin', f'تم استيراد الجدول من Excel ({import_count} حصة)')
+        flash(f'تم استيراد {import_count} حصة بنجاح')
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Excel Upload Error: {e}")
+        flash(f'خطأ أثناء معالجة الملف: {str(e)}')
+        
+    return redirect(url_for('admin'))
 
 if __name__ == '__main__':
     with app.app_context():
