@@ -314,6 +314,7 @@ def upload_master():
         df = df.applymap(lambda x: str(x).replace('\n', ' ').strip() if pd.notnull(x) else '')
         
         # Every 8 columns is a new day (1-8 Sun, 9-16 Mon, etc.)
+        # Column 0 is Grade/Class Name
         day_mappings = {
             'Sunday': range(1, 9),
             'Monday': range(9, 17),
@@ -330,9 +331,6 @@ def upload_master():
             grade_name = str(row[0])
             if not grade_name or grade_name.lower() in ['nan', 'none', '']: continue
             
-            # Clean newlines from grade name as well
-            grade_name = grade_name.replace('\n', ' ').strip()
-            
             # Use Grade Name as Class Name if not specified, or split if "Grade - Class"
             if ' - ' in grade_name:
                 parts = grade_name.split(' - ')
@@ -346,7 +344,7 @@ def upload_master():
                 for idx, col_idx in enumerate(col_range):
                     period_num = idx + 1
                     if col_idx < len(row):
-                        subject_name = str(row[col_idx]).replace('\n', ' ').strip()
+                        subject_name = str(row[col_idx])
                         if subject_name and subject_name.lower() not in ['nan', 'none', '']:
                             # UPSERT logic for Master Schedule
                             db.session.query(Subject).filter_by(class_id=cls.id, day=day_en, period=period_num).delete()
