@@ -143,10 +143,16 @@ def admin():
             if action == 'add_grade':
                 name = request.form.get('name')
                 if name:
-                    db.session.add(Grade(name=name))
-                    db.session.commit()
-                    log_activity('admin', f'إضافة صف جديد: {name}')
-                    flash('تم إضافة الصف بنجاح')
+                    try:
+                        new_grade = Grade(name=name, school_id=None)
+                        db.session.add(new_grade)
+                        db.session.commit()
+                        log_activity('admin', f'إضافة صف جديد: {name}')
+                        flash('تم إضافة الصف بنجاح')
+                    except Exception as e:
+                        db.session.rollback()
+                        print(f"Error adding grade: {e}")
+                        flash(f"خطأ في إضافة الصف: {e}")
             elif action == 'delete_grade':
                 gid = request.form.get('grade_id')
                 if gid and gid.isdigit():
@@ -166,10 +172,16 @@ def admin():
                 name = request.form.get('name')
                 gid = request.form.get('grade_id')
                 if name and gid and gid.isdigit():
-                    db.session.add(Class(name=name, grade_id=int(gid))); db.session.commit()
-                    db.session.commit()
-                    log_activity('admin', f'إضافة فصل جديد: {name}')
-                    flash('تم إضافة الفصل بنجاح')
+                    try:
+                        new_class = Class(name=name, grade_id=int(gid), school_id=None)
+                        db.session.add(new_class)
+                        db.session.commit()
+                        log_activity('admin', f'إضافة فصل جديد: {name}')
+                        flash('تم إضافة الفصل بنجاح')
+                    except Exception as e:
+                        db.session.rollback()
+                        print(f"Error adding class: {e}")
+                        flash(f"خطأ في إضافة الفصل: {e}")
             elif action == 'delete_class':
                 cid = request.form.get('class_id')
                 if cid and cid.isdigit():
@@ -199,13 +211,9 @@ def admin():
                                     f_day, f_period = swap['from_day'], int(swap['from_period'])
                                     t_day, t_period = swap['to_day'], int(swap['to_period'])
                                     
-                                    # Swap data for ALL weeks for this specific day/period
-                                    # This ensures that when a subject moves in the Master Schedule, 
-                                    # all its historical and future topics/homework move with it.
                                     from_entries = WeeklyData.query.filter_by(class_id=class_id, day=f_day, period=f_period).all()
                                     to_entries = WeeklyData.query.filter_by(class_id=class_id, day=t_day, period=t_period).all()
                                     
-                                    # Temporary storage to avoid unique constraint or logic issues during swap
                                     temp_from = []
                                     for e in from_entries:
                                         temp_from.append({'week': e.week_number, 'topic': e.topic, 'hw': e.homework})
@@ -216,25 +224,28 @@ def admin():
                                         temp_to.append({'week': e.week_number, 'topic': e.topic, 'hw': e.homework})
                                         db.session.delete(e)
                                     
-                                    db.session.flush() # Commit deletions before re-inserting
+                                    db.session.flush() 
                                     
                                     for e in temp_from:
                                         db.session.add(WeeklyData(class_id=class_id, week_number=e['week'], day=t_day, period=t_period, topic=e['topic'], homework=e['hw']))
                                     for e in temp_to:
                                         db.session.add(WeeklyData(class_id=class_id, week_number=e['week'], day=f_day, period=f_period, topic=e['topic'], homework=e['hw']))
                                         
-                                except (json.JSONDecodeError, KeyError, ValueError) as e:
+                                except Exception as e:
                                     print(f"Error processing master swap: {e}")
                             
-                            db.session.execute(db.delete(Subject).where(Subject.class_id == class_id))
+                            # Clean and insert master subjects
+                            db.session.query(Subject).filter_by(class_id=class_id).delete()
+                            db.session.flush()
+                            
+                            added_count = 0
                             for day in DAYS_ORDER:
                                 for period in range(1, 9):
                                     subject_name = request.form.get(f'fixed_{day}_{period}')
                                     if subject_name is not None:
                                         subject_name = subject_name.strip()
                                         
-                                        # When updating master schedule, we also update subject_name in WeeklyData
-                                        # to keep the labels consistent across all weeks.
+                                        # Force sync labels in WeeklyData for all weeks
                                         db.session.query(WeeklyData).filter(
                                             WeeklyData.class_id == class_id,
                                             WeeklyData.day == day,
@@ -242,14 +253,21 @@ def admin():
                                         ).update({"subject_name": subject_name}, synchronize_session=False)
                                         
                                         if subject_name:
-                                            db.session.add(Subject(class_id=class_id, day=day, period=period, name=subject_name))
-                            log_activity('admin', f'تحديث الجدول الأساسي للفصل: {cls.name}')
+                                            # Explicitly set school_id=None to avoid constraint issues if default is missing
+                                            db.session.add(Subject(class_id=class_id, day=day, period=period, name=subject_name, school_id=None))
+                                            added_count += 1
+                            
                             db.session.commit()
+                            log_activity('admin', f'تحديث الجدول الأساسي للفصل: {cls.name} ({added_count} مادة)')
                             flash('تم حفظ الجدول الأساسي بنجاح')
                         else:
                             flash('الفصل غير موجود')
-                    except ValueError:
-                        flash('معرف الفصل غير صالح')
+                    except Exception as e:
+                        db.session.rollback()
+                        print(f"ERROR in save_fixed_schedule: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        flash(f"حدث خطأ أثناء الحفظ: {str(e)}")
                 else:
                     flash('يرجى اختيار فصل صحيح')
             elif action == 'update_settings':

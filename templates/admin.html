@@ -364,7 +364,7 @@
         </div>
 
         {% if sel_fixed_class_id %}
-        <form method="POST">
+        <form method="POST" id="fixed-schedule-form">
             <input type="hidden" name="action" value="save_fixed_schedule">
             <input type="hidden" name="class_id" value="{{ sel_fixed_class_id }}">
             <div class="table-container">
@@ -393,8 +393,15 @@
                 </tbody>
             </table>
             </div>
-            <button type="submit" style="margin-top: 20px; width: 100%; background: #1e3a8a; font-size: 1.1em;">حفظ الجدول بالكامل ✓</button>
+            <button type="submit" id="save-fixed-btn" style="margin-top: 20px; width: 100%; background: #1e3a8a; font-size: 1.1em;">حفظ الجدول بالكامل ✓</button>
         </form>
+        <script>
+            document.getElementById('fixed-schedule-form').addEventListener('submit', function() {
+                const btn = document.getElementById('save-fixed-btn');
+                btn.disabled = true;
+                btn.innerText = 'جاري الحفظ...';
+            });
+        </script>
         {% endif %}
     </div>
 
