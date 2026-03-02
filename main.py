@@ -291,8 +291,8 @@ def upload_master():
         c_col = next((c for c in df.columns if 'الفصل' in c or 'الحصة' in c), df.columns[0])
         
         import_count = 0
-        # Process first 5 rows for verification
-        for _, row in df.head(5).iterrows():
+        # Process all rows in the file
+        for _, row in df.iterrows():
             class_info = str(row[c_col]).strip()
             if not class_info or class_info.lower() == 'nan': continue
             
@@ -321,7 +321,7 @@ def upload_master():
                             db.session.query(WeeklyData).filter_by(class_id=cls.id, day=target_day, period=p).update({"subject_name": sub})
                             import_count += 1
         db.session.commit()
-        flash(f'تم استيراد {import_count} حصة بنجاح من أول 5 صفوف')
+        flash(f'تم استيراد {import_count} حصة بنجاح من الملف بالكامل')
     except Exception as e:
         db.session.rollback()
         flash(f"خطأ: {e}")
