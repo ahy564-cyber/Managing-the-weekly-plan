@@ -78,7 +78,7 @@ class WeeklyData(db.Model):
     topic = db.Column(db.Text, default='')
     homework = db.Column(db.Text, default='')
     subject_name = db.Column(db.String(200), default='')
-    # school_id is NOT present here as it was causing NotNullViolation in IMG_213125
+    school_id = db.Column(db.Integer, nullable=True)
 
 class Setting(db.Model):
     key = db.Column(db.String(100), primary_key=True)
