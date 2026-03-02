@@ -110,11 +110,14 @@
                             <span style="color: #94a3b8; font-size: 0.8em;">هذا اليوم مغلق</span>
                         {% elif schedule[d][p].subject_name %}
                             <span class="fixed-sub">{{ schedule[d][p].subject_name }}</span>
-                            <input type="text" class="topic" value="{{ schedule[d][p].topic }}" 
-                                   placeholder="الدرس اليومي..." 
+                            <textarea class="topic" 
+                                   placeholder="موضوع الدرس..." 
                                    data-day="{{ d }}" data-period="{{ p }}"
-                                   style="min-width: 150px;">
-                            <input type="text" class="hw" value="{{ schedule[d][p].homework }}" placeholder="الواجب المنزلي..." style="min-width: 150px;">
+                                   style="min-width: 150px; width: 100%; border: 1px solid #0d9488; border-radius: 6px; padding: 8px; font-family: inherit; margin-bottom: 5px;">{{ schedule[d][p].topic }}</textarea>
+                            <textarea class="hw" 
+                                   placeholder="الواجب المنزلي..." 
+                                   data-day="{{ d }}" data-period="{{ p }}"
+                                   style="min-width: 150px; width: 100%; border: 1px solid #0d9488; border-radius: 6px; padding: 8px; font-family: inherit;">{{ schedule[d][p].homework }}</textarea>
                         {% else %}
                             <span style="color: #cbd5e1; font-size: 0.8em;">لا توجد مادة</span>
                         {% endif %}

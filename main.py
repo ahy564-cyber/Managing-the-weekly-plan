@@ -304,16 +304,16 @@ def upload_master():
     file = request.files.get('file')
     if not file: return redirect(url_for('admin'))
     try:
-        # Step 1: Skip first 2 header rows
+        # Hard-Coded Mapping: Start from Row 3 (skiprows=2)
         if file.filename.endswith('.csv'):
             df = pd.read_csv(file, skiprows=2, header=None)
         else:
             df = pd.read_excel(file, skiprows=2, header=None)
         
-        # Clean the entire dataframe: remove newlines and strip whitespace
+        # Clean data: remove newlines and strip whitespace
         df = df.applymap(lambda x: str(x).replace('\n', ' ').strip() if pd.notnull(x) else '')
         
-        # Sunday: 1-8 (indices 1-8), Monday: 9-16, Tuesday: 17-24, Wednesday: 25-32, Thursday: 33-40
+        # Every 8 columns is a new day (1-8 Sun, 9-16 Mon, etc.)
         day_mappings = {
             'Sunday': range(1, 9),
             'Monday': range(9, 17),
@@ -327,28 +327,29 @@ def upload_master():
         
         import_count = 0
         for _, row in df.iterrows():
-            class_info = str(row[0])
-            if not class_info or class_info.lower() in ['nan', 'None', '']: continue
+            grade_name = str(row[0])
+            if not grade_name or grade_name.lower() in ['nan', 'none', '']: continue
             
-            if ' - ' in class_info:
-                parts = class_info.split(' - ')
-                grade_name, class_name = parts[0].strip(), parts[1].strip()
+            # Use Grade Name as Class Name if not specified, or split if "Grade - Class"
+            if ' - ' in grade_name:
+                parts = grade_name.split(' - ')
+                g_n, c_n = parts[0].strip(), parts[1].strip()
             else:
-                grade_name, class_name = "عام", class_info
+                g_n, c_n = grade_name, "أ" # Default to 'A' if only grade is provided
 
-            cls = get_or_create_class(grade_name, class_name)
+            cls = get_or_create_class(g_n, c_n)
             
             for day_en, col_range in day_mappings.items():
                 for idx, col_idx in enumerate(col_range):
                     period_num = idx + 1
                     if col_idx < len(row):
                         subject_name = str(row[col_idx])
-                        if subject_name and subject_name.lower() not in ['nan', 'None', '']:
-                            # Update Master (UPSERT logic)
+                        if subject_name and subject_name.lower() not in ['nan', 'none', '']:
+                            # UPSERT logic for Master Schedule
                             db.session.query(Subject).filter_by(class_id=cls.id, day=day_en, period=period_num).delete()
                             db.session.add(Subject(class_id=cls.id, day=day_en, period=period_num, name=subject_name, school_id=1))
                             
-                            # Sync WeeklyData
+                            # UPSERT logic for Weekly Data
                             w_entry = WeeklyData.query.filter_by(class_id=cls.id, week_number=current_week, day=day_en, period=period_num).first()
                             if w_entry:
                                 w_entry.subject_name = subject_name
@@ -358,11 +359,11 @@ def upload_master():
                             import_count += 1
         
         db.session.commit()
-        flash(f'تم استيراد {import_count} حصة بنجاح وتحديث الجدول')
+        flash(f'تم استيراد {import_count} حصة بنجاح')
     except Exception as e:
         db.session.rollback()
         traceback.print_exc()
-        flash(f"خطأ في الاستيراد: {e}")
+        flash(f"خطأ: {e}")
     return redirect(url_for('admin'))
 
 @app.route('/teacher', methods=['GET', 'POST'])
