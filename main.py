@@ -304,86 +304,61 @@ def upload_master():
     file = request.files.get('file')
     if not file: return redirect(url_for('admin'))
     try:
-        # Skip 2 header rows to start reading from the 3rd row
+        # Step 1: Skip first 2 header rows
         if file.filename.endswith('.csv'):
-            df = pd.read_csv(file, skiprows=2)
+            df = pd.read_csv(file, skiprows=2, header=None)
         else:
-            df = pd.read_excel(file, skiprows=2)
+            df = pd.read_excel(file, skiprows=2, header=None)
         
-        # Standardize column names and remove extra whitespace/newlines
-        df.columns = [str(c).strip().replace('\n', ' ') for c in df.columns]
+        # Sunday: 1-8 (indices 1-8), Monday: 9-16, Tuesday: 17-24, Wednesday: 25-32, Thursday: 33-40
+        day_mappings = {
+            'Sunday': range(1, 9),
+            'Monday': range(9, 17),
+            'Tuesday': range(17, 25),
+            'Wednesday': range(25, 33),
+            'Thursday': range(33, 41)
+        }
         
-        # Identify the class column (contains 'الفصل' or 'الحصة')
-        c_col = next((c for c in df.columns if 'الفصل' in c or 'الحصة' in c), df.columns[0])
+        settings = {s.key: s.value for s in Setting.query.all()}
+        current_week = int(settings.get('current_week', '1'))
         
         import_count = 0
-        # Process every row in the file
         for _, row in df.iterrows():
-            class_info = str(row[c_col]).strip().replace('\n', ' ')
+            class_info = str(row[0]).strip().replace('\n', ' ')
             if not class_info or class_info.lower() == 'nan': continue
             
-            # Format: "Grade - Class"
             if ' - ' in class_info:
                 parts = class_info.split(' - ')
-                grade_name = parts[0].strip()
-                class_name = parts[1].strip()
+                grade_name, class_name = parts[0].strip(), parts[1].strip()
             else:
-                grade_name = "عام"
-                class_name = class_info
+                grade_name, class_name = "عام", class_info
 
             cls = get_or_create_class(grade_name, class_name)
             
-            # Map periods 1-8 for each day (Sunday to Thursday)
-            # The columns 1-8 repeat or are uniquely named like "الأحد 1", "الاثنين 1", etc.
-            for col in df.columns:
-                if col == c_col: continue
-                
-                # Identify the day from the column header
-                target_day = next((en for en, ar in DAYS_AR.items() if ar in col), None)
-                # Identify the period number (1-8)
-                p_match = re.search(r'(\d+)', col)
-                
-                if target_day and p_match:
-                    period_num = int(p_match.group(1))
-                    if 1 <= period_num <= 8:
-                        # Extract and clean the subject name from the cell
-                        subject_name = str(row[col]).strip().replace('\n', ' ')
-                        
+            for day_en, col_range in day_mappings.items():
+                for idx, col_idx in enumerate(col_range):
+                    period_num = idx + 1
+                    if col_idx < len(row):
+                        subject_name = str(row[col_idx]).strip().replace('\n', ' ')
                         if subject_name and subject_name.lower() != 'nan':
-                            # 1. Update Master Schedule (Subject table)
-                            db.session.query(Subject).filter_by(class_id=cls.id, day=target_day, period=period_num).delete()
-                            db.session.add(Subject(class_id=cls.id, day=target_day, period=period_num, name=subject_name))
+                            # Update Master
+                            db.session.query(Subject).filter_by(class_id=cls.id, day=day_en, period=period_num).delete()
+                            db.session.add(Subject(class_id=cls.id, day=day_en, period=period_num, name=subject_name))
                             
-                            # 2. Sync WeeklyData for the current week so teachers can see/edit
-                            # We use the current_week from settings
-                            settings = {s.key: s.value for s in Setting.query.all()}
-                            current_week = int(settings.get('current_week', '1'))
-                            
-                            weekly_entry = WeeklyData.query.filter_by(
-                                class_id=cls.id, 
-                                week_number=current_week, 
-                                day=target_day, 
-                                period=period_num
-                            ).first()
-                            
-                            if weekly_entry:
-                                weekly_entry.subject_name = subject_name
+                            # Sync WeeklyData
+                            w_entry = WeeklyData.query.filter_by(class_id=cls.id, week_number=current_week, day=day_en, period=period_num).first()
+                            if w_entry:
+                                w_entry.subject_name = subject_name
                             else:
-                                # Create new entry if it doesn't exist
-                                db.session.add(WeeklyData(
-                                    class_id=cls.id, 
-                                    week_number=current_week, 
-                                    day=target_day, 
-                                    period=period_num, 
-                                    subject_name=subject_name
-                                ))
+                                db.session.add(WeeklyData(class_id=cls.id, week_number=current_week, day=day_en, period=period_num, subject_name=subject_name))
+                            
                             import_count += 1
         
         db.session.commit()
-        flash(f'تم استيراد {import_count} حصة بنجاح وتحديث الجدول لجميع الفصول')
+        flash(f'تم استيراد {import_count} حصة بنجاح وتحديث الجدول')
     except Exception as e:
         db.session.rollback()
-        print(f"Import Error: {e}")
+        traceback.print_exc()
         flash(f"خطأ في الاستيراد: {e}")
     return redirect(url_for('admin'))
 
