@@ -446,7 +446,7 @@ def delete_date(key):
 
 with app.app_context():
     db.create_all()
-    if not Setting.query.get('admin_password'):
+    if not db.session.get(Setting, 'admin_password'):
         db.session.add(Setting(key='admin_password', value='fast490'))
         db.session.commit()
 
