@@ -301,19 +301,35 @@ def upload_master():
         if not c_col: return redirect(url_for('admin'))
         for _, row in df.iterrows():
             info = str(row[c_col]).strip()
+            # Normalize class info: "اول ابتدائي - أ" or similar
             if '-' in info:
                 parts = info.split('-')
-                cls = get_or_create_class(parts[0].strip(), parts[1].strip())
-                for col in df.columns:
-                    day = next((en for en, ar in DAYS_AR.items() if ar in col), None)
-                    p_match = re.search(r'(\d+)', col)
-                    if day and p_match:
-                        p = int(p_match.group(1))
-                        sub = str(row[col]).strip() if pd.notna(row[col]) else ''
+                grade_name = parts[0].strip()
+                class_name = parts[1].strip()
+            else:
+                grade_name = "عام"
+                class_name = info
+
+            cls = get_or_create_class(grade_name, class_name)
+            
+            for col in df.columns:
+                if col == c_col: continue
+                
+                # Extract day and period from column name (e.g., "الأحد 1")
+                day = next((en for en, ar in DAYS_AR.items() if ar in col), None)
+                p_match = re.search(r'(\d+)', col)
+                
+                if day and p_match:
+                    p = int(p_match.group(1))
+                    sub = str(row[col]).strip() if pd.notna(row[col]) else ''
+                    
+                    if sub and sub.lower() != 'nan':
+                        # Update Master Subject
                         db.session.query(Subject).filter_by(class_id=cls.id, day=day, period=p).delete()
-                        if sub and sub.lower() != 'nan':
-                            db.session.add(Subject(class_id=cls.id, day=day, period=p, name=sub))
+                        db.session.add(Subject(class_id=cls.id, day=day, period=p, name=sub))
+                        # Sync with WeeklyData
                         db.session.query(WeeklyData).filter_by(class_id=cls.id, day=day, period=p).update({"subject_name": sub})
+                        import_count += 1
         db.session.commit()
         flash('تم الاستيراد بنجاح')
     except Exception as e:
