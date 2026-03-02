@@ -303,7 +303,14 @@
                 <tbody>
                     {% for g in grades %}
                     <tr>
-                        <td>{{ g.name }}</td>
+                        <td>
+                            <form method="POST" style="display:inline-flex; gap:5px; width:100%;">
+                                <input type="hidden" name="action" value="edit_grade">
+                                <input type="hidden" name="grade_id" value="{{ g.id }}">
+                                <input type="text" name="name" value="{{ g.name }}" style="padding:5px; height:auto; width:150px;">
+                                <button type="submit" style="padding:5px 10px; background:#0d9488;">💾</button>
+                            </form>
+                        </td>
                         <td>
                             <form method="POST" onsubmit="return confirm('هل أنت متأكد؟ سيتم حذف جميع الفصول والمواد المرتبطة.')">
                                 <input type="hidden" name="action" value="delete_grade">
@@ -334,7 +341,14 @@
                     {% for c in classes %}
                     <tr>
                         <td>{{ c.grade.name }}</td>
-                        <td>{{ c.name }}</td>
+                        <td>
+                            <form method="POST" style="display:inline-flex; gap:5px; width:100%;">
+                                <input type="hidden" name="action" value="edit_class">
+                                <input type="hidden" name="class_id" value="{{ c.id }}">
+                                <input type="text" name="name" value="{{ c.name }}" style="padding:5px; height:auto; width:100px;">
+                                <button type="submit" style="padding:5px 10px; background:#0d9488;">💾</button>
+                            </form>
+                        </td>
                         <td>
                             <form method="POST" onsubmit="return confirm('هل أنت متأكد من حذف الفصل؟')">
                                 <input type="hidden" name="action" value="delete_class">

@@ -156,6 +156,17 @@ def admin():
                     except Exception as e:
                         db.session.rollback()
                         flash(f"خطأ: {e}")
+            elif action == 'edit_grade':
+                gid = request.form.get('grade_id')
+                new_name = request.form.get('name')
+                if gid and gid.isdigit() and new_name:
+                    grade = db.session.get(Grade, int(gid))
+                    if grade:
+                        old_name = grade.name
+                        grade.name = new_name
+                        db.session.commit()
+                        log_activity('admin', f'تعديل اسم الصف من {old_name} إلى {new_name}')
+                        flash('تم تعديل اسم الصف بنجاح')
             elif action == 'delete_grade':
                 gid = request.form.get('grade_id')
                 if gid and gid.isdigit():
@@ -170,6 +181,17 @@ def admin():
                         db.session.commit()
                         log_activity('admin', f'حذف صف: {name}')
                         flash('تم حذف الصف بنجاح')
+            elif action == 'edit_class':
+                cid = request.form.get('class_id')
+                new_name = request.form.get('name')
+                if cid and cid.isdigit() and new_name:
+                    cls = db.session.get(Class, int(cid))
+                    if cls:
+                        old_name = cls.name
+                        cls.name = new_name
+                        db.session.commit()
+                        log_activity('admin', f'تعديل اسم الفصل من {old_name} إلى {new_name}')
+                        flash('تم تعديل اسم الفصل بنجاح')
             elif action == 'add_class':
                 name = request.form.get('name')
                 gid = request.form.get('grade_id')
