@@ -142,7 +142,8 @@ def admin():
             if action == 'add_grade':
                 name = request.form.get('name')
                 if name:
-                    db.session.add(Grade(name=name))
+                    db.session.add(Grade(name=name)); db.session.commit()
+                    db.session.commit()
                     log_activity('admin', f'إضافة صف جديد: {name}')
                     flash('تم إضافة الصف بنجاح')
             elif action == 'delete_grade':
@@ -158,7 +159,8 @@ def admin():
                 name = request.form.get('name')
                 gid = request.form.get('grade_id')
                 if name and gid and gid.isdigit():
-                    db.session.add(Class(name=name, grade_id=int(gid)))
+                    db.session.add(Class(name=name, grade_id=int(gid))); db.session.commit()
+                    db.session.commit()
                     log_activity('admin', f'إضافة فصل جديد: {name}')
                     flash('تم إضافة الفصل بنجاح')
             elif action == 'delete_class':
@@ -556,6 +558,20 @@ def student(grade_id, class_id):
 
 # Audit report logic moved to audit_report_view
 
+def get_or_create_class(grade_name, class_name):
+    grade = Grade.query.filter_by(name=grade_name).first()
+    if not grade:
+        grade = Grade(name=grade_name)
+        db.session.add(grade)
+        db.session.flush()
+    
+    cls = Class.query.filter_by(name=class_name, grade_id=grade.id).first()
+    if not cls:
+        cls = Class(name=class_name, grade_id=grade.id)
+        db.session.add(cls)
+        db.session.flush()
+    return cls
+
 @app.route('/admin/upload_master', methods=['POST'])
 @admin_required
 def upload_master():
@@ -563,6 +579,77 @@ def upload_master():
     if not file or file.filename == '':
         flash('لم يتم اختيار ملف')
         return redirect(url_for('admin'))
+    
+    try:
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(file)
+        else:
+            df = pd.read_excel(file)
+        
+        df.columns = [str(c).strip() for c in df.columns]
+        
+        class_col = df.columns[0]
+        for col in df.columns:
+            if any(kw in col.lower() for kw in ['صف', 'فصل', 'grade', 'class']):
+                class_col = col
+                break
+        
+        import_count = 0
+        for _, row in df.iterrows():
+            class_full_name = str(row[class_col]).strip()
+            if not class_full_name or class_full_name.lower() == 'nan':
+                continue
+                
+            cls = None
+            if ' - ' in class_full_name:
+                parts = class_full_name.split(' - ', 1)
+                g_name, c_name = parts[0].strip(), parts[1].strip()
+                cls = get_or_create_class(g_name, c_name)
+            else:
+                cls = Class.query.filter(Class.name == class_full_name).first()
+                if not cls:
+                    cls = get_or_create_class('عام', class_full_name)
+                
+            if not cls:
+                continue
+                
+            for col in df.columns:
+                if col == class_col: continue
+                
+                subject_name = str(row[col]).strip()
+                if not subject_name or subject_name.lower() == 'nan':
+                    subject_name = "" 
+                
+                target_day = None
+                target_period = None
+                
+                for day_en, day_ar in DAYS_AR.items():
+                    if day_ar in col or day_en.lower() in col.lower():
+                        target_day = day_en
+                        break
+                
+                import re
+                nums = re.findall(r'\d+', col)
+                if nums:
+                    target_period = int(nums[0])
+                
+                if target_day and target_period and 1 <= target_period <= 8:
+                    db.session.query(Subject).filter_by(class_id=cls.id, day=target_day, period=target_period).delete()
+                    if subject_name:
+                        db.session.add(Subject(class_id=cls.id, day=target_day, period=target_period, name=subject_name))
+                    db.session.query(WeeklyData).filter_by(class_id=cls.id, day=target_day, period=target_period).update({"subject_name": subject_name})
+                    import_count += 1
+                
+        db.session.commit()
+        log_activity('admin', f'تم استيراد الجدول من Excel ({import_count} حصة)')
+        flash(f'تم استيراد {import_count} حصة بنجاح وتحديث الصفوف والفصول')
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f'Excel Upload Error: {e}')
+        flash(f'خطأ في معالجة الملف: {str(e)}')
+        
+    return redirect(url_for('admin'))
     
     try:
         if file.filename.endswith('.csv'):
