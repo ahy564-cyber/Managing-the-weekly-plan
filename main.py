@@ -331,16 +331,45 @@ def teacher():
     if request.method == 'POST':
         data = request.json
         if c_id and week:
-            for e in data.get('entries', []):
-                w = WeeklyData.query.filter_by(class_id=int(c_id), week_number=int(week), day=e['day'], period=int(e['period'])).first()
-                if not w:
-                    w = WeeklyData(class_id=int(c_id), week_number=int(week), day=e['day'], period=int(e['period']))
-                    db.session.add(w)
-                w.topic = e.get('topic', '')
-                w.homework = e.get('homework', '')
-            db.session.commit()
-            return jsonify({'status': 'success'})
-        return jsonify({'status': 'error'})
+            try:
+                for e in data.get('entries', []):
+                    day = e.get('day')
+                    period = int(e.get('period'))
+                    topic = e.get('topic', '')
+                    homework = e.get('homework', '')
+                    
+                    # Try to find existing entry
+                    w = WeeklyData.query.filter_by(
+                        class_id=int(c_id), 
+                        week_number=int(week), 
+                        day=day, 
+                        period=period
+                    ).first()
+                    
+                    if not w:
+                        # Fetch subject name from Master Schedule if not exists in WeeklyData
+                        master_sub = Subject.query.filter_by(class_id=int(c_id), day=day, period=period).first()
+                        sub_name = master_sub.name if master_sub else ''
+                        
+                        w = WeeklyData(
+                            class_id=int(c_id), 
+                            week_number=int(week), 
+                            day=day, 
+                            period=period,
+                            subject_name=sub_name
+                        )
+                        db.session.add(w)
+                    
+                    w.topic = topic
+                    w.homework = homework
+                
+                db.session.commit()
+                return jsonify({'status': 'success'})
+            except Exception as e:
+                db.session.rollback()
+                print(f"Teacher Save Error: {e}")
+                return jsonify({'status': 'error', 'message': str(e)})
+        return jsonify({'status': 'error', 'message': 'Missing class or week'})
 
     grades = Grade.query.all()
     classes = Class.query.filter_by(grade_id=int(g_id)).all() if g_id else []
