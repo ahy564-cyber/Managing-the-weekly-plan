@@ -143,17 +143,23 @@ def admin():
             if action == 'add_grade':
                 name = request.form.get('name')
                 if name:
-                    db.session.add(Grade(name=name)); db.session.commit()
+                    db.session.add(Grade(name=name))
                     db.session.commit()
                     log_activity('admin', f'إضافة صف جديد: {name}')
                     flash('تم إضافة الصف بنجاح')
             elif action == 'delete_grade':
                 gid = request.form.get('grade_id')
                 if gid and gid.isdigit():
-                    grade = db.session.get(Grade, int(gid))
+                    grade_id = int(gid)
+                    grade = db.session.get(Grade, grade_id)
                     if grade:
                         name = grade.name
+                        for cls_obj in grade.classes:
+                            db.session.execute(db.delete(Subject).where(Subject.class_id == cls_obj.id))
+                            db.session.execute(db.delete(WeeklyData).where(WeeklyData.class_id == cls_obj.id))
+                            db.session.delete(cls_obj)
                         db.session.delete(grade)
+                        db.session.commit()
                         log_activity('admin', f'حذف صف: {name}')
                         flash('تم حذف الصف بنجاح')
             elif action == 'add_class':
@@ -167,10 +173,15 @@ def admin():
             elif action == 'delete_class':
                 cid = request.form.get('class_id')
                 if cid and cid.isdigit():
-                    cls = db.session.get(Class, int(cid))
+                    class_id = int(cid)
+                    # Explicitly delete related data to ensure cascade-like behavior
+                    db.session.execute(db.delete(Subject).where(Subject.class_id == class_id))
+                    db.session.execute(db.delete(WeeklyData).where(WeeklyData.class_id == class_id))
+                    cls = db.session.get(Class, class_id)
                     if cls:
                         name = cls.name
                         db.session.delete(cls)
+                        db.session.commit()
                         log_activity('admin', f'حذف فصل: {name}')
                         flash('تم حذف الفصل بنجاح')
             elif action == 'save_fixed_schedule':
