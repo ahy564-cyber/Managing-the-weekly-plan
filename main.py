@@ -282,49 +282,87 @@ def upload_master():
     file = request.files.get('file')
     if not file: return redirect(url_for('admin'))
     try:
+        # Skip 2 header rows to start reading from the 3rd row
         if file.filename.endswith('.csv'):
             df = pd.read_csv(file, skiprows=2)
         else:
             df = pd.read_excel(file, skiprows=2)
         
-        df.columns = [str(c).strip() for c in df.columns]
+        # Standardize column names and remove extra whitespace/newlines
+        df.columns = [str(c).strip().replace('\n', ' ') for c in df.columns]
+        
+        # Identify the class column (contains 'الفصل' or 'الحصة')
         c_col = next((c for c in df.columns if 'الفصل' in c or 'الحصة' in c), df.columns[0])
         
         import_count = 0
-        # Process all rows in the file
+        # Process every row in the file
         for _, row in df.iterrows():
-            class_info = str(row[c_col]).strip()
+            class_info = str(row[c_col]).strip().replace('\n', ' ')
             if not class_info or class_info.lower() == 'nan': continue
             
+            # Format: "Grade - Class"
             if ' - ' in class_info:
                 parts = class_info.split(' - ')
                 grade_name = parts[0].strip()
                 class_name = parts[1].strip()
             else:
-                grade_name = "Default Grade"
+                grade_name = "عام"
                 class_name = class_info
 
             cls = get_or_create_class(grade_name, class_name)
             
+            # Map periods 1-8 for each day (Sunday to Thursday)
+            # The columns 1-8 repeat or are uniquely named like "الأحد 1", "الاثنين 1", etc.
             for col in df.columns:
                 if col == c_col: continue
+                
+                # Identify the day from the column header
                 target_day = next((en for en, ar in DAYS_AR.items() if ar in col), None)
+                # Identify the period number (1-8)
                 p_match = re.search(r'(\d+)', col)
                 
                 if target_day and p_match:
-                    p = int(p_match.group(1))
-                    if 1 <= p <= 8:
-                        sub = str(row[col]).strip()
-                        if sub and sub.lower() != 'nan':
-                            db.session.query(Subject).filter_by(class_id=cls.id, day=target_day, period=p).delete()
-                            db.session.add(Subject(class_id=cls.id, day=target_day, period=p, name=sub))
-                            db.session.query(WeeklyData).filter_by(class_id=cls.id, day=target_day, period=p).update({"subject_name": sub})
+                    period_num = int(p_match.group(1))
+                    if 1 <= period_num <= 8:
+                        # Extract and clean the subject name from the cell
+                        subject_name = str(row[col]).strip().replace('\n', ' ')
+                        
+                        if subject_name and subject_name.lower() != 'nan':
+                            # 1. Update Master Schedule (Subject table)
+                            db.session.query(Subject).filter_by(class_id=cls.id, day=target_day, period=period_num).delete()
+                            db.session.add(Subject(class_id=cls.id, day=target_day, period=period_num, name=subject_name))
+                            
+                            # 2. Sync WeeklyData for the current week so teachers can see/edit
+                            # We use the current_week from settings
+                            settings = {s.key: s.value for s in Setting.query.all()}
+                            current_week = int(settings.get('current_week', '1'))
+                            
+                            weekly_entry = WeeklyData.query.filter_by(
+                                class_id=cls.id, 
+                                week_number=current_week, 
+                                day=target_day, 
+                                period=period_num
+                            ).first()
+                            
+                            if weekly_entry:
+                                weekly_entry.subject_name = subject_name
+                            else:
+                                # Create new entry if it doesn't exist
+                                db.session.add(WeeklyData(
+                                    class_id=cls.id, 
+                                    week_number=current_week, 
+                                    day=target_day, 
+                                    period=period_num, 
+                                    subject_name=subject_name
+                                ))
                             import_count += 1
+        
         db.session.commit()
-        flash(f'تم استيراد {import_count} حصة بنجاح من الملف بالكامل')
+        flash(f'تم استيراد {import_count} حصة بنجاح وتحديث الجدول لجميع الفصول')
     except Exception as e:
         db.session.rollback()
-        flash(f"خطأ: {e}")
+        print(f"Import Error: {e}")
+        flash(f"خطأ في الاستيراد: {e}")
     return redirect(url_for('admin'))
 
 @app.route('/teacher', methods=['GET', 'POST'])
