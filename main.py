@@ -447,10 +447,16 @@ def delete_date(key):
     return redirect(url_for('admin'))
 
 with app.app_context():
-    db.create_all()
-    if not Setting.query.get('admin_password'):
-        db.session.add(Setting(key='admin_password', value='fast490'))
-        db.session.commit()
+    try:
+        db.create_all()
+        # Use a more robust check for settings
+        admin_pass = db.session.get(Setting, 'admin_password')
+        if not admin_pass:
+            db.session.add(Setting(key='admin_password', value='fast490'))
+            db.session.commit()
+    except Exception as e:
+        print(f"Startup DB Error: {e}")
+        db.session.rollback()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
