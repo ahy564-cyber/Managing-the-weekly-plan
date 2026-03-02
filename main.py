@@ -68,7 +68,7 @@ class WeeklyData(db.Model):
     topic = db.Column(db.Text, default='')
     homework = db.Column(db.Text, default='')
     subject_name = db.Column(db.String(200), default='')
-    school_id = db.Column(db.Integer, nullable=True)
+    school_id = db.Column(db.Integer, nullable=True, server_default='1')
 
 class Setting(db.Model):
     key = db.Column(db.String(100), primary_key=True)
@@ -282,56 +282,46 @@ def upload_master():
     file = request.files.get('file')
     if not file: return redirect(url_for('admin'))
     try:
-        if file.filename.endswith('.csv'): df = pd.read_csv(file); s_name = None
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(file, skiprows=2)
         else:
-            h_df = pd.read_excel(file, header=None, nrows=5); s_name = None
-            for row in h_df.values:
-                for cell in row:
-                    if isinstance(cell, str) and ('مدارس' in cell or 'ثقافة' in cell):
-                        s_name = cell.strip(); break
-                if s_name: break
-            if s_name:
-                s = db.session.get(Setting, 'school_name')
-                if s: s.value = s_name
-                else: db.session.add(Setting(key='school_name', value=s_name))
-                db.session.commit()
-            df = pd.read_excel(file)
+            df = pd.read_excel(file, skiprows=2)
+        
         df.columns = [str(c).strip() for c in df.columns]
-        c_col = next((c for c in df.columns if 'الصف' in c or 'الفصل' in c), None)
-        if not c_col: return redirect(url_for('admin'))
-        for _, row in df.iterrows():
-            info = str(row[c_col]).strip()
-            # Normalize class info: "اول ابتدائي - أ" or similar
-            if '-' in info:
-                parts = info.split('-')
+        c_col = next((c for c in df.columns if 'الفصل' in c or 'الحصة' in c), df.columns[0])
+        
+        import_count = 0
+        # Process first 5 rows for verification
+        for _, row in df.head(5).iterrows():
+            class_info = str(row[c_col]).strip()
+            if not class_info or class_info.lower() == 'nan': continue
+            
+            if ' - ' in class_info:
+                parts = class_info.split(' - ')
                 grade_name = parts[0].strip()
                 class_name = parts[1].strip()
             else:
-                grade_name = "عام"
-                class_name = info
+                grade_name = "Default Grade"
+                class_name = class_info
 
             cls = get_or_create_class(grade_name, class_name)
             
             for col in df.columns:
                 if col == c_col: continue
-                
-                # Extract day and period from column name (e.g., "الأحد 1")
-                day = next((en for en, ar in DAYS_AR.items() if ar in col), None)
+                target_day = next((en for en, ar in DAYS_AR.items() if ar in col), None)
                 p_match = re.search(r'(\d+)', col)
                 
-                if day and p_match:
+                if target_day and p_match:
                     p = int(p_match.group(1))
-                    sub = str(row[col]).strip() if pd.notna(row[col]) else ''
-                    
-                    if sub and sub.lower() != 'nan':
-                        # Update Master Subject
-                        db.session.query(Subject).filter_by(class_id=cls.id, day=day, period=p).delete()
-                        db.session.add(Subject(class_id=cls.id, day=day, period=p, name=sub))
-                        # Sync with WeeklyData
-                        db.session.query(WeeklyData).filter_by(class_id=cls.id, day=day, period=p).update({"subject_name": sub})
-                        import_count += 1
+                    if 1 <= p <= 8:
+                        sub = str(row[col]).strip()
+                        if sub and sub.lower() != 'nan':
+                            db.session.query(Subject).filter_by(class_id=cls.id, day=target_day, period=p).delete()
+                            db.session.add(Subject(class_id=cls.id, day=target_day, period=p, name=sub))
+                            db.session.query(WeeklyData).filter_by(class_id=cls.id, day=target_day, period=p).update({"subject_name": sub})
+                            import_count += 1
         db.session.commit()
-        flash('تم الاستيراد بنجاح')
+        flash(f'تم استيراد {import_count} حصة بنجاح من أول 5 صفوف')
     except Exception as e:
         db.session.rollback()
         flash(f"خطأ: {e}")
@@ -353,39 +343,20 @@ def teacher():
                     period = int(e.get('period'))
                     topic = e.get('topic', '')
                     homework = e.get('homework', '')
-                    
-                    # Try to find existing entry
-                    w = WeeklyData.query.filter_by(
-                        class_id=int(c_id), 
-                        week_number=int(week), 
-                        day=day, 
-                        period=period
-                    ).first()
-                    
+                    w = WeeklyData.query.filter_by(class_id=int(c_id), week_number=int(week), day=day, period=period).first()
                     if not w:
-                        # Fetch subject name from Master Schedule if not exists in WeeklyData
                         master_sub = Subject.query.filter_by(class_id=int(c_id), day=day, period=period).first()
                         sub_name = master_sub.name if master_sub else ''
-                        
-                        w = WeeklyData(
-                            class_id=int(c_id), 
-                            week_number=int(week), 
-                            day=day, 
-                            period=period,
-                            subject_name=sub_name
-                        )
+                        w = WeeklyData(class_id=int(c_id), week_number=int(week), day=day, period=period, subject_name=sub_name)
                         db.session.add(w)
-                    
                     w.topic = topic
                     w.homework = homework
-                
                 db.session.commit()
                 return jsonify({'status': 'success'})
             except Exception as e:
                 db.session.rollback()
-                print(f"Teacher Save Error: {e}")
                 return jsonify({'status': 'error', 'message': str(e)})
-        return jsonify({'status': 'error', 'message': 'Missing class or week'})
+        return jsonify({'status': 'error', 'message': 'Missing data'})
 
     grades = Grade.query.all()
     classes = Class.query.filter_by(grade_id=int(g_id)).all() if g_id else []
