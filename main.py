@@ -330,6 +330,9 @@ def upload_master():
             grade_name = str(row[0])
             if not grade_name or grade_name.lower() in ['nan', 'none', '']: continue
             
+            # Clean newlines from grade name as well
+            grade_name = grade_name.replace('\n', ' ').strip()
+            
             # Use Grade Name as Class Name if not specified, or split if "Grade - Class"
             if ' - ' in grade_name:
                 parts = grade_name.split(' - ')
@@ -343,7 +346,7 @@ def upload_master():
                 for idx, col_idx in enumerate(col_range):
                     period_num = idx + 1
                     if col_idx < len(row):
-                        subject_name = str(row[col_idx])
+                        subject_name = str(row[col_idx]).replace('\n', ' ').strip()
                         if subject_name and subject_name.lower() not in ['nan', 'none', '']:
                             # UPSERT logic for Master Schedule
                             db.session.query(Subject).filter_by(class_id=cls.id, day=day_en, period=period_num).delete()
@@ -353,6 +356,7 @@ def upload_master():
                             w_entry = WeeklyData.query.filter_by(class_id=cls.id, week_number=current_week, day=day_en, period=period_num).first()
                             if w_entry:
                                 w_entry.subject_name = subject_name
+                                w_entry.school_id = 1
                             else:
                                 db.session.add(WeeklyData(class_id=cls.id, week_number=current_week, day=day_en, period=period_num, subject_name=subject_name, school_id=1))
                             
