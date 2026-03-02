@@ -9,21 +9,18 @@ import io
 from datetime import datetime
 from functools import wraps
 from werkzeug.utils import secure_filename
+import re
+import traceback
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SESSION_SECRET', 'super-secret-key-fast490')
 
-# PostgreSQL Configuration
 db_url = os.getenv('DATABASE_URL')
 if db_url and db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
-# Dynamic SSL Mode Handling
 engine_options = {"pool_pre_ping": True}
 if db_url:
-    # Helium (Replit's internal DB) does NOT support SSL.
-    # To support both local development and production environments,
-    # we use 'prefer' which attempts SSL but falls back gracefully if unsupported.
     if "sslmode" not in db_url:
         separator = "&" if "?" in db_url else "?"
         db_url += f"{separator}sslmode=prefer"
@@ -36,18 +33,10 @@ db = SQLAlchemy(app)
 
 UPLOAD_FOLDER = 'static/uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-DAYS_AR = {
-    'Sunday': 'الأحد',
-    'Monday': 'الاثنين',
-    'Tuesday': 'الثلاثاء',
-    'Wednesday': 'الأربعاء',
-    'Thursday': 'الخميس'
-}
-
+DAYS_AR = {'Sunday': 'الأحد', 'Monday': 'الاثنين', 'Tuesday': 'الثلاثاء', 'Wednesday': 'الأربعاء', 'Thursday': 'الخميس'}
 DAYS_ORDER = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday']
 
 class Grade(db.Model):
@@ -67,7 +56,7 @@ class Subject(db.Model):
     class_id = db.Column(db.Integer, db.ForeignKey('class.id'), nullable=False)
     day = db.Column(db.String(20), nullable=False)
     period = db.Column(db.Integer, nullable=False)
-    name = db.Column(db.String(200), nullable=False)
+    name = db.Column(db.String(200), nullable=True)
     school_id = db.Column(db.Integer, nullable=True)
 
 class WeeklyData(db.Model):
@@ -84,6 +73,7 @@ class WeeklyData(db.Model):
 class Setting(db.Model):
     key = db.Column(db.String(100), primary_key=True)
     value = db.Column(db.Text)
+    school_id = db.Column(db.Integer, nullable=True)
 
 class LockedDay(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -99,12 +89,10 @@ class ActivityLog(db.Model):
 
 def log_activity(role, action):
     try:
-        # Use timezone-aware UTC or standard datetime
         log = ActivityLog(user_role=role, action=action, timestamp=datetime.utcnow())
         db.session.add(log)
         db.session.commit()
-    except Exception as e:
-        print(f"Error logging activity: {e}")
+    except Exception:
         db.session.rollback()
 
 def admin_required(f):
@@ -114,6 +102,23 @@ def admin_required(f):
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
+
+def get_or_create_class(grade_name, class_name):
+    grade = Grade.query.filter_by(name=grade_name).first()
+    if not grade:
+        grade = Grade(name=grade_name)
+        db.session.add(grade)
+        db.session.flush()
+    cls = Class.query.filter_by(name=class_name, grade_id=grade.id).first()
+    if not cls:
+        cls = Class(name=class_name, grade_id=grade.id)
+        db.session.add(cls)
+        db.session.flush()
+    return cls
+
+@app.route('/')
+def index():
+    return render_template('index.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -144,20 +149,17 @@ def admin():
                 name = request.form.get('name')
                 if name:
                     try:
-                        new_grade = Grade(name=name, school_id=None)
-                        db.session.add(new_grade)
+                        db.session.add(Grade(name=name))
                         db.session.commit()
                         log_activity('admin', f'إضافة صف جديد: {name}')
                         flash('تم إضافة الصف بنجاح')
                     except Exception as e:
                         db.session.rollback()
-                        print(f"Error adding grade: {e}")
-                        flash(f"خطأ في إضافة الصف: {e}")
+                        flash(f"خطأ: {e}")
             elif action == 'delete_grade':
                 gid = request.form.get('grade_id')
                 if gid and gid.isdigit():
-                    grade_id = int(gid)
-                    grade = db.session.get(Grade, grade_id)
+                    grade = db.session.get(Grade, int(gid))
                     if grade:
                         name = grade.name
                         for cls_obj in grade.classes:
@@ -173,20 +175,17 @@ def admin():
                 gid = request.form.get('grade_id')
                 if name and gid and gid.isdigit():
                     try:
-                        new_class = Class(name=name, grade_id=int(gid), school_id=None)
-                        db.session.add(new_class)
+                        db.session.add(Class(name=name, grade_id=int(gid)))
                         db.session.commit()
                         log_activity('admin', f'إضافة فصل جديد: {name}')
                         flash('تم إضافة الفصل بنجاح')
                     except Exception as e:
                         db.session.rollback()
-                        print(f"Error adding class: {e}")
-                        flash(f"خطأ في إضافة الفصل: {e}")
+                        flash(f"خطأ: {e}")
             elif action == 'delete_class':
                 cid = request.form.get('class_id')
                 if cid and cid.isdigit():
                     class_id = int(cid)
-                    # Explicitly delete related data to ensure cascade-like behavior
                     db.session.execute(db.delete(Subject).where(Subject.class_id == class_id))
                     db.session.execute(db.delete(WeeklyData).where(WeeklyData.class_id == class_id))
                     cls = db.session.get(Class, class_id)
@@ -198,584 +197,201 @@ def admin():
                         flash('تم حذف الفصل بنجاح')
             elif action == 'save_fixed_schedule':
                 cid = request.form.get('class_id')
-                if cid and str(cid).strip().lower() != 'none':
-                    try:
-                        class_id = int(cid)
-                        cls = db.session.get(Class, class_id)
-                        if cls:
-                            # Handle master swaps first (topic/homework migration)
-                            master_swaps = request.form.getlist('master_swaps[]')
-                            for swap_json in master_swaps:
-                                try:
-                                    swap = json.loads(swap_json)
-                                    f_day, f_period = swap['from_day'], int(swap['from_period'])
-                                    t_day, t_period = swap['to_day'], int(swap['to_period'])
-                                    
-                                    from_entries = WeeklyData.query.filter_by(class_id=class_id, day=f_day, period=f_period).all()
-                                    to_entries = WeeklyData.query.filter_by(class_id=class_id, day=t_day, period=t_period).all()
-                                    
-                                    temp_from = []
-                                    for e in from_entries:
-                                        temp_from.append({'week': e.week_number, 'topic': e.topic, 'hw': e.homework})
-                                        db.session.delete(e)
-                                        
-                                    temp_to = []
-                                    for e in to_entries:
-                                        temp_to.append({'week': e.week_number, 'topic': e.topic, 'hw': e.homework})
-                                        db.session.delete(e)
-                                    
-                                    db.session.flush() 
-                                    
-                                    for e in temp_from:
-                                        db.session.add(WeeklyData(class_id=class_id, week_number=e['week'], day=t_day, period=t_period, topic=e['topic'], homework=e['hw']))
-                                    for e in temp_to:
-                                        db.session.add(WeeklyData(class_id=class_id, week_number=e['week'], day=f_day, period=f_period, topic=e['topic'], homework=e['hw']))
-                                        
-                                except Exception as e:
-                                    print(f"Error processing master swap: {e}")
-                            
-                            # Clean and insert master subjects
-                            db.session.query(Subject).filter_by(class_id=class_id).delete()
-                            db.session.flush()
-                            
-                            added_count = 0
-                            for day in DAYS_ORDER:
-                                for period in range(1, 9):
-                                    subject_name = request.form.get(f'fixed_{day}_{period}')
-                                    if subject_name is not None:
-                                        subject_name = subject_name.strip()
-                                        
-                                        # Force sync labels in WeeklyData for all weeks
-                                        db.session.query(WeeklyData).filter(
-                                            WeeklyData.class_id == class_id,
-                                            WeeklyData.day == day,
-                                            WeeklyData.period == period
-                                        ).update({"subject_name": subject_name}, synchronize_session=False)
-                                        
-                                        if subject_name:
-                                            # Explicitly set school_id=None to avoid constraint issues if default is missing
-                                            db.session.add(Subject(class_id=class_id, day=day, period=period, name=subject_name, school_id=None))
-                                            added_count += 1
-                            
-                            db.session.commit()
-                            log_activity('admin', f'تحديث الجدول الأساسي للفصل: {cls.name} ({added_count} مادة)')
-                            flash('تم حفظ الجدول الأساسي بنجاح')
-                        else:
-                            flash('الفصل غير موجود')
-                    except Exception as e:
-                        db.session.rollback()
-                        print(f"ERROR in save_fixed_schedule: {e}")
-                        import traceback
-                        traceback.print_exc()
-                        flash(f"حدث خطأ أثناء الحفظ: {str(e)}")
-                else:
-                    flash('يرجى اختيار فصل صحيح')
+                if cid and cid != 'None':
+                    class_id = int(cid)
+                    cls = db.session.get(Class, class_id)
+                    if cls:
+                        db.session.query(Subject).filter_by(class_id=class_id).delete()
+                        for day in DAYS_ORDER:
+                            for period in range(1, 9):
+                                name = request.form.get(f'fixed_{day}_{period}')
+                                if name:
+                                    db.session.add(Subject(class_id=class_id, day=day, period=period, name=name))
+                                    db.session.query(WeeklyData).filter_by(class_id=class_id, day=day, period=period).update({"subject_name": name})
+                        db.session.commit()
+                        flash('تم الحفظ بنجاح')
             elif action == 'update_settings':
                 for key in ['period1_date', 'period2_date', 'final_date', 'current_week', 'school_name']:
                     val = request.form.get(key)
-                    # We treat None or empty string as valid but handle it safely
                     s = db.session.get(Setting, key)
-                    if s:
-                        s.value = val if val is not None else ''
-                    else:
-                        db.session.add(Setting(key=key, value=val if val is not None else ''))
-                log_activity('admin', 'تحديث الإعدادات العامة')
+                    if s: s.value = val
+                    else: db.session.add(Setting(key=key, value=val))
                 db.session.commit()
-                flash('تم تحديث الإعدادات بنجاح')
+                flash('تم الحفظ')
             elif action == 'update_locked_days':
                 week = request.form.get('week_number')
-                if week and week.isdigit():
-                    week_int = int(week)
-                    locked_days = request.form.getlist('locked_days')
-                    # Batch delete existing locked days for this week
-                    db.session.execute(db.delete(LockedDay).where(LockedDay.week_number == week_int))
-                    for d in locked_days:
-                        db.session.add(LockedDay(week_number=week_int, day_name=d))
-                    log_activity('admin', f'تحديث الأيام المغلقة للأسبوع {week_int}')
+                if week:
+                    w_int = int(week)
+                    db.session.execute(db.delete(LockedDay).where(LockedDay.week_number == w_int))
+                    for d in request.form.getlist('locked_days'):
+                        db.session.add(LockedDay(week_number=w_int, day_name=d))
                     db.session.commit()
-                    flash(f'تم تحديث الأيام المغلقة للأسبوع {week_int}')
+                    flash('تم تحديث القفل')
             elif action == 'upload_logo':
                 file = request.files.get('logo')
                 if file:
-                    filename = secure_filename(file.filename)
-                    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                    fname = secure_filename(file.filename)
+                    file.save(os.path.join(app.config['UPLOAD_FOLDER'], fname))
                     s = db.session.get(Setting, 'school_logo')
-                    if s: s.value = filename
-                    else: db.session.add(Setting(key='school_logo', value=filename))
-                    log_activity('admin', 'تحديث شعار المدرسة')
+                    if s: s.value = fname
+                    else: db.session.add(Setting(key='school_logo', value=fname))
                     db.session.commit()
-                    flash('تم رفع الشعار بنجاح')
-            elif action == 'save_override_batch':
-                cid = request.form.get('class_id')
-                week = request.form.get('week')
-                if cid and week and str(cid).strip().lower() != 'none' and str(week).strip().lower() != 'none':
-                    try:
-                        class_id = int(cid)
-                        week_number = int(week)
-                        cls = db.session.get(Class, class_id)
-                        
-                        if cls:
-                            # Handle swaps if any
-                            swaps = request.form.getlist('swaps[]')
-                            for swap_json in swaps:
-                                swap = json.loads(swap_json)
-                                f_day, f_period = swap['from_day'], int(swap['from_period'])
-                                t_day, t_period = swap['to_day'], int(swap['to_period'])
-                                
-                                # Find both entries
-                                entry_from = WeeklyData.query.filter_by(class_id=class_id, week_number=week_number, day=f_day, period=f_period).first()
-                                entry_to = WeeklyData.query.filter_by(class_id=class_id, week_number=week_number, day=t_day, period=t_period).first()
-                                
-                                if entry_from or entry_to:
-                                    # Swap topics and homework
-                                    f_topic = entry_from.topic if entry_from else ''
-                                    f_hw = entry_from.homework if entry_from else ''
-                                    t_topic = entry_to.topic if entry_to else ''
-                                    t_hw = entry_to.homework if entry_to else ''
-                                    
-                                    if entry_from:
-                                        entry_from.topic = t_topic
-                                        entry_from.homework = t_hw
-                                    elif t_topic or t_hw:
-                                        new_entry_f = WeeklyData(class_id=class_id, week_number=week_number, day=f_day, period=f_period, topic=t_topic, homework=t_hw)
-                                        db.session.add(new_entry_f)
-                                        
-                                    if entry_to:
-                                        entry_to.topic = f_topic
-                                        entry_to.homework = f_hw
-                                    elif f_topic or f_hw:
-                                        new_entry_t = WeeklyData(class_id=class_id, week_number=week_number, day=t_day, period=t_period, topic=f_topic, homework=f_hw)
-                                        db.session.add(new_entry_t)
-
-                            # We update subject names while preserving topics and homework
-                            for day in DAYS_ORDER:
-                                for period in range(1, 9):
-                                    subject_name = request.form.get(f'override_{day}_{period}')
-                                    if subject_name is not None:
-                                        subject_name = subject_name.strip()
-                                        # Use filter instead of filter_by to be extra safe with SQLAlchemy versions
-                                        exists = WeeklyData.query.filter(WeeklyData.class_id == class_id, 
-                                                                       WeeklyData.week_number == week_number, 
-                                                                       WeeklyData.day == day, 
-                                                                       WeeklyData.period == period).first()
-                                        if exists:
-                                            exists.subject_name = subject_name
-                                        else:
-                                            if subject_name:
-                                                db.session.add(WeeklyData(class_id=class_id, week_number=week_number, day=day, period=period, subject_name=subject_name))
-                            
-                            log_activity('admin', f'تحديث التجاوزات الأسبوعية بالكامل (الأسبوع {week_number}, الفصل {cls.name})')
-                            db.session.commit()
-                            flash('تم حفظ التعديلات الأسبوعية بالكامل بنجاح')
-                        else:
-                            flash('الفصل غير موجود')
-                    except ValueError:
-                        flash('بيانات غير صالحة للحفظ')
-                else:
-                    flash('بيانات غير مكتملة للحفظ')
-            
-            db.session.commit()
+                    flash('تم رفع الشعار')
         except Exception as e:
             db.session.rollback()
-            print(f"CRITICAL ERROR in admin POST: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            flash(f"حدث خطأ أثناء الحفظ: {str(e)}")
-        
+            flash(f"خطأ: {e}")
         return redirect(url_for('admin', **request.args))
 
     grades = Grade.query.order_by(Grade.name).all()
     classes = Class.query.options(joinedload(Class.grade)).order_by(Class.name).all()
-    all_settings = Setting.query.all()
-    settings_dict = {s.key: s.value for s in all_settings}
-        
-    subjects = Subject.query.options(joinedload(Subject.class_obj).joinedload(Class.grade)).all()
+    settings = {s.key: s.value for s in Setting.query.all()}
     
-    sel_class_id = request.args.get('class_id')
-    sel_week = request.args.get('week', settings_dict.get('current_week', '1'))
-    
-    # Manage locked days view
-    locked_view_week = request.args.get('locked_week', settings_dict.get('current_week', '1'))
-    current_locked_days = []
-    if locked_view_week and locked_view_week.isdigit():
-        current_locked_days = [ld.day_name for ld in LockedDay.query.filter_by(week_number=int(locked_view_week)).all()]
-
-    # Manage fixed schedule view
     sel_fixed_class_id = request.args.get('fixed_class_id')
     fixed_schedule = {day: {p: '' for p in range(1, 9)} for day in DAYS_ORDER}
-    if sel_fixed_class_id and sel_fixed_class_id.isdigit():
-        existing_fixed = Subject.query.filter_by(class_id=int(sel_fixed_class_id)).all()
-        for s in existing_fixed:
+    if sel_fixed_class_id:
+        for s in Subject.query.filter_by(class_id=int(sel_fixed_class_id)).all():
             fixed_schedule[s.day][s.period] = s.name
 
+    sel_class_id = request.args.get('class_id')
+    sel_week = request.args.get('week', settings.get('current_week', '1'))
     schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
-    if sel_class_id and sel_class_id.isdigit():
-        fixed = Subject.query.filter_by(class_id=int(sel_class_id)).all()
-        for f in fixed: schedule[f.day][f.period]['subject_name'] = f.name
-        
-        weekly = WeeklyData.query.filter_by(class_id=int(sel_class_id), week_number=int(sel_week)).all()
-        for w in weekly:
-            day_data = schedule[w.day][w.period]
-            day_data.update({'topic': w.topic, 'homework': w.homework})
-            if w.subject_name:
-                day_data['subject_name'] = w.subject_name
+    if sel_class_id:
+        for f in Subject.query.filter_by(class_id=int(sel_class_id)).all():
+            schedule[f.day][f.period]['subject_name'] = f.name
+        for w in WeeklyData.query.filter_by(class_id=int(sel_class_id), week_number=int(sel_week)).all():
+            schedule[w.day][w.period].update({'topic': w.topic, 'homework': w.homework})
+            if w.subject_name: schedule[w.day][w.period]['subject_name'] = w.subject_name
 
-    current_week_int = int(settings_dict.get('current_week', '1'))
-    all_classes_count = len(classes)
-    completed_classes = []
-    pending_classes = []
-    
-    for c in classes:
-        # A class is considered "Completed" if it has at least one topic AND homework filled in the current week
-        has_data = WeeklyData.query.filter(
-            WeeklyData.class_id == c.id,
-            WeeklyData.week_number == current_week_int,
-            WeeklyData.topic != '',
-            WeeklyData.topic != None,
-            WeeklyData.homework != '',
-            WeeklyData.homework != None
-        ).first()
-        if has_data:
-            completed_classes.append(c)
-        else:
-            pending_classes.append(c)
-    
-    completion_percent = (len(completed_classes) / all_classes_count * 100) if all_classes_count > 0 else 0
-    
-    # Activity Logs
-    logs = ActivityLog.query.order_by(ActivityLog.timestamp.desc()).limit(50).all()
-    
-    return render_template('admin.html', grades=grades, classes=classes, settings=settings_dict, subjects=subjects, 
-                         days_ar=DAYS_AR, days_order=DAYS_ORDER, schedule=schedule, 
-                         selected_class_id=sel_class_id, selected_week=sel_week,
-                         locked_view_week=locked_view_week, current_locked_days=current_locked_days,
-                         sel_fixed_class_id=sel_fixed_class_id, fixed_schedule=fixed_schedule,
-                         completion_percent=round(completion_percent, 1),
-                         completed_classes=completed_classes, pending_classes=pending_classes,
-                         logs=logs)
+    l_week = request.args.get('locked_week', settings.get('current_week', '1'))
+    locked_days = [ld.day_name for ld in LockedDay.query.filter_by(week_number=int(l_week)).all()]
 
-@app.route('/admin/audit_report')
-@admin_required
-def audit_report_view():
-    week = request.args.get('week', db.session.get(Setting, 'current_week').value if db.session.get(Setting, 'current_week') else '1')
-    try:
-        week_int = int(week)
-    except ValueError:
-        week_int = 1
-        
-    classes_list = Class.query.options(joinedload(Class.grade)).all()
-    report = []
-    
-    for c in classes_list:
-        # Get all subjects for this class from Master Schedule
-        subjects = Subject.query.filter_by(class_id=c.id).all()
-        for s in subjects:
-            # Check for current week's completion
-            override = WeeklyData.query.filter_by(class_id=c.id, week_number=week_int, day=s.day, period=s.period).first()
-            
-            subject_name = override.subject_name if (override and override.subject_name) else s.name
-            topic = override.topic if override else ''
-            homework = override.homework if override else ''
-            
-            # Missing if topic OR homework is empty for a scheduled master subject
-            if not topic or not topic.strip() or not homework or not homework.strip():
-                report.append({
-                    'subject': subject_name,
-                    'grade': f"{c.grade.name} - {c.name}",
-                    'day': DAYS_AR.get(s.day, s.day),
-                    'period': s.period
-                })
-                
-    return render_template('audit_report.html', report=report, week=week_int)
+    c_week = int(settings.get('current_week', '1'))
+    completed = [c for c in classes if WeeklyData.query.filter(WeeklyData.class_id==c.id, WeeklyData.week_number==c_week, WeeklyData.topic!='', WeeklyData.topic!=None).first()]
+    pending = [c for c in classes if c not in completed]
+    percent = (len(completed)/len(classes)*100) if classes else 0
+    logs = ActivityLog.query.order_by(ActivityLog.timestamp.desc()).limit(20).all()
 
-@app.route('/admin/delete_date/<date_type>', methods=['POST'])
-@admin_required
-def delete_date(date_type):
-    if date_type in ['period1_date', 'period2_date', 'final_date']:
-        s = db.session.get(Setting, date_type)
-        if s:
-            s.value = ''
-            db.session.commit()
-            flash('تم حذف التاريخ بنجاح')
-    return redirect(url_for('admin'))
-
-@app.route('/')
-def index():
-    return redirect(url_for('teacher'))
-
-@app.route('/teacher', methods=['GET', 'POST'])
-def teacher():
-    grade_id = request.args.get('grade_id')
-    class_id = request.args.get('class_id')
-    week = request.args.get('week')
-    
-    all_settings = Setting.query.all()
-    settings_dict = {s.key: s.value for s in all_settings}
-    if not week: week = settings_dict.get('current_week', '1')
-    
-    # Locked days check
-    locked_days = []
-    if week and week.isdigit():
-        locked_days = [ld.day_name for ld in LockedDay.query.filter_by(week_number=int(week)).all()]
-    
-    if request.method == 'POST':
-        data = request.json
-        if class_id and class_id.isdigit() and week and week.isdigit():
-            week_int = int(week)
-            cls = db.session.get(Class, int(class_id))
-            for entry in data.get('entries', []):
-                if entry['day'] in locked_days:
-                    return jsonify({'status': 'error', 'message': f"هذا اليوم مغلق في هذا الأسبوع محدد من قبل الإدارة"}), 403
-                
-                exists = WeeklyData.query.filter_by(class_id=int(class_id), week_number=week_int, day=entry['day'], period=int(entry['period'])).first()
-                if exists:
-                    exists.topic = entry['topic']
-                    exists.homework = entry['homework']
-                else:
-                    db.session.add(WeeklyData(class_id=int(class_id), week_number=week_int, day=entry['day'], 
-                                            period=int(entry['period']), topic=entry['topic'], homework=entry['homework']))
-            
-            log_activity('teacher', f'تحديث دروس وواجبات الفصل: {cls.name if cls else class_id} (الأسبوع {week})')
-            db.session.commit()
-            return jsonify({'status': 'success'})
-        return jsonify({'status': 'error', 'message': 'Invalid input'}), 400
-
-    grades = Grade.query.all()
-    classes = Class.query.filter_by(grade_id=int(grade_id)).all() if grade_id and grade_id.isdigit() else []
-    
-    schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
-    if class_id and class_id.isdigit():
-        fixed = Subject.query.filter_by(class_id=int(class_id)).all()
-        for f in fixed: schedule[f.day][f.period]['subject_name'] = f.name
-        
-        weekly = WeeklyData.query.filter_by(class_id=int(class_id), week_number=int(week)).all()
-        for w in weekly:
-            day_data = schedule[w.day][w.period]
-            day_data.update({'topic': w.topic, 'homework': w.homework})
-            if w.subject_name:
-                day_data['subject_name'] = w.subject_name
-
-    return render_template('teacher.html', grades=grades, classes=classes, schedule=schedule, 
-                         selected_grade=grade_id, selected_class=class_id, selected_week=week, 
-                         days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings_dict,
-                         locked_days=locked_days)
-
-@app.route('/student/<int:grade_id>/<int:class_id>')
-def student(grade_id, class_id):
-    all_settings = Setting.query.all()
-    settings_dict = {s.key: s.value for s in all_settings}
-    week = settings_dict.get('current_week', '1')
-    
-    grade = db.session.get(Grade, grade_id)
-    cls = db.session.get(Class, class_id)
-    
-    if not grade or not cls:
-        return "الصف أو الفصل غير موجود", 404
-        
-    schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
-    fixed = Subject.query.filter_by(class_id=class_id).all()
-    for f in fixed: schedule[f.day][f.period]['subject_name'] = f.name
-    
-    weekly = WeeklyData.query.filter_by(class_id=class_id, week_number=int(week)).all()
-    for w in weekly:
-        day_data = schedule[w.day][w.period]
-        day_data.update({'topic': w.topic, 'homework': w.homework})
-        if w.subject_name:
-            day_data['subject_name'] = w.subject_name
-
-    return render_template('student.html', schedule=schedule, days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings_dict, 
-                         week=week, grade_name=grade.name if grade else '', class_name=cls.name if cls else '')
-
-# Audit report logic moved to audit_report_view
-
-def get_or_create_class(grade_name, class_name):
-    grade = Grade.query.filter_by(name=grade_name).first()
-    if not grade:
-        grade = Grade(name=grade_name)
-        db.session.add(grade)
-        db.session.flush()
-    
-    cls = Class.query.filter_by(name=class_name, grade_id=grade.id).first()
-    if not cls:
-        cls = Class(name=class_name, grade_id=grade.id)
-        db.session.add(cls)
-        db.session.flush()
-    return cls
+    return render_template('admin.html', grades=grades, classes=classes, settings=settings, days_ar=DAYS_AR, days_order=DAYS_ORDER,
+                         fixed_schedule=fixed_schedule, sel_fixed_class_id=sel_fixed_class_id, schedule=schedule,
+                         selected_class_id=sel_class_id, selected_week=sel_week, locked_view_week=l_week, current_locked_days=locked_days,
+                         completion_percent=round(percent,1), completed_classes=completed, pending_classes=pending, logs=logs)
 
 @app.route('/admin/upload_master', methods=['POST'])
 @admin_required
 def upload_master():
     file = request.files.get('file')
-    if not file or file.filename == '':
-        flash('لم يتم اختيار ملف')
-        return redirect(url_for('admin'))
-    
+    if not file: return redirect(url_for('admin'))
     try:
-        if file.filename.endswith('.csv'):
-            df = pd.read_csv(file)
+        if file.filename.endswith('.csv'): df = pd.read_csv(file); s_name = None
         else:
+            h_df = pd.read_excel(file, header=None, nrows=5); s_name = None
+            for row in h_df.values:
+                for cell in row:
+                    if isinstance(cell, str) and ('مدارس' in cell or 'ثقافة' in cell):
+                        s_name = cell.strip(); break
+                if s_name: break
+            if s_name:
+                s = db.session.get(Setting, 'school_name')
+                if s: s.value = s_name
+                else: db.session.add(Setting(key='school_name', value=s_name))
+                db.session.commit()
             df = pd.read_excel(file)
-        
         df.columns = [str(c).strip() for c in df.columns]
-        
-        class_col = df.columns[0]
-        for col in df.columns:
-            if any(kw in col.lower() for kw in ['صف', 'فصل', 'grade', 'class']):
-                class_col = col
-                break
-        
-        import_count = 0
+        c_col = next((c for c in df.columns if 'الصف' in c or 'الفصل' in c), None)
+        if not c_col: return redirect(url_for('admin'))
         for _, row in df.iterrows():
-            class_full_name = str(row[class_col]).strip()
-            if not class_full_name or class_full_name.lower() == 'nan':
-                continue
-                
-            cls = None
-            if ' - ' in class_full_name:
-                parts = class_full_name.split(' - ', 1)
-                g_name, c_name = parts[0].strip(), parts[1].strip()
-                cls = get_or_create_class(g_name, c_name)
-            else:
-                cls = Class.query.filter(Class.name == class_full_name).first()
-                if not cls:
-                    cls = get_or_create_class('عام', class_full_name)
-                
-            if not cls:
-                continue
-                
-            for col in df.columns:
-                if col == class_col: continue
-                
-                subject_name = str(row[col]).strip()
-                if not subject_name or subject_name.lower() == 'nan':
-                    subject_name = "" 
-                
-                target_day = None
-                target_period = None
-                
-                for day_en, day_ar in DAYS_AR.items():
-                    if day_ar in col or day_en.lower() in col.lower():
-                        target_day = day_en
-                        break
-                
-                import re
-                nums = re.findall(r'\d+', col)
-                if nums:
-                    target_period = int(nums[0])
-                
-                if target_day and target_period and 1 <= target_period <= 8:
-                    db.session.query(Subject).filter_by(class_id=cls.id, day=target_day, period=target_period).delete()
-                    if subject_name:
-                        db.session.add(Subject(class_id=cls.id, day=target_day, period=target_period, name=subject_name))
-                    db.session.query(WeeklyData).filter_by(class_id=cls.id, day=target_day, period=target_period).update({"subject_name": subject_name})
-                    import_count += 1
-                
+            info = str(row[c_col]).strip()
+            if '-' in info:
+                parts = info.split('-')
+                cls = get_or_create_class(parts[0].strip(), parts[1].strip())
+                for col in df.columns:
+                    day = next((en for en, ar in DAYS_AR.items() if ar in col), None)
+                    p_match = re.search(r'(\d+)', col)
+                    if day and p_match:
+                        p = int(p_match.group(1))
+                        sub = str(row[col]).strip() if pd.notna(row[col]) else ''
+                        db.session.query(Subject).filter_by(class_id=cls.id, day=day, period=p).delete()
+                        if sub and sub.lower() != 'nan':
+                            db.session.add(Subject(class_id=cls.id, day=day, period=p, name=sub))
+                        db.session.query(WeeklyData).filter_by(class_id=cls.id, day=day, period=p).update({"subject_name": sub})
         db.session.commit()
-        log_activity('admin', f'تم استيراد الجدول من Excel ({import_count} حصة)')
-        flash(f'تم استيراد {import_count} حصة بنجاح وتحديث الصفوف والفصول')
-        
+        flash('تم الاستيراد بنجاح')
     except Exception as e:
         db.session.rollback()
-        print(f'Excel Upload Error: {e}')
-        flash(f'خطأ في معالجة الملف: {str(e)}')
-        
-    return redirect(url_for('admin'))
-    
-    try:
-        if file.filename.endswith('.csv'):
-            df = pd.read_csv(file)
-        else:
-            df = pd.read_excel(file)
-        
-        # Mapping Logic: Rows are Grade/Class, Columns are Day/Period
-        # Expected Format: First column is Grade/Class name
-        # Other columns should match Day_Period pattern or be identified by order
-        
-        # Clean column names
-        df.columns = [str(c).strip() for c in df.columns]
-        
-        # Find the class column (usually the first one or named 'الصف', 'الفصل', 'Grade', 'Class')
-        class_col = df.columns[0]
-        for col in df.columns:
-            if any(kw in col for kw in ['صف', 'فصل', 'grade', 'class']):
-                class_col = col
-                break
-        
-        import_count = 0
-        for _, row in df.iterrows():
-            class_full_name = str(row[class_col]).strip()
-            if not class_full_name or class_full_name.lower() == 'nan':
-                continue
-                
-            # Try to find class. Format could be "Grade - Class" or just "Class"
-            cls = None
-            if ' - ' in class_full_name:
-                g_name, c_name = class_full_name.split(' - ', 1)
-                cls = Class.query.join(Grade).filter(Grade.name == g_name, Class.name == c_name).first()
-            
-            if not cls:
-                cls = Class.query.filter(Class.name == class_full_name).first()
-                
-            if not cls:
-                # If class doesn't exist, skip or handle (here we skip for safety)
-                continue
-                
-            # Map periods
-            # We look for columns that might indicate day and period
-            # Common patterns: "الأحد 1", "Sunday 1", "1", etc.
-            for col in df.columns:
-                if col == class_col: continue
-                
-                subject_name = str(row[col]).strip()
-                if not subject_name or subject_name.lower() == 'nan':
-                    subject_name = "" # Empty slot
-                
-                # Try to parse day and period from column name
-                target_day = None
-                target_period = None
-                
-                # Check for day name in column
-                for day_en, day_ar in DAYS_AR.items():
-                    if day_ar in col or day_en.lower() in col.lower():
-                        target_day = day_en
-                        break
-                
-                # Check for period number in column
-                import re
-                nums = re.findall(r'\d+', col)
-                if nums:
-                    target_period = int(nums[0])
-                
-                if target_day and target_period and 1 <= target_period <= 8:
-                    # Clear existing and add new
-                    db.session.query(Subject).filter_by(class_id=cls.id, day=target_day, period=target_period).delete()
-                    if subject_name:
-                        db.session.add(Subject(class_id=cls.id, day=target_day, period=target_period, name=subject_name))
-                    # Sync subject_name in WeeklyData for existing entries
-                    db.session.query(WeeklyData).filter_by(class_id=cls.id, day=target_day, period=target_period).update({"subject_name": subject_name})
-                    import_count += 1
-                
-        db.session.commit()
-        log_activity('admin', f'تم استيراد الجدول من Excel ({import_count} حصة)')
-        flash(f'تم استيراد {import_count} حصة بنجاح')
-        
-    except Exception as e:
-        db.session.rollback()
-        print(f"Excel Upload Error: {e}")
-        flash(f'خطأ أثناء معالجة الملف: {str(e)}')
-        
+        flash(f"خطأ: {e}")
     return redirect(url_for('admin'))
 
+@app.route('/teacher', methods=['GET', 'POST'])
+def teacher():
+    settings = {s.key: s.value for s in Setting.query.all()}
+    g_id = request.args.get('grade_id')
+    c_id = request.args.get('class_id')
+    week = request.args.get('week', settings.get('current_week', '1'))
+    
+    if request.method == 'POST':
+        data = request.json
+        if c_id and week:
+            for e in data.get('entries', []):
+                w = WeeklyData.query.filter_by(class_id=int(c_id), week_number=int(week), day=e['day'], period=int(e['period'])).first()
+                if not w:
+                    w = WeeklyData(class_id=int(c_id), week_number=int(week), day=e['day'], period=int(e['period']))
+                    db.session.add(w)
+                w.topic = e.get('topic', '')
+                w.homework = e.get('homework', '')
+            db.session.commit()
+            return jsonify({'status': 'success'})
+        return jsonify({'status': 'error'})
+
+    grades = Grade.query.all()
+    classes = Class.query.filter_by(grade_id=int(g_id)).all() if g_id else []
+    schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
+    if c_id:
+        for f in Subject.query.filter_by(class_id=int(c_id)).all():
+            schedule[f.day][f.period]['subject_name'] = f.name
+        for w in WeeklyData.query.filter_by(class_id=int(c_id), week_number=int(week)).all():
+            schedule[w.day][w.period].update({'topic': w.topic, 'homework': w.homework})
+            if w.subject_name: schedule[w.day][w.period]['subject_name'] = w.subject_name
+    
+    locked = [ld.day_name for ld in LockedDay.query.filter_by(week_number=int(week)).all()]
+    return render_template('teacher.html', grades=grades, classes=classes, schedule=schedule, selected_grade=g_id, selected_class=c_id, selected_week=week, days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings, locked_days=locked)
+
+@app.route('/student/<int:g_id>/<int:c_id>')
+def student(g_id, c_id):
+    settings = {s.key: s.value for s in Setting.query.all()}
+    week = settings.get('current_week', '1')
+    grade = db.session.get(Grade, g_id)
+    cls = db.session.get(Class, c_id)
+    schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
+    for f in Subject.query.filter_by(class_id=c_id).all():
+        schedule[f.day][f.period]['subject_name'] = f.name
+    for w in WeeklyData.query.filter_by(class_id=c_id, week_number=int(week)).all():
+        schedule[w.day][w.period].update({'topic': w.topic, 'homework': w.homework})
+        if w.subject_name: schedule[w.day][w.period]['subject_name'] = w.subject_name
+    return render_template('student.html', schedule=schedule, days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings, week=week, grade_name=grade.name if grade else '', class_name=cls.name if cls else '')
+
+@app.route('/admin/audit_report')
+@admin_required
+def audit_report():
+    week = request.args.get('week', '1')
+    classes = Class.query.options(joinedload(Class.grade)).all()
+    report = []
+    for c in classes:
+        missing = WeeklyData.query.filter(WeeklyData.class_id==c.id, WeeklyData.week_number==int(week), (WeeklyData.topic=='') | (WeeklyData.topic==None) | (WeeklyData.homework=='') | (WeeklyData.homework==None)).all()
+        report.append({'class': c, 'missing': len(missing)})
+    return render_template('audit_report.html', report=report, week=week)
+
+@app.route('/admin/delete_date/<key>', methods=['POST'])
+@admin_required
+def delete_date(key):
+    s = db.session.get(Setting, key)
+    if s: s.value = ''; db.session.commit()
+    return redirect(url_for('admin'))
+
+with app.app_context():
+    db.create_all()
+    if not Setting.query.get('admin_password'):
+        db.session.add(Setting(key='admin_password', value='fast490'))
+        db.session.commit()
+
 if __name__ == '__main__':
-    with app.app_context():
-        try:
-            # We use create_all() which only creates tables if they don't exist
-            # It does NOT drop existing data.
-            db.create_all()
-            print("Successfully connected to PostgreSQL and initialized schema.")
-        except Exception as e:
-            print(f"Error connecting to PostgreSQL: {e}")
-    # If using in-memory SQLite, recreate tables
-    with app.app_context():
-        db.create_all()
     app.run(host='0.0.0.0', port=5000, debug=True)
