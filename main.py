@@ -310,6 +310,9 @@ def upload_master():
         else:
             df = pd.read_excel(file, skiprows=2, header=None)
         
+        # Clean the entire dataframe: remove newlines and strip whitespace
+        df = df.applymap(lambda x: str(x).replace('\n', ' ').strip() if pd.notnull(x) else '')
+        
         # Sunday: 1-8 (indices 1-8), Monday: 9-16, Tuesday: 17-24, Wednesday: 25-32, Thursday: 33-40
         day_mappings = {
             'Sunday': range(1, 9),
@@ -324,8 +327,8 @@ def upload_master():
         
         import_count = 0
         for _, row in df.iterrows():
-            class_info = str(row[0]).strip().replace('\n', ' ')
-            if not class_info or class_info.lower() == 'nan': continue
+            class_info = str(row[0])
+            if not class_info or class_info.lower() in ['nan', 'None', '']: continue
             
             if ' - ' in class_info:
                 parts = class_info.split(' - ')
@@ -339,18 +342,18 @@ def upload_master():
                 for idx, col_idx in enumerate(col_range):
                     period_num = idx + 1
                     if col_idx < len(row):
-                        subject_name = str(row[col_idx]).strip().replace('\n', ' ')
-                        if subject_name and subject_name.lower() != 'nan':
-                            # Update Master
+                        subject_name = str(row[col_idx])
+                        if subject_name and subject_name.lower() not in ['nan', 'None', '']:
+                            # Update Master (UPSERT logic)
                             db.session.query(Subject).filter_by(class_id=cls.id, day=day_en, period=period_num).delete()
-                            db.session.add(Subject(class_id=cls.id, day=day_en, period=period_num, name=subject_name))
+                            db.session.add(Subject(class_id=cls.id, day=day_en, period=period_num, name=subject_name, school_id=1))
                             
                             # Sync WeeklyData
                             w_entry = WeeklyData.query.filter_by(class_id=cls.id, week_number=current_week, day=day_en, period=period_num).first()
                             if w_entry:
                                 w_entry.subject_name = subject_name
                             else:
-                                db.session.add(WeeklyData(class_id=cls.id, week_number=current_week, day=day_en, period=period_num, subject_name=subject_name))
+                                db.session.add(WeeklyData(class_id=cls.id, week_number=current_week, day=day_en, period=period_num, subject_name=subject_name, school_id=1))
                             
                             import_count += 1
         
