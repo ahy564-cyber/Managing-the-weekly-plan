@@ -72,6 +72,7 @@ class LockedDay(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     week_number = db.Column(db.Integer, nullable=False)
     day_name = db.Column(db.String(20), nullable=False)
+    school_id = db.Column(db.Integer, nullable=True)
     __table_args__ = (db.UniqueConstraint('week_number', 'day_name', name='_week_day_uc'),)
 
 class ActivityLog(db.Model):
@@ -240,7 +241,7 @@ def admin():
                     w_int = int(week)
                     db.session.execute(db.delete(LockedDay).where(LockedDay.week_number == w_int))
                     for d in request.form.getlist('locked_days'):
-                        db.session.add(LockedDay(week_number=w_int, day_name=d))
+                        db.session.add(LockedDay(week_number=w_int, day_name=d, school_id=1))
                     db.session.commit()
                     flash('تم تحديث القفل')
             elif action == 'save_override_batch':
