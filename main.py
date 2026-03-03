@@ -443,6 +443,15 @@ def delete_date(key):
 with app.app_context():
     db.create_all()
     try:
+        db.session.execute(db.text(
+            "INSERT INTO school (id, name, slug, admin_username, password) "
+            "VALUES (1, 'مدارس الثقافة الرقمية', 'digital-culture', 'admin', 'admin') "
+            "ON CONFLICT (id) DO NOTHING"
+        ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+    try:
         admin_pass = db.session.get(Setting, 'admin_password')
         if not admin_pass:
             db.session.add(Setting(key='admin_password', value='fast490'))
