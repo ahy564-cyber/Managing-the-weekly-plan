@@ -443,23 +443,60 @@ def swap_schedule():
         dst = Subject.query.filter_by(class_id=class_id, day=to_day, period=to_period, school_id=1).first()
         src_name = src.name if src else ''
         dst_name = dst.name if dst else ''
-        if src:
-            src.name = dst_name
-        elif dst_name:
-            db.session.add(Subject(class_id=class_id, day=from_day, period=from_period, name=dst_name, school_id=1))
-        if dst:
-            dst.name = src_name
-        elif src_name:
+
+        if src and dst:
+            src.name, dst.name = dst_name, src_name
+        elif src and not dst:
             db.session.add(Subject(class_id=class_id, day=to_day, period=to_period, name=src_name, school_id=1))
-        if not src_name and src:
             db.session.delete(src)
-        if not dst_name and dst:
+        elif dst and not src:
+            db.session.add(Subject(class_id=class_id, day=from_day, period=from_period, name=dst_name, school_id=1))
             db.session.delete(dst)
+
+        src_wd_all = WeeklyData.query.filter_by(class_id=class_id, day=from_day, period=from_period, school_id=1).all()
+        dst_wd_all = WeeklyData.query.filter_by(class_id=class_id, day=to_day, period=to_period, school_id=1).all()
+        src_map = {w.week_number: w for w in src_wd_all}
+        dst_map = {w.week_number: w for w in dst_wd_all}
+        all_weeks = set(list(src_map.keys()) + list(dst_map.keys()))
+        for wk in all_weeks:
+            sw = src_map.get(wk)
+            dw = dst_map.get(wk)
+            s_subj = sw.subject_name if sw else ''
+            s_topic = sw.topic if sw else ''
+            s_hw = sw.homework if sw else ''
+            d_subj = dw.subject_name if dw else ''
+            d_topic = dw.topic if dw else ''
+            d_hw = dw.homework if dw else ''
+            if sw and dw:
+                sw.subject_name, sw.topic, sw.homework = d_subj, d_topic, d_hw
+                dw.subject_name, dw.topic, dw.homework = s_subj, s_topic, s_hw
+            elif sw and not dw:
+                db.session.add(WeeklyData(class_id=class_id, week_number=wk, day=to_day, period=to_period,
+                                           subject_name=s_subj, topic=s_topic, homework=s_hw, school_id=1))
+                db.session.delete(sw)
+            elif dw and not sw:
+                db.session.add(WeeklyData(class_id=class_id, week_number=wk, day=from_day, period=from_period,
+                                           subject_name=d_subj, topic=d_topic, homework=d_hw, school_id=1))
+                db.session.delete(dw)
+
         db.session.commit()
-        return jsonify({'success': True, 'message': 'تم نقل المادة بنجاح في الجدول الأساسي'})
+        return jsonify({'success': True, 'message': 'تم نقل المادة وجميع بيانات الدروس بنجاح'})
 
     elif swap_type == 'weekly':
         week_number = int(data.get('week_number'))
+        src_subj = Subject.query.filter_by(class_id=class_id, day=from_day, period=from_period, school_id=1).first()
+        dst_subj = Subject.query.filter_by(class_id=class_id, day=to_day, period=to_period, school_id=1).first()
+        s_name = src_subj.name if src_subj else ''
+        d_name = dst_subj.name if dst_subj else ''
+        if src_subj and dst_subj:
+            src_subj.name, dst_subj.name = d_name, s_name
+        elif src_subj and not dst_subj:
+            db.session.add(Subject(class_id=class_id, day=to_day, period=to_period, name=s_name, school_id=1))
+            db.session.delete(src_subj)
+        elif dst_subj and not src_subj:
+            db.session.add(Subject(class_id=class_id, day=from_day, period=from_period, name=d_name, school_id=1))
+            db.session.delete(dst_subj)
+
         src_wd = WeeklyData.query.filter_by(class_id=class_id, week_number=week_number, day=from_day, period=from_period, school_id=1).first()
         dst_wd = WeeklyData.query.filter_by(class_id=class_id, week_number=week_number, day=to_day, period=to_period, school_id=1).first()
         src_subject = src_wd.subject_name if src_wd else ''
@@ -468,20 +505,19 @@ def swap_schedule():
         dst_subject = dst_wd.subject_name if dst_wd else ''
         dst_topic = dst_wd.topic if dst_wd else ''
         dst_homework = dst_wd.homework if dst_wd else ''
-        if src_wd:
-            src_wd.subject_name = dst_subject
-            src_wd.topic = dst_topic
-            src_wd.homework = dst_homework
-        elif dst_subject or dst_topic or dst_homework:
-            db.session.add(WeeklyData(class_id=class_id, week_number=week_number, day=from_day, period=from_period,
-                                       subject_name=dst_subject, topic=dst_topic, homework=dst_homework, school_id=1))
-        if dst_wd:
-            dst_wd.subject_name = src_subject
-            dst_wd.topic = src_topic
-            dst_wd.homework = src_homework
-        elif src_subject or src_topic or src_homework:
+
+        if src_wd and dst_wd:
+            src_wd.subject_name, src_wd.topic, src_wd.homework = dst_subject, dst_topic, dst_homework
+            dst_wd.subject_name, dst_wd.topic, dst_wd.homework = src_subject, src_topic, src_homework
+        elif src_wd and not dst_wd:
             db.session.add(WeeklyData(class_id=class_id, week_number=week_number, day=to_day, period=to_period,
                                        subject_name=src_subject, topic=src_topic, homework=src_homework, school_id=1))
+            db.session.delete(src_wd)
+        elif dst_wd and not src_wd:
+            db.session.add(WeeklyData(class_id=class_id, week_number=week_number, day=from_day, period=from_period,
+                                       subject_name=dst_subject, topic=dst_topic, homework=dst_homework, school_id=1))
+            db.session.delete(dst_wd)
+
         db.session.commit()
         return jsonify({'success': True, 'message': 'تم نقل بيانات الدرس بالكامل بنجاح (المادة + التحضير + الواجب)'})
 
