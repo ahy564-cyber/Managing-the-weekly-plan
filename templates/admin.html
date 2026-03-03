@@ -158,7 +158,7 @@
         </table>
     </div>
 
-        <div id="toast" style="visibility: hidden; min-width: 250px; background-color: #059669; color: #fff; text-align: center; border-radius: 8px; padding: 16px; position: fixed; z-index: 1000; left: 50%; bottom: 30px; transform: translateX(-50%); font-weight: 700;">تم الحفظ بنجاح ✓</div>
+        <div id="toast" style="visibility: hidden; min-width: 280px; background-color: #059669; color: #fff; text-align: center; border-radius: 8px; padding: 16px 24px; position: fixed; z-index: 1000; left: 50%; bottom: 30px; transform: translateX(-50%); font-weight: 700; box-shadow: 0 4px 12px rgba(0,0,0,0.2); transition: opacity 0.4s ease;">تم الحفظ بنجاح ✓</div>
         <div class="card">
         <h2>إدارة التجاوز الأسبوعي (Full Batch Grid)</h2>
         <div class="flex mb-2">
@@ -442,6 +442,18 @@
             ev.preventDefault();
         }
 
+        function showToast(message, isSuccess) {
+            var toast = document.getElementById('toast');
+            toast.innerText = message;
+            toast.style.backgroundColor = isSuccess ? '#059669' : '#dc2626';
+            toast.style.visibility = 'visible';
+            toast.style.opacity = '1';
+            setTimeout(function() {
+                toast.style.opacity = '0';
+                setTimeout(function() { toast.style.visibility = 'hidden'; toast.style.opacity = '1'; }, 400);
+            }, 3000);
+        }
+
         function drag(ev) {
             ev.dataTransfer.setData("text", ev.target.name);
             ev.dataTransfer.setData("day", ev.target.dataset.day);
@@ -455,34 +467,50 @@
             var sourceDay = ev.dataTransfer.getData("day");
             var sourcePeriod = ev.dataTransfer.getData("period");
             var sourceValue = ev.dataTransfer.getData("value");
-            
+
             var target = ev.target;
             if (target.tagName === 'INPUT') {
                 var targetDay = target.dataset.day;
                 var targetPeriod = target.dataset.period;
                 var targetValue = target.value;
-                
-                // Swap values in UI
+
+                if (sourceDay === targetDay && sourcePeriod === targetPeriod) return;
+
+                var classId = '{{ selected_class_id }}';
+                var weekNum = '{{ selected_week }}';
+                if (!classId || classId === 'None') return;
+
                 target.value = sourceValue;
                 document.getElementsByName(sourceName)[0].value = targetValue;
-                
-                // We also need to notify the server about the topic/homework move
-                // but since this is a batch save form, the user will click 'Save'
-                // and we should handle the topic/homework swap on the server side
-                // during the save_override_batch action.
-                
-                // Add hidden inputs to track the swap for the server
-                var form = target.closest('form');
-                var swapInput = document.createElement('input');
-                swapInput.type = 'hidden';
-                swapInput.name = 'swaps[]';
-                swapInput.value = JSON.stringify({
-                    from_day: sourceDay,
-                    from_period: sourcePeriod,
-                    to_day: targetDay,
-                    to_period: targetPeriod
+
+                fetch('/admin/swap_schedule', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        type: 'weekly',
+                        class_id: classId,
+                        week_number: weekNum,
+                        from_day: sourceDay,
+                        from_period: sourcePeriod,
+                        to_day: targetDay,
+                        to_period: targetPeriod
+                    })
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.success) {
+                        showToast('تم نقل بيانات الدرس بالكامل بنجاح (المادة + التحضير + الواجب) ✓', true);
+                    } else {
+                        showToast('خطأ: ' + data.message, false);
+                        target.value = targetValue;
+                        document.getElementsByName(sourceName)[0].value = sourceValue;
+                    }
+                })
+                .catch(function() {
+                    showToast('خطأ في الاتصال بالخادم', false);
+                    target.value = targetValue;
+                    document.getElementsByName(sourceName)[0].value = sourceValue;
                 });
-                form.appendChild(swapInput);
             }
         }
 
@@ -492,29 +520,48 @@
             var sourceDay = ev.dataTransfer.getData("day");
             var sourcePeriod = ev.dataTransfer.getData("period");
             var sourceValue = ev.dataTransfer.getData("value");
-            
+
             var target = ev.target;
             if (target.tagName === 'INPUT') {
                 var targetDay = target.dataset.day;
                 var targetPeriod = target.dataset.period;
                 var targetValue = target.value;
-                
-                            // Track master swap for server
-                            var form = target.closest('form');
-                            var swapInput = document.createElement('input');
-                            swapInput.type = 'hidden';
-                            swapInput.name = 'master_swaps[]';
-                            swapInput.value = JSON.stringify({
-                                from_day: sourceDay,
-                                from_period: sourcePeriod,
-                                to_day: targetDay,
-                                to_period: targetPeriod
-                            });
-                            form.appendChild(swapInput);
-                            
-                            // Swap values in UI
-                            target.value = sourceValue;
-                            document.getElementsByName(sourceName)[0].value = targetValue;
+
+                if (sourceDay === targetDay && sourcePeriod === targetPeriod) return;
+
+                var classId = '{{ sel_fixed_class_id }}';
+                if (!classId || classId === 'None') return;
+
+                target.value = sourceValue;
+                document.getElementsByName(sourceName)[0].value = targetValue;
+
+                fetch('/admin/swap_schedule', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        type: 'master',
+                        class_id: classId,
+                        from_day: sourceDay,
+                        from_period: sourcePeriod,
+                        to_day: targetDay,
+                        to_period: targetPeriod
+                    })
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.success) {
+                        showToast('تم نقل المادة بنجاح في الجدول الأساسي ✓', true);
+                    } else {
+                        showToast('خطأ: ' + data.message, false);
+                        target.value = targetValue;
+                        document.getElementsByName(sourceName)[0].value = sourceValue;
+                    }
+                })
+                .catch(function() {
+                    showToast('خطأ في الاتصال بالخادم', false);
+                    target.value = targetValue;
+                    document.getElementsByName(sourceName)[0].value = sourceValue;
+                });
             }
         }
 

@@ -243,6 +243,22 @@ def admin():
                         db.session.add(LockedDay(week_number=w_int, day_name=d))
                     db.session.commit()
                     flash('تم تحديث القفل')
+            elif action == 'save_override_batch':
+                cid = request.form.get('class_id')
+                week = request.form.get('week')
+                if cid and cid != 'None' and week:
+                    class_id = int(cid)
+                    week_num = int(week)
+                    for day in DAYS_ORDER:
+                        for period in range(1, 9):
+                            subject_name = request.form.get(f'override_{day}_{period}', '')
+                            wd = WeeklyData.query.filter_by(class_id=class_id, week_number=week_num, day=day, period=period).first()
+                            if wd:
+                                wd.subject_name = subject_name
+                            elif subject_name:
+                                db.session.add(WeeklyData(class_id=class_id, week_number=week_num, day=day, period=period, subject_name=subject_name, topic='', homework='', school_id=1))
+                    db.session.commit()
+                    flash('تم حفظ التعديلات الأسبوعية بنجاح')
             elif action == 'upload_logo':
                 file = request.files.get('logo')
                 if file:
@@ -410,6 +426,66 @@ def teacher():
     
     locked = [ld.day_name for ld in LockedDay.query.filter_by(week_number=int(week)).all()]
     return render_template('teacher.html', grades=grades, classes=classes, schedule=schedule, selected_grade=g_id, selected_class=c_id, selected_week=week, days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings, locked_days=locked)
+
+@app.route('/admin/swap_schedule', methods=['POST'])
+@admin_required
+def swap_schedule():
+    data = request.get_json()
+    swap_type = data.get('type')
+    class_id = int(data.get('class_id'))
+    from_day = data.get('from_day')
+    from_period = int(data.get('from_period'))
+    to_day = data.get('to_day')
+    to_period = int(data.get('to_period'))
+
+    if swap_type == 'master':
+        src = Subject.query.filter_by(class_id=class_id, day=from_day, period=from_period, school_id=1).first()
+        dst = Subject.query.filter_by(class_id=class_id, day=to_day, period=to_period, school_id=1).first()
+        src_name = src.name if src else ''
+        dst_name = dst.name if dst else ''
+        if src:
+            src.name = dst_name
+        elif dst_name:
+            db.session.add(Subject(class_id=class_id, day=from_day, period=from_period, name=dst_name, school_id=1))
+        if dst:
+            dst.name = src_name
+        elif src_name:
+            db.session.add(Subject(class_id=class_id, day=to_day, period=to_period, name=src_name, school_id=1))
+        if not src_name and src:
+            db.session.delete(src)
+        if not dst_name and dst:
+            db.session.delete(dst)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'تم نقل المادة بنجاح في الجدول الأساسي'})
+
+    elif swap_type == 'weekly':
+        week_number = int(data.get('week_number'))
+        src_wd = WeeklyData.query.filter_by(class_id=class_id, week_number=week_number, day=from_day, period=from_period, school_id=1).first()
+        dst_wd = WeeklyData.query.filter_by(class_id=class_id, week_number=week_number, day=to_day, period=to_period, school_id=1).first()
+        src_subject = src_wd.subject_name if src_wd else ''
+        src_topic = src_wd.topic if src_wd else ''
+        src_homework = src_wd.homework if src_wd else ''
+        dst_subject = dst_wd.subject_name if dst_wd else ''
+        dst_topic = dst_wd.topic if dst_wd else ''
+        dst_homework = dst_wd.homework if dst_wd else ''
+        if src_wd:
+            src_wd.subject_name = dst_subject
+            src_wd.topic = dst_topic
+            src_wd.homework = dst_homework
+        elif dst_subject or dst_topic or dst_homework:
+            db.session.add(WeeklyData(class_id=class_id, week_number=week_number, day=from_day, period=from_period,
+                                       subject_name=dst_subject, topic=dst_topic, homework=dst_homework, school_id=1))
+        if dst_wd:
+            dst_wd.subject_name = src_subject
+            dst_wd.topic = src_topic
+            dst_wd.homework = src_homework
+        elif src_subject or src_topic or src_homework:
+            db.session.add(WeeklyData(class_id=class_id, week_number=week_number, day=to_day, period=to_period,
+                                       subject_name=src_subject, topic=src_topic, homework=src_homework, school_id=1))
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'تم نقل بيانات الدرس بالكامل بنجاح (المادة + التحضير + الواجب)'})
+
+    return jsonify({'success': False, 'message': 'نوع غير معروف'}), 400
 
 @app.route('/student/<int:g_id>/<int:c_id>')
 def student(g_id, c_id):

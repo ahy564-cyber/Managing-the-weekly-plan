@@ -14,7 +14,7 @@ Preferred communication style: Simple, everyday language.
 - **Python Flask Backend** (`main.py`) - Main application logic
   - Uses PostgreSQL database via SQLAlchemy ORM
   - Serves HTML templates from `templates/` directory
-  - Routes: `/`, `/login`, `/admin`, `/teacher`, `/student/<g_id>/<c_id>`, `/admin/upload_master`, `/admin/audit_report`
+  - Routes: `/`, `/login`, `/admin`, `/teacher`, `/student/<g_id>/<c_id>`, `/admin/upload_master`, `/admin/audit_report`, `/admin/swap_schedule` (AJAX)
 
 - **Node.js Proxy** (`server/index.ts`) - HTTP proxy on port 5000
   - Proxies all requests to Flask running on port 5001
@@ -51,9 +51,11 @@ Tables defined in `main.py`:
 
 ### Key Features
 - **Edit Grade/Class names**: Inline edit with save button in admin panel
+- **Drag & Drop (Deep Move)**: AJAX-based swap via `/admin/swap_schedule` — moves subject_name + topic + homework together; works for both master schedule and weekly override grids; shows toast confirmation
+- **Weekly Achievement Dashboard**: Shows completion % + filled/total periods counter; filters by school_id=1
 - **Teacher view**: Subject names shown as read-only tags, teachers only edit topic/homework
 - **Day locking**: Admin can lock specific days per week to prevent teacher edits
-- **Audit report**: Shows classes missing topic/homework entries
+- **Audit report**: Shows individual missing entries per subject/day/period with school_id=1 filter
 
 ## Running the Project
 
