@@ -305,7 +305,7 @@ def upload_master():
             df = pd.read_excel(file, skiprows=2, header=None)
         
         # Clean data: remove newlines and strip whitespace
-        df = df.applymap(lambda x: str(x).replace('\n', ' ').strip() if pd.notnull(x) else '')
+        df = df.map(lambda x: str(x).replace('\n', ' ').strip() if pd.notnull(x) else '')
         
         # Every 8 columns is a new day (1-8 Sun, 9-16 Mon, etc.)
         day_mappings = {
@@ -426,6 +426,8 @@ def student(g_id, c_id):
 @admin_required
 def audit_report():
     week = request.args.get('week', '1')
+    if not week or not week.strip():
+        week = '1'
     classes = Class.query.options(joinedload(Class.grade)).all()
     report = []
     for c in classes:
