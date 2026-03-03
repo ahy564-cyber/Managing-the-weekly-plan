@@ -282,15 +282,18 @@ def admin():
     locked_days = [ld.day_name for ld in LockedDay.query.filter_by(week_number=int(l_week)).all()]
 
     c_week = int(settings.get('current_week', '1'))
-    completed = [c for c in classes if WeeklyData.query.filter(WeeklyData.class_id==c.id, WeeklyData.week_number==c_week, WeeklyData.topic!='', WeeklyData.topic!=None).first()]
+    completed = [c for c in classes if WeeklyData.query.filter(WeeklyData.class_id==c.id, WeeklyData.week_number==c_week, WeeklyData.school_id==1, WeeklyData.topic!='', WeeklyData.topic!=None).first()]
     pending = [c for c in classes if c not in completed]
     percent = (len(completed)/len(classes)*100) if classes else 0
+    total_periods = Subject.query.filter_by(school_id=1).count()
+    filled_periods = WeeklyData.query.filter(WeeklyData.week_number==c_week, WeeklyData.school_id==1, WeeklyData.topic!='', WeeklyData.topic!=None).count()
     logs = ActivityLog.query.order_by(ActivityLog.timestamp.desc()).limit(20).all()
 
     return render_template('admin.html', grades=grades, classes=classes, settings=settings, days_ar=DAYS_AR, days_order=DAYS_ORDER,
                          fixed_schedule=fixed_schedule, sel_fixed_class_id=sel_fixed_class_id, schedule=schedule,
                          selected_class_id=sel_class_id, selected_week=sel_week, locked_view_week=l_week, current_locked_days=locked_days,
-                         completion_percent=round(percent,1), completed_classes=completed, pending_classes=pending, logs=logs)
+                         completion_percent=round(percent,1), completed_classes=completed, pending_classes=pending, logs=logs,
+                         total_periods=total_periods, filled_periods=filled_periods)
 
 @app.route('/admin/upload_master', methods=['POST'])
 @admin_required
@@ -431,8 +434,16 @@ def audit_report():
     classes = Class.query.options(joinedload(Class.grade)).all()
     report = []
     for c in classes:
-        missing = WeeklyData.query.filter(WeeklyData.class_id==c.id, WeeklyData.week_number==int(week), (WeeklyData.topic=='') | (WeeklyData.topic==None) | (WeeklyData.homework=='') | (WeeklyData.homework==None)).all()
-        report.append({'class': c, 'missing': len(missing)})
+        subjects = Subject.query.filter_by(class_id=c.id, school_id=1).all()
+        for subj in subjects:
+            wd = WeeklyData.query.filter_by(class_id=c.id, week_number=int(week), day=subj.day, period=subj.period, school_id=1).first()
+            if not wd or not wd.topic or not wd.homework:
+                report.append({
+                    'subject': subj.name,
+                    'grade': f"{c.grade.name} - {c.name}",
+                    'day': DAYS_AR.get(subj.day, subj.day),
+                    'period': subj.period
+                })
     return render_template('audit_report.html', report=report, week=week)
 
 @app.route('/admin/delete_date/<key>', methods=['POST'])

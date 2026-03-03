@@ -64,29 +64,47 @@
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 25px;">
         <div class="card" style="border-right: 6px solid #10b981;">
             <h2 style="color: #065f46;">إحصائيات الإنجاز (للأسبوع {{ settings.current_week }})</h2>
+            {% if classes|length == 0 %}
+            <div style="text-align: center; padding: 30px; color: #64748b; font-size: 1.1em;">
+                لا توجد بيانات بعد — قم برفع ملف Excel أولاً
+            </div>
+            {% else %}
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <div style="text-align: center; flex: 1;">
-                    <div style="font-size: 3em; font-weight: 800; color: #10b981;">{{ completion_percent }}%</div>
+                    <div style="font-size: 3em; font-weight: 800; color: #10b981;" data-testid="text-completion-percent">{{ completion_percent }}%</div>
                     <div style="color: #64748b; font-weight: 600;">نسبة اكتمال الخطط الأسبوعية</div>
                 </div>
+                <div style="text-align: center; flex: 1;">
+                    <div style="font-size: 2em; font-weight: 800; color: #0d9488;" data-testid="text-filled-periods">{{ filled_periods }} / {{ total_periods }}</div>
+                    <div style="color: #64748b; font-weight: 600;">الحصص المعبأة من إجمالي الحصص</div>
+                </div>
                 <div style="flex: 1; text-align: left;">
-                    <a href="/admin/audit_report?week={{ settings.current_week }}"><button class="btn-success">تقرير الإحصائيات والتدقيق (Audit & Stats Report) 📊</button></a>
+                    <a href="/admin/audit_report?week={{ settings.current_week }}"><button class="btn-success" data-testid="button-audit-report">تقرير الإحصائيات والتدقيق (Audit & Stats Report) 📊</button></a>
                 </div>
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                 <div>
                     <h4 style="color: #166534; margin-bottom: 8px;">مكتمل ({{ completed_classes|length }})</h4>
                     <div style="max-height: 150px; overflow-y: auto; background: #f0fdf4; padding: 10px; border-radius: 8px; font-size: 0.85em;">
+                        {% if completed_classes|length == 0 %}
+                        <div style="color: #94a3b8; text-align: center;">لا توجد فصول مكتملة بعد</div>
+                        {% else %}
                         {% for c in completed_classes %}<div>{{ c.grade.name }} - {{ c.name }}</div>{% endfor %}
+                        {% endif %}
                     </div>
                 </div>
                 <div>
                     <h4 style="color: #991b1b; margin-bottom: 8px;">قيد الانتظار ({{ pending_classes|length }})</h4>
                     <div style="max-height: 150px; overflow-y: auto; background: #fef2f2; padding: 10px; border-radius: 8px; font-size: 0.85em;">
+                        {% if pending_classes|length == 0 %}
+                        <div style="color: #94a3b8; text-align: center;">جميع الفصول مكتملة</div>
+                        {% else %}
                         {% for c in pending_classes %}<div>{{ c.grade.name }} - {{ c.name }}</div>{% endfor %}
+                        {% endif %}
                     </div>
                 </div>
             </div>
+            {% endif %}
         </div>
 
         <div class="card" style="border-right: 6px solid #6366f1;">
