@@ -19,15 +19,8 @@ db_url = os.getenv('DATABASE_URL')
 if db_url and db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
-engine_options = {"pool_pre_ping": True}
-if db_url:
-    if "sslmode" not in db_url:
-        separator = "&" if "?" in db_url else "?"
-        db_url += f"{separator}sslmode=prefer"
-    engine_options["connect_args"] = {"sslmode": "prefer"}
-
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = engine_options
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {"pool_pre_ping": True}
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -118,7 +111,8 @@ def get_or_create_class(grade_name, class_name):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    settings = {s.key: s.value for s in Setting.query.all()}
+    return render_template('index.html', current_week=settings.get('current_week', '1'), settings=settings)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -447,16 +441,15 @@ def delete_date(key):
     return redirect(url_for('admin'))
 
 with app.app_context():
+    db.create_all()
     try:
-        db.create_all()
-        # Use a more robust check for settings
         admin_pass = db.session.get(Setting, 'admin_password')
         if not admin_pass:
             db.session.add(Setting(key='admin_password', value='fast490'))
             db.session.commit()
-    except Exception as e:
-        print(f"Startup DB Error: {e}")
+    except Exception:
         db.session.rollback()
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.getenv('FLASK_PORT', '5000'))
+    app.run(host='0.0.0.0', port=port)

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a School Study Plan Management System that helps manage and view weekly class schedules. The application provides two main interfaces: a student view for viewing weekly schedules and an admin/teacher view for managing schedule entries. The system tracks subjects, topics, homework assignments, and allows setting the current week number.
+School Study Plan Management System for managing weekly class schedules. Provides admin, teacher, and student interfaces. Features Excel/CSV import for master schedules, drag & drop editing (admin only), audit reporting, and Arabic RTL interface with DCS teal (#0d9488) theme.
 
 ## User Preferences
 
@@ -10,70 +10,61 @@ Preferred communication style: Simple, everyday language.
 
 ## System Architecture
 
-### Hybrid Backend Architecture
-The project has an unusual hybrid setup with two backend technologies:
+### Backend Architecture
+- **Python Flask Backend** (`main.py`) - Main application logic
+  - Uses PostgreSQL database via SQLAlchemy ORM
+  - Serves HTML templates from `templates/` directory
+  - Routes: `/`, `/login`, `/admin`, `/teacher`, `/student/<g_id>/<c_id>`, `/admin/upload_master`, `/admin/audit_report`
 
-1. **Python Flask Backend (Primary)** - Located in `main.py`, this handles the actual application logic:
-   - Uses SQLite database (`school.db`) for data storage
-   - Serves HTML templates from the `templates/` directory
-   - Manages schedule entries, configuration, and user sessions
-   - Routes include `/`, `/student`, `/admin`, and authentication endpoints
+- **Node.js Proxy** (`server/index.ts`) - HTTP proxy on port 5000
+  - Proxies all requests to Flask running on port 5001
+  - Required because Replit's port detection works better with Node.js
 
-2. **Node.js/Express Wrapper** - The `server/index.ts` spawns the Python Flask process:
-   - Acts as a process manager for the Flask application
-   - The TypeScript/Express infrastructure exists but delegates to Python
+### Database (PostgreSQL)
+Tables defined in `main.py`:
+- `grade` - Grade levels (e.g., اول ابتدائي)
+- `class` - Classes within grades (e.g., أ, ب)
+- `subject` - Master schedule (class_id, day, period, name, school_id)
+- `weekly_data` - Weekly teacher data (class_id, week_number, day, period, subject_name, topic, homework, school_id)
+- `setting` - Key-value store (admin_password, current_week, school_name, etc.)
+- `locked_day` - Days locked from teacher editing
+- `activity_log` - Audit trail
+- `school` - School records (id=1 is default: مدارس الثقافة الرقمية)
 
-### Frontend Architecture
-The project contains two separate frontend approaches:
+**Important**: `school_id` is nullable in subject and weekly_data tables but defaults to 1. The school table MUST have a record with id=1.
 
-1. **Flask Jinja Templates (Active)** - Server-rendered HTML templates:
-   - `templates/index.html` - Landing page with role selection
-   - `templates/student.html` - Weekly schedule view for students
-   - `templates/admin.html` - Schedule management interface
-   - `templates/teacher.html` - Teacher portal placeholder
+### Frontend (Flask Jinja Templates)
+- `templates/index.html` - Landing page with role selection
+- `templates/student.html` - Weekly schedule view for students
+- `templates/admin.html` - Admin panel (grades, classes, master schedule, settings, import, audit)
+- `templates/teacher.html` - Teacher portal (view subjects read-only, edit topic/homework)
+- `templates/login.html` - Admin login
+- `templates/audit_report.html` - Missing data report
 
-2. **React SPA (Scaffolded but unused)** - Located in `client/src/`:
-   - Built with Vite, React, and TypeScript
-   - Uses shadcn/ui component library with Radix UI primitives
-   - Tailwind CSS for styling
-   - React Query for data fetching
-   - Wouter for client-side routing
-   - Currently only has a 404 page implemented
+### Excel Import Logic (`/admin/upload_master`)
+- Skips first 2 header rows (skiprows=2, header=None)
+- Column 0: Class name (e.g., "اول ابتدائي" or "Grade - Class")
+- Sunday: Columns 1-8, Monday: 9-16, Tuesday: 17-24, Wednesday: 25-32, Thursday: 33-40
+- Cleans `\n` characters from cells using `.replace('\n', ' ').strip()`
+- UPSERT logic: deletes existing Subject, creates new one; updates or creates WeeklyData
+- All records set school_id=1
 
-### Database Design
-Two database configurations exist:
+### Key Features
+- **Edit Grade/Class names**: Inline edit with save button in admin panel
+- **Teacher view**: Subject names shown as read-only tags, teachers only edit topic/homework
+- **Day locking**: Admin can lock specific days per week to prevent teacher edits
+- **Audit report**: Shows classes missing topic/homework entries
 
-1. **SQLite (Active with Flask)** - Tables defined in `main.py`:
-   - `config` - Key-value store for settings (current week)
-   - `schedule` - Weekly schedule entries with week, day, period, subject, topic, homework
+## Running the Project
 
-2. **PostgreSQL with Drizzle ORM (Scaffolded)** - In `shared/schema.ts`:
-   - `users` table with id, username, password
-   - Configured via `drizzle.config.ts` with `DATABASE_URL` environment variable
+- Workflow: `npm run dev` → Node.js proxy (port 5000) → Flask (port 5001)
+- Flask port configured via `FLASK_PORT` env var (default 5000, set to 5001 by Node.js)
+- Admin login password: `fast490` (stored in settings table)
 
-### Build System
-- Development: `npm run dev` runs `tsx server/index.ts` which spawns Python Flask
-- Production: `npm run build` uses esbuild for server and Vite for client assets
-- Database migrations: `npm run db:push` uses Drizzle Kit
+## Python Dependencies
+- Flask, Flask-SQLAlchemy, pandas, openpyxl, gunicorn, waitress
 
-## External Dependencies
-
-### Python Dependencies
-- Flask - Web framework
-- SQLite3 - Database (built into Python)
-
-### Node.js Dependencies (from package.json)
-- **UI Framework**: React with shadcn/ui components, Radix UI primitives
-- **Styling**: Tailwind CSS, class-variance-authority
-- **State Management**: TanStack React Query
-- **Routing**: Wouter
-- **Forms**: React Hook Form with Zod validation
-- **Database**: Drizzle ORM with PostgreSQL driver (pg), connect-pg-simple for sessions
-- **Build Tools**: Vite, esbuild, TypeScript
-
-### Environment Variables Required
-- `DATABASE_URL` - PostgreSQL connection string (for Drizzle, if enabled)
-
-### Third-Party Services
-- No external APIs or services currently integrated
-- The scaffolded code includes dependencies for potential integrations: OpenAI, Google Generative AI, Stripe, Nodemailer
+## Environment Variables
+- `DATABASE_URL` - PostgreSQL connection string
+- `SESSION_SECRET` - Flask session secret
+- `FLASK_PORT` - Flask listening port (set by Node.js to 5001)
