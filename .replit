@@ -18,7 +18,7 @@ PORT = "5000"
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["gunicorn", "--bind=0.0.0.0:5001", "--reuse-port", "--timeout=120", "--workers=1", "main:app"]
+run = ["gunicorn", "--bind=0.0.0.0:5001", "--reuse-port", "--timeout=300", "--workers=3", "--graceful-timeout=300", "main:app"]
 build = ["npm", "run", "build"]
 
 [workflows]

@@ -572,12 +572,7 @@ def delete_date(key):
     if s: s.value = ''; db.session.commit()
     return redirect(url_for('admin'))
 
-_db_initialized = False
-
 def seed_db():
-    global _db_initialized
-    if _db_initialized:
-        return
     try:
         db.session.execute(db.text(
             "INSERT INTO school (id, name, slug, admin_username, password) "
@@ -594,11 +589,6 @@ def seed_db():
             db.session.commit()
     except Exception:
         db.session.rollback()
-    _db_initialized = True
-
-@app.before_request
-def ensure_db():
-    seed_db()
 
 if __name__ == '__main__':
     with app.app_context():
