@@ -20,7 +20,13 @@ if db_url and db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {"pool_pre_ping": True}
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    "pool_pre_ping": True,
+    "pool_recycle": 300,
+    "pool_size": 5,
+    "max_overflow": 10,
+    "connect_args": {"connect_timeout": 5}
+}
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -566,9 +572,14 @@ def delete_date(key):
     if s: s.value = ''; db.session.commit()
     return redirect(url_for('admin'))
 
-with app.app_context():
-    db.create_all()
+_db_initialized = False
+
+def init_db():
+    global _db_initialized
+    if _db_initialized:
+        return
     try:
+        db.create_all()
         db.session.execute(db.text(
             "INSERT INTO school (id, name, slug, admin_username, password) "
             "VALUES (1, 'مدارس الثقافة الرقمية', 'digital-culture', 'admin', 'admin') "
@@ -584,7 +595,14 @@ with app.app_context():
             db.session.commit()
     except Exception:
         db.session.rollback()
+    _db_initialized = True
+
+@app.before_request
+def ensure_db():
+    init_db()
 
 if __name__ == '__main__':
+    with app.app_context():
+        init_db()
     port = int(os.getenv('FLASK_PORT', '5000'))
     app.run(host='0.0.0.0', port=port)
