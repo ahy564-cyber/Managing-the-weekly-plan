@@ -574,12 +574,11 @@ def delete_date(key):
 
 _db_initialized = False
 
-def init_db():
+def seed_db():
     global _db_initialized
     if _db_initialized:
         return
     try:
-        db.create_all()
         db.session.execute(db.text(
             "INSERT INTO school (id, name, slug, admin_username, password) "
             "VALUES (1, 'مدارس الثقافة الرقمية', 'digital-culture', 'admin', 'admin') "
@@ -599,10 +598,11 @@ def init_db():
 
 @app.before_request
 def ensure_db():
-    init_db()
+    seed_db()
 
 if __name__ == '__main__':
     with app.app_context():
-        init_db()
+        db.create_all()
+        seed_db()
     port = int(os.getenv('FLASK_PORT', '5000'))
     app.run(host='0.0.0.0', port=port)
