@@ -4,7 +4,6 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy import func
 import os
 import json
-import pandas as pd
 import io
 from datetime import datetime
 from functools import wraps
@@ -325,6 +324,7 @@ def upload_master():
     if not file: return redirect(url_for('admin'))
     try:
         # Hard-Coded Mapping: Start from Row 3 (skiprows=2)
+        import pandas as pd
         if file.filename.endswith('.csv'):
             df = pd.read_csv(file, skiprows=2, header=None)
         else:
