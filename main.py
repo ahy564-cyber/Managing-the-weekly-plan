@@ -103,6 +103,30 @@ def log_activity(role, action):
     except Exception:
         db.session.rollback()
 
+_tables_ensured = False
+
+@app.before_request
+def ensure_tables():
+    global _tables_ensured
+    if _tables_ensured:
+        return
+    _tables_ensured = True
+    try:
+        db.session.execute(db.text('''
+            CREATE TABLE IF NOT EXISTS teacher_account (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(200) NOT NULL,
+                username VARCHAR(100) UNIQUE NOT NULL,
+                password VARCHAR(200) NOT NULL,
+                school_id INTEGER DEFAULT 1,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        '''))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -511,6 +535,10 @@ def teacher():
     g_id = request.args.get('grade_id')
     c_id = request.args.get('class_id')
     week = request.args.get('week', settings.get('current_week', '1'))
+    if g_id in (None, '', 'None'):
+        g_id = None
+    if c_id in (None, '', 'None'):
+        c_id = None
     
     if request.method == 'POST':
         data = request.json

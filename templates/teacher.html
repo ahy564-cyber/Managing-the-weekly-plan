@@ -78,14 +78,14 @@
             </div>
             <div>
                 <label>الفصل:</label>
-                <select onchange="location.href='/teacher?grade_id={{ selected_grade }}&class_id='+this.value">
+                <select onchange="location.href='/teacher?grade_id={{ selected_grade }}&class_id='+this.value+'&week={{ selected_week }}'">
                     <option value="">اختر الفصل...</option>
                     {% for c in classes %}<option value="{{ c.id }}" {% if selected_class == c.id|string %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
                 </select>
             </div>
             <div>
                 <label>الأسبوع الدراسي:</label>
-                <select onchange="location.href='/teacher?grade_id={{ selected_grade }}&class_id={{ selected_class }}&week='+this.value">
+                <select onchange="var url='/teacher?week='+this.value; {% if selected_grade %}url+='&grade_id={{ selected_grade }}';{% endif %} {% if selected_class %}url+='&class_id={{ selected_class }}';{% endif %} location.href=url;">
                     {% for w in range(1, 20) %}<option value="{{ w }}" {% if selected_week == w|string %}selected{% endif %}>أسبوع {{ w }}</option>{% endfor %}
                 </select>
             </div>
