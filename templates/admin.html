@@ -437,6 +437,107 @@
         {% endif %}
     </div>
 
+    <div class="card">
+        <h2>إدارة حسابات المعلمين</h2>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px;">
+            <div>
+                <h3 style="color: #134e4a; margin-bottom: 15px;">إضافة معلم جديد</h3>
+                <form method="POST" style="display: flex; flex-direction: column; gap: 12px;">
+                    <input type="hidden" name="action" value="add_teacher">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>اسم المعلم</label>
+                        <input type="text" name="teacher_name" placeholder="مثال: أحمد محمد" required data-testid="input-teacher-name">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>اسم المستخدم</label>
+                        <input type="text" name="teacher_username" placeholder="مثال: ahmed" required data-testid="input-teacher-username">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>كلمة المرور</label>
+                        <input type="text" name="teacher_password" placeholder="كلمة مرور المعلم" required data-testid="input-teacher-password">
+                    </div>
+                    <button type="submit" data-testid="button-add-teacher">إضافة المعلم</button>
+                </form>
+            </div>
+            <div>
+                <h3 style="color: #134e4a; margin-bottom: 15px;">رفع حسابات المعلمين من Excel</h3>
+                <form action="/admin/upload_teachers" method="POST" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 12px;" onsubmit="this.querySelector('button').innerText='جاري الرفع...'; this.querySelector('button').disabled=true;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>اختر ملف Excel (.xlsx) أو CSV</label>
+                        <input type="file" name="file" accept=".xlsx,.csv" required data-testid="input-teacher-file">
+                    </div>
+                    <button type="submit" style="background: #1e3a8a;" data-testid="button-upload-teachers">رفع واستيراد المعلمين</button>
+                    <p style="color: #94a3b8; font-size: 0.85em; margin: 0;">
+                        * يجب أن يحتوي الملف على أعمدة: الاسم (العمود 1)، اسم المستخدم (العمود 2)، كلمة المرور (العمود 3)
+                    </p>
+                </form>
+            </div>
+        </div>
+
+        {% if teachers|length > 0 %}
+        <div style="margin-top: 25px;">
+            <h3 style="color: #134e4a; margin-bottom: 15px;">المعلمون المسجلون ({{ teachers|length }})</h3>
+            <div class="table-container">
+            <table style="min-width: 600px;">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">#</th>
+                        <th>الاسم</th>
+                        <th>اسم المستخدم</th>
+                        <th>كلمة المرور</th>
+                        <th>الحالة</th>
+                        <th style="width: 280px;">إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in teachers %}
+                    <tr style="{{ 'opacity: 0.5;' if not t.is_active else '' }}">
+                        <td>{{ loop.index }}</td>
+                        <td style="font-weight: 600;">{{ t.name }}</td>
+                        <td><code style="background: #f0fdfa; padding: 4px 8px; border-radius: 4px;">{{ t.username }}</code></td>
+                        <td><code style="background: #f0fdfa; padding: 4px 8px; border-radius: 4px;">{{ t.password }}</code></td>
+                        <td>
+                            {% if t.is_active %}
+                            <span style="background: #dcfce7; color: #166534; padding: 4px 12px; border-radius: 20px; font-size: 0.85em;">مفعل</span>
+                            {% else %}
+                            <span style="background: #fef2f2; color: #991b1b; padding: 4px 12px; border-radius: 20px; font-size: 0.85em;">معطل</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 6px; justify-content: center; flex-wrap: wrap;">
+                                <form method="POST" style="display: inline;">
+                                    <input type="hidden" name="action" value="toggle_teacher">
+                                    <input type="hidden" name="teacher_id" value="{{ t.id }}">
+                                    <button type="submit" style="font-size: 0.8em; padding: 6px 12px; background: {{ '#f59e0b' if t.is_active else '#10b981' }};" data-testid="button-toggle-teacher-{{ t.id }}">
+                                        {{ 'تعطيل' if t.is_active else 'تفعيل' }}
+                                    </button>
+                                </form>
+                                <form method="POST" style="display: inline;" onsubmit="var p=prompt('كلمة المرور الجديدة:'); if(!p) return false; this.querySelector('[name=new_password]').value=p;">
+                                    <input type="hidden" name="action" value="reset_teacher_password">
+                                    <input type="hidden" name="teacher_id" value="{{ t.id }}">
+                                    <input type="hidden" name="new_password" value="">
+                                    <button type="submit" style="font-size: 0.8em; padding: 6px 12px; background: #3b82f6;" data-testid="button-reset-password-{{ t.id }}">تغيير كلمة المرور</button>
+                                </form>
+                                <form method="POST" style="display: inline;" onsubmit="return confirm('هل تريد حذف هذا المعلم؟');">
+                                    <input type="hidden" name="action" value="delete_teacher">
+                                    <input type="hidden" name="teacher_id" value="{{ t.id }}">
+                                    <button type="submit" class="btn-danger" style="font-size: 0.8em; padding: 6px 12px;" data-testid="button-delete-teacher-{{ t.id }}">حذف</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+        {% else %}
+        <div style="margin-top: 20px; text-align: center; padding: 20px; color: #64748b; background: #f8fafc; border-radius: 8px;">
+            لا يوجد معلمون مسجلون بعد
+        </div>
+        {% endif %}
+    </div>
+
     <script>
         function allowDrop(ev) {
             ev.preventDefault();

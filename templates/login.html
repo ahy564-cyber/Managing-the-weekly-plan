@@ -5,19 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>تسجيل الدخول - نظام الخطة الدراسية</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #ecf0f1; }
-        .login-card { background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 100%; }
-        h1 { color: #2c3e50; margin-bottom: 30px; }
-        input { width: 100%; padding: 12px; margin-bottom: 20px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 1em; text-align: center; }
-        button { background: #3498db; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; width: 100%; font-weight: bold; font-size: 1.1em; transition: background 0.3s; }
-        button:hover { background: #2980b9; }
-        .error { color: #e74c3c; margin-bottom: 20px; font-weight: bold; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f0fdfa; }
+        .login-card { background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; max-width: 420px; width: 100%; }
+        h1 { color: #0d9488; margin-bottom: 10px; }
+        .subtitle { color: #7f8c8d; margin-bottom: 25px; font-size: 0.95em; }
+        .form-group { margin-bottom: 16px; text-align: right; }
+        label { display: block; margin-bottom: 6px; font-weight: 600; color: #334155; font-size: 0.9em; }
+        input { width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box; font-size: 1em; text-align: right; transition: border 0.3s; }
+        input:focus { outline: none; border-color: #0d9488; box-shadow: 0 0 0 3px rgba(13,148,136,0.1); }
+        button { background: #0d9488; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; width: 100%; font-weight: bold; font-size: 1.1em; transition: background 0.3s; margin-top: 10px; }
+        button:hover { background: #0f766e; }
+        .error { color: #e74c3c; margin-bottom: 15px; font-weight: bold; background: #fef2f2; padding: 10px; border-radius: 6px; }
         .back { margin-top: 20px; display: block; color: #7f8c8d; text-decoration: none; }
+        .back:hover { color: #0d9488; }
+        .hint { color: #94a3b8; font-size: 0.85em; margin-top: 6px; }
     </style>
 </head>
 <body>
     <div class="login-card">
         <h1>تسجيل الدخول</h1>
+        <p class="subtitle">نظام الخطة الدراسية الأسبوعية</p>
         {% with messages = get_flashed_messages() %}
           {% if messages %}
             {% for message in messages %}
@@ -26,7 +33,15 @@
           {% endif %}
         {% endwith %}
         <form method="POST">
-            <input type="password" name="password" placeholder="أدخل كلمة المرور" required>
+            <div class="form-group">
+                <label for="username">اسم المستخدم</label>
+                <input type="text" id="username" name="username" placeholder="اتركه فارغاً للمدير" autocomplete="username">
+                <div class="hint">للمدير: اتركه فارغاً أو اكتب admin</div>
+            </div>
+            <div class="form-group">
+                <label for="password">كلمة المرور</label>
+                <input type="password" id="password" name="password" placeholder="أدخل كلمة المرور" required autocomplete="current-password">
+            </div>
             <button type="submit">دخول</button>
         </form>
         <a href="/" class="back">العودة للقائمة الرئيسية</a>

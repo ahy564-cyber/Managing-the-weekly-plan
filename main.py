@@ -80,6 +80,15 @@ class LockedDay(db.Model):
     school_id = db.Column(db.Integer, nullable=True)
     __table_args__ = (db.UniqueConstraint('week_number', 'day_name', name='_week_day_uc'),)
 
+class TeacherAccount(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    username = db.Column(db.String(100), unique=True, nullable=False)
+    password = db.Column(db.String(200), nullable=False)
+    school_id = db.Column(db.Integer, nullable=True, default=1)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 class ActivityLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_role = db.Column(db.String(50))
@@ -98,6 +107,14 @@ def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if session.get('user_role') != 'admin':
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if session.get('user_role') not in ('admin', 'teacher'):
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
@@ -123,21 +140,32 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        password = request.form.get('password')
+        username = request.form.get('username', '').strip().lower()
+        password = request.form.get('password', '').strip()
         stored = db.session.get(Setting, 'admin_password')
-        if password == (stored.value if stored else 'fast490'):
+        admin_pass = stored.value if stored else 'fast490'
+        if password == admin_pass and (not username or username == 'admin'):
             session.clear()
             session['user_role'] = 'admin'
             log_activity('admin', 'تم تسجيل الدخول للوحة التحكم')
             return redirect(url_for('admin'))
-        flash('كلمة المرور غير صحيحة')
+        if username:
+            teacher = TeacherAccount.query.filter_by(username=username, is_active=True).first()
+            if teacher and teacher.password == password:
+                session.clear()
+                session['user_role'] = 'teacher'
+                session['teacher_id'] = teacher.id
+                session['teacher_name'] = teacher.name
+                log_activity('teacher', f'تسجيل دخول المعلم: {teacher.name}')
+                return redirect(url_for('teacher'))
+        flash('اسم المستخدم أو كلمة المرور غير صحيحة')
     return render_template('login.html')
 
 @app.route('/logout')
 def logout():
     log_activity(session.get('user_role', 'guest'), 'تم تسجيل الخروج')
     session.clear()
-    return redirect(url_for('teacher'))
+    return redirect(url_for('login'))
 
 @app.route('/admin', methods=['GET', 'POST'])
 @admin_required
@@ -265,6 +293,49 @@ def admin():
                                 db.session.add(WeeklyData(class_id=class_id, week_number=week_num, day=day, period=period, subject_name=subject_name, topic='', homework='', school_id=1))
                     db.session.commit()
                     flash('تم حفظ التعديلات الأسبوعية بنجاح')
+            elif action == 'add_teacher':
+                t_name = request.form.get('teacher_name', '').strip()
+                t_username = request.form.get('teacher_username', '').strip().lower()
+                t_password = request.form.get('teacher_password', '').strip()
+                if t_name and t_username and t_password:
+                    if t_username == 'admin':
+                        flash('لا يمكن استخدام "admin" كاسم مستخدم للمعلم')
+                    elif TeacherAccount.query.filter_by(username=t_username).first():
+                        flash(f'اسم المستخدم "{t_username}" موجود بالفعل')
+                    else:
+                        db.session.add(TeacherAccount(name=t_name, username=t_username, password=t_password, school_id=1))
+                        db.session.commit()
+                        log_activity('admin', f'إضافة حساب معلم: {t_name}')
+                        flash(f'تم إضافة المعلم: {t_name}')
+            elif action == 'reset_teacher_password':
+                t_id = request.form.get('teacher_id')
+                new_pass = request.form.get('new_password', '').strip()
+                if t_id and new_pass:
+                    teacher = db.session.get(TeacherAccount, int(t_id))
+                    if teacher:
+                        teacher.password = new_pass
+                        db.session.commit()
+                        log_activity('admin', f'إعادة تعيين كلمة مرور المعلم: {teacher.name}')
+                        flash(f'تم تغيير كلمة مرور: {teacher.name}')
+            elif action == 'delete_teacher':
+                t_id = request.form.get('teacher_id')
+                if t_id:
+                    teacher = db.session.get(TeacherAccount, int(t_id))
+                    if teacher:
+                        name = teacher.name
+                        db.session.delete(teacher)
+                        db.session.commit()
+                        log_activity('admin', f'حذف حساب معلم: {name}')
+                        flash(f'تم حذف المعلم: {name}')
+            elif action == 'toggle_teacher':
+                t_id = request.form.get('teacher_id')
+                if t_id:
+                    teacher = db.session.get(TeacherAccount, int(t_id))
+                    if teacher:
+                        teacher.is_active = not teacher.is_active
+                        db.session.commit()
+                        status = 'تفعيل' if teacher.is_active else 'تعطيل'
+                        flash(f'تم {status} حساب: {teacher.name}')
             elif action == 'upload_logo':
                 file = request.files.get('logo')
                 if file:
@@ -310,12 +381,13 @@ def admin():
     total_periods = Subject.query.filter_by(school_id=1).count()
     filled_periods = WeeklyData.query.filter(WeeklyData.week_number==c_week, WeeklyData.school_id==1, WeeklyData.topic!='', WeeklyData.topic!=None).count()
     logs = ActivityLog.query.order_by(ActivityLog.timestamp.desc()).limit(20).all()
+    teachers = TeacherAccount.query.filter_by(school_id=1).order_by(TeacherAccount.name).all()
 
     return render_template('admin.html', grades=grades, classes=classes, settings=settings, days_ar=DAYS_AR, days_order=DAYS_ORDER,
                          fixed_schedule=fixed_schedule, sel_fixed_class_id=sel_fixed_class_id, schedule=schedule,
                          selected_class_id=sel_class_id, selected_week=sel_week, locked_view_week=l_week, current_locked_days=locked_days,
                          completion_percent=round(percent,1), completed_classes=completed, pending_classes=pending, logs=logs,
-                         total_periods=total_periods, filled_periods=filled_periods)
+                         total_periods=total_periods, filled_periods=filled_periods, teachers=teachers)
 
 @app.route('/admin/upload_master', methods=['POST'])
 @admin_required
@@ -390,7 +462,50 @@ def upload_master():
         flash(f"خطأ: {e}")
     return redirect(url_for('admin'))
 
+@app.route('/admin/upload_teachers', methods=['POST'])
+@admin_required
+def upload_teachers():
+    file = request.files.get('file')
+    if not file:
+        flash('لم يتم اختيار ملف')
+        return redirect(url_for('admin'))
+    try:
+        import pandas as pd
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(file, header=None)
+        else:
+            df = pd.read_excel(file, header=None)
+
+        added = 0
+        skipped = 0
+        for _, row in df.iterrows():
+            name = str(row[0]).strip() if len(row) > 0 else ''
+            username = str(row[1]).strip().lower() if len(row) > 1 else ''
+            password = str(row[2]).strip() if len(row) > 2 else ''
+            if not name or not username or not password:
+                continue
+            if name.lower() in ['nan', 'none', ''] or username in ['nan', 'none', '']:
+                continue
+            if username == 'admin':
+                skipped += 1
+                continue
+            existing = TeacherAccount.query.filter_by(username=username).first()
+            if existing:
+                skipped += 1
+                continue
+            db.session.add(TeacherAccount(name=name, username=username, password=password, school_id=1))
+            added += 1
+        db.session.commit()
+        log_activity('admin', f'استيراد {added} حساب معلم من Excel')
+        flash(f'تم إضافة {added} معلم، تم تخطي {skipped} (موجودون مسبقاً)')
+    except Exception as e:
+        db.session.rollback()
+        traceback.print_exc()
+        flash(f"خطأ: {e}")
+    return redirect(url_for('admin'))
+
 @app.route('/teacher', methods=['GET', 'POST'])
+@login_required
 def teacher():
     settings = {s.key: s.value for s in Setting.query.all()}
     g_id = request.args.get('grade_id')
@@ -531,6 +646,7 @@ def swap_schedule():
     return jsonify({'success': False, 'message': 'نوع غير معروف'}), 400
 
 @app.route('/student/<int:g_id>/<int:c_id>')
+@login_required
 def student(g_id, c_id):
     settings = {s.key: s.value for s in Setting.query.all()}
     week = settings.get('current_week', '1')

@@ -56,7 +56,15 @@
     <div id="toast">تم حفظ البيانات بنجاح ✓</div>
     <div class="header">
         <h1>{{ settings.school_name or 'لوحة تحكم المعلم' }}</h1>
-        <a href="/admin" class="admin-link">لوحة المدير 🔑</a>
+        <div style="display: flex; gap: 15px; align-items: center;">
+            {% if session.get('teacher_name') %}
+            <span style="color: #0d9488; font-weight: 600;">{{ session.get('teacher_name') }}</span>
+            {% endif %}
+            {% if session.get('user_role') == 'admin' %}
+            <a href="/admin" class="admin-link">لوحة المدير</a>
+            {% endif %}
+            <a href="/logout" style="color: #64748b; text-decoration: none; font-size: 0.9em;">تسجيل الخروج</a>
+        </div>
     </div>
 
     <div class="card">

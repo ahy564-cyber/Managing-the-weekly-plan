@@ -14,7 +14,7 @@ Preferred communication style: Simple, everyday language.
 - **Python Flask Backend** (`main.py`) - Main application logic
   - Uses PostgreSQL database via SQLAlchemy ORM
   - Serves HTML templates from `templates/` directory
-  - Routes: `/`, `/login`, `/admin`, `/teacher`, `/student/<g_id>/<c_id>`, `/admin/upload_master`, `/admin/audit_report`, `/admin/swap_schedule` (AJAX)
+  - Routes: `/`, `/login`, `/admin`, `/teacher`, `/student/<g_id>/<c_id>`, `/admin/upload_master`, `/admin/upload_teachers`, `/admin/audit_report`, `/admin/swap_schedule` (AJAX)
 
 - **Node.js Proxy** (`server/index.ts`) - HTTP proxy on port 5000
   - Proxies all requests to Flask running on port 5001
@@ -30,6 +30,7 @@ Tables defined in `main.py`:
 - `locked_day` - Days locked from teacher editing
 - `activity_log` - Audit trail
 - `school` - School records (id=1 is default: مدارس الثقافة الرقمية)
+- `teacher_account` - Teacher login accounts (name, username, password, school_id, is_active)
 
 **Important**: `school_id` is nullable in subject and weekly_data tables but defaults to 1. The school table MUST have a record with id=1.
 
@@ -38,7 +39,7 @@ Tables defined in `main.py`:
 - `templates/student.html` - Weekly schedule view for students
 - `templates/admin.html` - Admin panel (grades, classes, master schedule, settings, import, audit)
 - `templates/teacher.html` - Teacher portal (view subjects read-only, edit topic/homework)
-- `templates/login.html` - Admin login
+- `templates/login.html` - Unified login (admin + teacher)
 - `templates/audit_report.html` - Missing data report
 
 ### Excel Import Logic (`/admin/upload_master`)
@@ -56,6 +57,7 @@ Tables defined in `main.py`:
 - **Teacher view**: Subject names shown as read-only tags, teachers only edit topic/homework
 - **Day locking**: Admin can lock specific days per week to prevent teacher edits
 - **Audit report**: Shows individual missing entries per subject/day/period with school_id=1 filter
+- **Teacher Authentication**: Unified login page (admin uses password only or username=admin; teachers use username+password). Teacher accounts managed in admin panel — add individually or bulk upload from Excel (columns: name, username, password). Admin can reset passwords, toggle active/inactive, delete accounts. Teacher/student routes require login.
 
 ## Running the Project
 
