@@ -14,7 +14,7 @@ Preferred communication style: Simple, everyday language.
 - **Python Flask Backend** (`main.py`) - Main application logic
   - Uses PostgreSQL database via SQLAlchemy ORM
   - Serves HTML templates from `templates/` directory
-  - Routes: `/`, `/login`, `/admin`, `/teacher`, `/student/<g_id>/<c_id>`, `/admin/upload_master`, `/admin/upload_teachers`, `/admin/audit_report`, `/admin/swap_schedule` (AJAX)
+  - Routes: `/`, `/login`, `/admin`, `/teacher`, `/student/<g_id>/<c_id>`, `/admin/upload_master`, `/admin/upload_teachers`, `/admin/audit_report`, `/admin/activity_log`, `/admin/swap_schedule` (AJAX)
 
 - **Node.js Proxy** (`server/index.ts`) - HTTP proxy on port 5000
   - Proxies all requests to Flask running on port 5001
@@ -28,7 +28,7 @@ Tables defined in `main.py`:
 - `weekly_data` - Weekly teacher data (class_id, week_number, day, period, subject_name, topic, homework, school_id, teacher_id, updated_at)
 - `setting` - Key-value store (admin_password, current_week, school_name, etc.)
 - `locked_day` - Days locked from teacher editing
-- `activity_log` - Audit trail
+- `activity_log` - Audit trail (user_role, action, timestamp, school_id, teacher_name, action_type, target_subject, description)
 - `school` - School records (id=1 is default: مدارس الثقافة الرقمية)
 - `teacher_account` - Teacher login accounts (name, username, password, school_id, is_active)
 
@@ -45,6 +45,7 @@ Tables defined in `main.py`:
 - `templates/teacher.html` - Teacher portal (view subjects read-only, edit topic/homework)
 - `templates/login.html` - Unified login (admin + teacher)
 - `templates/audit_report.html` - Missing data report
+- `templates/activity_log.html` - Full activity log with filtering (teacher name, action type, date) and pagination
 
 ### Excel Import Logic (`/admin/upload_master`)
 - Skips first 2 header rows (skiprows=2, header=None)
@@ -61,6 +62,7 @@ Tables defined in `main.py`:
 - **Teacher view**: Subject names shown as read-only tags, teachers only edit topic/homework
 - **Day locking**: Admin can lock specific days per week to prevent teacher edits
 - **Audit report**: Shows individual missing entries per subject/day/period with school_id=1 filter
+- **Activity log**: Dedicated `/admin/activity_log` page with filtering (teacher name, action type, date), pagination (50 per page), color-coded badges for action types. Swap/drag-drop operations are logged. All log entries include school_id=1.
 - **Teacher Authentication**: Unified login page (admin uses password only or username=admin; teachers use username+password). Teacher accounts managed in admin panel — add individually or bulk upload from Excel (columns: name, username, password). Admin can reset passwords, toggle active/inactive, delete accounts. Teacher/student routes require login.
 
 ## Running the Project

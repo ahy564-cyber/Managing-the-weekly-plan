@@ -108,22 +108,33 @@
         </div>
 
         <div class="card" style="border-right: 6px solid #6366f1;">
-            <h2 style="color: #3730a3;">سجل العمليات (Activity Log)</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2 style="color: #3730a3;">سجل العمليات (Activity Log)</h2>
+                <a href="/admin/activity_log"><button style="background: #6366f1; font-size: 0.9em;" data-testid="button-full-activity-log">عرض السجل الكامل مع التصفية</button></a>
+            </div>
             <div style="max-height: 300px; overflow-y: auto; font-size: 0.85em;">
                 <table style="margin-top: 0; border: none;">
                     <thead>
                         <tr style="background: #eef2ff;">
                             <th style="padding: 8px;">الوقت</th>
-                            <th style="padding: 8px;">الدور</th>
-                            <th style="padding: 8px;">العملية</th>
+                            <th style="padding: 8px;">المستخدم</th>
+                            <th style="padding: 8px;">النوع</th>
+                            <th style="padding: 8px;">التفاصيل</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for log in logs %}
                         <tr>
-                            <td style="font-size: 0.8em; color: #64748b;">{{ log.timestamp.strftime('%H:%M:%S %Y/%m/%d') }}</td>
-                            <td><span style="background: {% if log.user_role == 'admin' %}#dbeafe{% else %}#dcfce7{% endif %}; padding: 2px 6px; border-radius: 4px;">{{ 'مدير' if log.user_role == 'admin' else 'معلم' }}</span></td>
-                            <td style="text-align: right;">{{ log.action }}</td>
+                            <td style="font-size: 0.8em; color: #64748b; white-space: nowrap;">{{ log.timestamp.strftime('%H:%M:%S %Y/%m/%d') if log.timestamp else '-' }}</td>
+                            <td>
+                                <span style="background: {% if log.user_role == 'admin' %}#dbeafe{% else %}#dcfce7{% endif %}; padding: 2px 6px; border-radius: 4px; font-size: 0.85em;">
+                                    {{ log.teacher_name or ('مدير' if log.user_role == 'admin' else log.user_role or '-') }}
+                                </span>
+                            </td>
+                            <td>
+                                <span style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.85em;">{{ log.action_type or 'عام' }}</span>
+                            </td>
+                            <td style="text-align: right; font-size: 0.85em;">{{ log.description or log.action }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سجل النشاطات - {{ settings.school_name or 'نظام الخطة الدراسية' }}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Cairo', sans-serif; margin: 20px; background: #f8fafc; color: #1e293b; }
+        .card { background: white; padding: 25px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); border: 1px solid #e2e8f0; }
+        h1 { color: #134e4a; margin: 0; }
+        h2 { border-bottom: 3px solid #0d9488; padding-bottom: 12px; font-weight: 700; color: #134e4a; margin-top: 0; }
+        .header-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+        .nav-links { display: flex; gap: 12px; align-items: center; }
+        .nav-links a { color: #0d9488; text-decoration: none; font-weight: 600; padding: 8px 16px; border-radius: 8px; transition: all 0.2s; }
+        .nav-links a:hover { background: #f0fdfa; }
+        .filters { display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 20px; }
+        .filter-group { display: flex; flex-direction: column; gap: 4px; }
+        .filter-group label { font-weight: 600; font-size: 0.85em; color: #475569; }
+        .filter-group input, .filter-group select { padding: 8px 12px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 0.9em; min-width: 160px; }
+        .filter-group input:focus, .filter-group select:focus { outline: none; border-color: #0d9488; box-shadow: 0 0 0 3px rgba(13,148,136,0.1); }
+        button { background: #0d9488; color: white; border: none; padding: 8px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; font-family: inherit; transition: all 0.2s; }
+        button:hover { background: #0f766e; }
+        .btn-clear { background: #64748b; }
+        .btn-clear:hover { background: #475569; }
+        .table-container { width: 100%; overflow-x: auto; border-radius: 8px; }
+        table { width: 100%; border-collapse: separate; border-spacing: 0; background: white; border: 1px solid #e2e8f0; }
+        th { background: #0d9488; color: white; font-weight: 700; padding: 12px 15px; text-align: center; white-space: nowrap; }
+        td { padding: 10px 15px; border-bottom: 1px solid #f1f5f9; text-align: center; font-size: 0.9em; }
+        tr:hover td { background: #f8fafc; }
+        tr:last-child td { border-bottom: none; }
+        .badge { padding: 3px 10px; border-radius: 20px; font-size: 0.8em; font-weight: 600; display: inline-block; }
+        .badge-login { background: #dbeafe; color: #1e40af; }
+        .badge-logout { background: #f1f5f9; color: #475569; }
+        .badge-save { background: #dcfce7; color: #166534; }
+        .badge-add { background: #d1fae5; color: #065f46; }
+        .badge-edit { background: #fef3c7; color: #92400e; }
+        .badge-delete { background: #fef2f2; color: #991b1b; }
+        .badge-move { background: #ede9fe; color: #5b21b6; }
+        .badge-general { background: #f1f5f9; color: #475569; }
+        .badge-admin { background: #dbeafe; color: #1e40af; }
+        .badge-teacher { background: #dcfce7; color: #166534; }
+        .pagination { display: flex; justify-content: center; gap: 8px; margin-top: 20px; align-items: center; }
+        .pagination a { padding: 6px 14px; border: 1px solid #cbd5e1; border-radius: 6px; text-decoration: none; color: #334155; font-weight: 600; transition: all 0.2s; }
+        .pagination a:hover { background: #f0fdfa; border-color: #0d9488; }
+        .pagination a.active { background: #0d9488; color: white; border-color: #0d9488; }
+        .pagination span { color: #94a3b8; font-size: 0.9em; }
+        .summary { background: #f0fdfa; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .summary-stat { text-align: center; }
+        .summary-stat .num { font-size: 1.8em; font-weight: 800; color: #0d9488; }
+        .summary-stat .label { font-size: 0.85em; color: #64748b; }
+        .desc-cell { text-align: right; max-width: 400px; word-wrap: break-word; font-size: 0.85em; color: #475569; }
+        .empty-state { text-align: center; padding: 40px; color: #94a3b8; font-size: 1.1em; }
+    </style>
+</head>
+<body>
+    <div style="max-width: 100%; padding: 10px;">
+        <div class="header-actions">
+            <h1>سجل النشاطات (Activity Log)</h1>
+            <div class="nav-links">
+                <a href="/admin">لوحة التحكم</a>
+                <a href="/admin/audit_report?week={{ settings.current_week or '1' }}">تقرير التدقيق</a>
+                <a href="/logout">تسجيل الخروج</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>تصفية السجلات</h2>
+            <form method="GET" action="/admin/activity_log">
+                <div class="filters">
+                    <div class="filter-group">
+                        <label>اسم المعلم</label>
+                        <input type="text" name="teacher" value="{{ filter_teacher }}" placeholder="بحث بالاسم..." data-testid="input-filter-teacher">
+                    </div>
+                    <div class="filter-group">
+                        <label>نوع العملية</label>
+                        <select name="type" data-testid="select-filter-type">
+                            <option value="">الكل</option>
+                            <option value="تسجيل دخول" {% if filter_type == 'تسجيل دخول' %}selected{% endif %}>تسجيل دخول</option>
+                            <option value="تسجيل خروج" {% if filter_type == 'تسجيل خروج' %}selected{% endif %}>تسجيل خروج</option>
+                            <option value="حفظ" {% if filter_type == 'حفظ' %}selected{% endif %}>حفظ درس/واجب</option>
+                            <option value="إضافة" {% if filter_type == 'إضافة' %}selected{% endif %}>إضافة</option>
+                            <option value="تعديل" {% if filter_type == 'تعديل' %}selected{% endif %}>تعديل</option>
+                            <option value="حذف" {% if filter_type == 'حذف' %}selected{% endif %}>حذف</option>
+                            <option value="نقل" {% if filter_type == 'نقل' %}selected{% endif %}>نقل (سحب وإفلات)</option>
+                            <option value="عام" {% if filter_type == 'عام' %}selected{% endif %}>عام</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>التاريخ</label>
+                        <input type="date" name="date" value="{{ filter_date }}" data-testid="input-filter-date">
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: flex-end;">
+                        <button type="submit" data-testid="button-filter">تصفية</button>
+                        <a href="/admin/activity_log"><button type="button" class="btn-clear" data-testid="button-clear-filter">مسح</button></a>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="card">
+            <div class="summary">
+                <div class="summary-stat">
+                    <div class="num" data-testid="text-total-logs">{{ total }}</div>
+                    <div class="label">إجمالي السجلات</div>
+                </div>
+                <div class="summary-stat">
+                    <div class="num">{{ page }} / {{ total_pages }}</div>
+                    <div class="label">الصفحة</div>
+                </div>
+            </div>
+
+            {% if logs|length > 0 %}
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th style="width: 160px;">التاريخ والوقت</th>
+                            <th style="width: 100px;">الدور</th>
+                            <th style="width: 130px;">المستخدم</th>
+                            <th style="width: 110px;">نوع العملية</th>
+                            <th style="width: 130px;">الهدف</th>
+                            <th>التفاصيل</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in logs %}
+                        <tr>
+                            <td style="color: #94a3b8; font-size: 0.8em;">{{ (page - 1) * 50 + loop.index }}</td>
+                            <td style="font-size: 0.8em; color: #475569; direction: ltr; white-space: nowrap;">
+                                {{ log.timestamp.strftime('%Y/%m/%d %H:%M:%S') if log.timestamp else '-' }}
+                            </td>
+                            <td>
+                                <span class="badge {{ 'badge-admin' if log.user_role == 'admin' else 'badge-teacher' }}">
+                                    {{ 'مدير' if log.user_role == 'admin' else ('معلم' if log.user_role == 'teacher' else log.user_role or '-') }}
+                                </span>
+                            </td>
+                            <td style="font-weight: 600;">{{ log.teacher_name or log.user_role or '-' }}</td>
+                            <td>
+                                {% set at = log.action_type or 'عام' %}
+                                <span class="badge {% if at == 'تسجيل دخول' %}badge-login{% elif at == 'تسجيل خروج' %}badge-logout{% elif at == 'حفظ' %}badge-save{% elif at == 'إضافة' %}badge-add{% elif at == 'تعديل' %}badge-edit{% elif at == 'حذف' %}badge-delete{% elif at == 'نقل' %}badge-move{% else %}badge-general{% endif %}">
+                                    {{ at }}
+                                </span>
+                            </td>
+                            <td style="font-size: 0.85em;">{{ log.target_subject or '-' }}</td>
+                            <td class="desc-cell">{{ log.description or log.action or '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if total_pages > 1 %}
+            <div class="pagination">
+                {% if page > 1 %}
+                <a href="/admin/activity_log?page={{ page - 1 }}&teacher={{ filter_teacher }}&type={{ filter_type }}&date={{ filter_date }}">السابق</a>
+                {% endif %}
+                {% for p in range(1, total_pages + 1) %}
+                    {% if p == page %}
+                    <a class="active">{{ p }}</a>
+                    {% elif p <= 3 or p >= total_pages - 2 or (p >= page - 2 and p <= page + 2) %}
+                    <a href="/admin/activity_log?page={{ p }}&teacher={{ filter_teacher }}&type={{ filter_type }}&date={{ filter_date }}">{{ p }}</a>
+                    {% elif p == 4 or p == total_pages - 3 %}
+                    <span>...</span>
+                    {% endif %}
+                {% endfor %}
+                {% if page < total_pages %}
+                <a href="/admin/activity_log?page={{ page + 1 }}&teacher={{ filter_teacher }}&type={{ filter_type }}&date={{ filter_date }}">التالي</a>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% else %}
+            <div class="empty-state">
+                لا توجد سجلات مطابقة للتصفية المحددة
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

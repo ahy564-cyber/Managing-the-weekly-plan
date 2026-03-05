@@ -96,10 +96,24 @@ class ActivityLog(db.Model):
     user_role = db.Column(db.String(50))
     action = db.Column(db.Text)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    school_id = db.Column(db.Integer, nullable=True, default=1)
+    teacher_name = db.Column(db.String(200), nullable=True)
+    action_type = db.Column(db.String(50), nullable=True)
+    target_subject = db.Column(db.String(200), nullable=True)
+    description = db.Column(db.Text, nullable=True)
 
-def log_activity(role, action):
+def log_activity(role, action, teacher_name=None, action_type=None, target_subject=None, description=None):
     try:
-        log = ActivityLog(user_role=role, action=action, timestamp=datetime.utcnow())
+        log = ActivityLog(
+            user_role=role,
+            action=action,
+            timestamp=datetime.utcnow(),
+            school_id=1,
+            teacher_name=teacher_name or (role if role != 'admin' else 'المدير'),
+            action_type=action_type or 'عام',
+            target_subject=target_subject or '',
+            description=description or action
+        )
         db.session.add(log)
         db.session.commit()
     except Exception:
@@ -134,6 +148,18 @@ def ensure_tables():
         ))
         db.session.execute(db.text(
             "ALTER TABLE weekly_data ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP"
+        ))
+        db.session.execute(db.text(
+            "ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS teacher_name VARCHAR(200)"
+        ))
+        db.session.execute(db.text(
+            "ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS action_type VARCHAR(50)"
+        ))
+        db.session.execute(db.text(
+            "ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS target_subject VARCHAR(200)"
+        ))
+        db.session.execute(db.text(
+            "ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS description TEXT"
         ))
         db.session.commit()
     except Exception:
@@ -183,7 +209,7 @@ def login():
         if password == admin_pass and (not username or username == 'admin'):
             session.clear()
             session['user_role'] = 'admin'
-            log_activity('admin', 'تم تسجيل الدخول للوحة التحكم')
+            log_activity('admin', 'تم تسجيل الدخول للوحة التحكم', teacher_name='المدير', action_type='تسجيل دخول')
             return redirect(url_for('admin'))
         if username:
             teacher = TeacherAccount.query.filter_by(username=username, is_active=True).first()
@@ -192,14 +218,14 @@ def login():
                 session['user_role'] = 'teacher'
                 session['teacher_id'] = teacher.id
                 session['teacher_name'] = teacher.name
-                log_activity('teacher', f'تسجيل دخول المعلم: {teacher.name}')
+                log_activity('teacher', f'تسجيل دخول المعلم: {teacher.name}', teacher_name=teacher.name, action_type='تسجيل دخول')
                 return redirect(url_for('teacher'))
         flash('اسم المستخدم أو كلمة المرور غير صحيحة')
     return render_template('login.html')
 
 @app.route('/logout')
 def logout():
-    log_activity(session.get('user_role', 'guest'), 'تم تسجيل الخروج')
+    log_activity(session.get('user_role', 'guest'), 'تم تسجيل الخروج', teacher_name=session.get('teacher_name', 'المدير'), action_type='تسجيل خروج')
     session.clear()
     return redirect(url_for('login'))
 
@@ -215,7 +241,7 @@ def admin():
                     try:
                         db.session.add(Grade(name=name))
                         db.session.commit()
-                        log_activity('admin', f'إضافة صف جديد: {name}')
+                        log_activity('admin', f'إضافة صف جديد: {name}', teacher_name='المدير', action_type='إضافة', description=f'إضافة صف جديد: {name}')
                         flash('تم إضافة الصف بنجاح')
                     except Exception as e:
                         db.session.rollback()
@@ -229,7 +255,7 @@ def admin():
                         old_name = grade.name
                         grade.name = new_name
                         db.session.commit()
-                        log_activity('admin', f'تعديل اسم الصف من {old_name} إلى {new_name}')
+                        log_activity('admin', f'تعديل اسم الصف من {old_name} إلى {new_name}', teacher_name='المدير', action_type='تعديل', description=f'تعديل اسم الصف من {old_name} إلى {new_name}')
                         flash('تم تعديل اسم الصف بنجاح')
             elif action == 'delete_grade':
                 gid = request.form.get('grade_id')
@@ -243,7 +269,7 @@ def admin():
                             db.session.delete(cls_obj)
                         db.session.delete(grade)
                         db.session.commit()
-                        log_activity('admin', f'حذف صف: {name}')
+                        log_activity('admin', f'حذف صف: {name}', teacher_name='المدير', action_type='حذف', description=f'حذف صف: {name} وجميع فصوله وبياناته')
                         flash('تم حذف الصف بنجاح')
             elif action == 'edit_class':
                 cid = request.form.get('class_id')
@@ -279,7 +305,7 @@ def admin():
                         name = cls.name
                         db.session.delete(cls)
                         db.session.commit()
-                        log_activity('admin', f'حذف فصل: {name}')
+                        log_activity('admin', f'حذف فصل: {name}', teacher_name='المدير', action_type='حذف', description=f'حذف فصل: {name} وجميع بياناته الأسبوعية')
                         flash('تم حذف الفصل بنجاح')
             elif action == 'save_fixed_schedule':
                 cid = request.form.get('class_id')
@@ -306,7 +332,7 @@ def admin():
                                         )
                                     ).update({"subject_name": name}, synchronize_session=False)
                         db.session.commit()
-                        log_activity('admin', f'حفظ الجدول الأساسي للفصل: {cls.grade.name} - {cls.name}')
+                        log_activity('admin', f'حفظ الجدول الأساسي للفصل: {cls.grade.name} - {cls.name}', teacher_name='المدير', action_type='تعديل', description=f'حفظ الجدول الأساسي للفصل {cls.grade.name} - {cls.name} — البيانات التي أدخلها المعلمون محمية')
                         flash('تم الحفظ بنجاح — لم يتم تعديل الحصص التي أدخل المعلمون بياناتها')
             elif action == 'update_settings':
                 for key in ['period1_date', 'period2_date', 'final_date', 'current_week', 'school_name']:
@@ -571,24 +597,50 @@ def teacher():
                 saved_count = 0
                 current_teacher_id = session.get('teacher_id')
                 teacher_name = session.get('teacher_name', session.get('user_role', 'unknown'))
+                cls_obj = db.session.get(Class, int(c_id))
+                class_label = f'{cls_obj.grade.name} - {cls_obj.name}' if cls_obj else f'فصل {c_id}'
+                save_details = []
                 for e in data.get('entries', []):
                     day = e.get('day')
                     period = int(e.get('period'))
                     topic = e.get('topic', '')
                     homework = e.get('homework', '')
                     w = WeeklyData.query.filter_by(class_id=int(c_id), week_number=int(week), day=day, period=period).first()
+                    was_existing = w is not None
+                    old_topic = w.topic if w and w.topic else ''
+                    old_homework = w.homework if w and w.homework else ''
                     if not w:
                         master_sub = Subject.query.filter_by(class_id=int(c_id), day=day, period=period).first()
                         sub_name = master_sub.name if master_sub else ''
                         w = WeeklyData(class_id=int(c_id), week_number=int(week), day=day, period=period, subject_name=sub_name, school_id=1)
                         db.session.add(w)
+                    subject_label = w.subject_name or f'ح{period}'
+                    day_ar = DAYS_AR.get(day, day)
+                    if topic or homework:
+                        if was_existing and (old_topic or old_homework):
+                            change_type = 'تعديل'
+                        else:
+                            change_type = 'إضافة'
+                        save_details.append(f'{change_type} {subject_label} ({day_ar} ح{period})')
+                    elif was_existing and (old_topic or old_homework):
+                        save_details.append(f'مسح {subject_label} ({day_ar} ح{period})')
                     w.topic = topic
                     w.homework = homework
                     w.teacher_id = current_teacher_id
                     w.updated_at = datetime.utcnow()
                     saved_count += 1
                 db.session.commit()
-                log_activity(teacher_name, f'حفظ {saved_count} حصة — الأسبوع {week}')
+                details_str = '، '.join(save_details[:10])
+                if len(save_details) > 10:
+                    details_str += f' و{len(save_details)-10} أخرى'
+                log_activity(
+                    'teacher',
+                    f'حفظ {saved_count} حصة — الأسبوع {week} — {class_label}',
+                    teacher_name=teacher_name,
+                    action_type='حفظ',
+                    target_subject=class_label,
+                    description=f'المعلم {teacher_name} حفظ بيانات الأسبوع {week} لـ{class_label}: {details_str}' if details_str else f'المعلم {teacher_name} حفظ بيانات الأسبوع {week} لـ{class_label}'
+                )
                 return jsonify({'status': 'success', 'saved': saved_count})
             except Exception as e:
                 db.session.rollback()
@@ -662,6 +714,9 @@ def swap_schedule():
                 db.session.delete(dw)
 
         db.session.commit()
+        log_activity('admin', f'نقل مادة في الجدول الأساسي: {DAYS_AR.get(from_day,from_day)} ح{from_period} ↔ {DAYS_AR.get(to_day,to_day)} ح{to_period}',
+                     teacher_name='المدير', action_type='نقل', target_subject=f'فصل {class_id}',
+                     description=f'نقل مادة في الجدول الأساسي من {DAYS_AR.get(from_day,from_day)} ح{from_period} إلى {DAYS_AR.get(to_day,to_day)} ح{to_period}')
         return jsonify({'success': True, 'message': 'تم نقل المادة وجميع بيانات الدروس بنجاح'})
 
     elif swap_type == 'weekly':
@@ -701,9 +756,47 @@ def swap_schedule():
             db.session.delete(dst_wd)
 
         db.session.commit()
+        log_activity('admin', f'نقل درس أسبوعي: {DAYS_AR.get(from_day,from_day)} ح{from_period} ↔ {DAYS_AR.get(to_day,to_day)} ح{to_period} (أسبوع {week_number})',
+                     teacher_name='المدير', action_type='نقل', target_subject=f'فصل {class_id}',
+                     description=f'نقل درس أسبوعي مع التحضير والواجب من {DAYS_AR.get(from_day,from_day)} ح{from_period} إلى {DAYS_AR.get(to_day,to_day)} ح{to_period}')
         return jsonify({'success': True, 'message': 'تم نقل بيانات الدرس بالكامل بنجاح (المادة + التحضير + الواجب)'})
 
     return jsonify({'success': False, 'message': 'نوع غير معروف'}), 400
+
+@app.route('/admin/activity_log')
+@admin_required
+def activity_log():
+    filter_teacher = request.args.get('teacher', '').strip()
+    filter_type = request.args.get('type', '').strip()
+    filter_date = request.args.get('date', '').strip()
+    page = int(request.args.get('page', '1'))
+    per_page = 50
+
+    query = ActivityLog.query
+    if filter_teacher:
+        query = query.filter(ActivityLog.teacher_name.ilike(f'%{filter_teacher}%'))
+    if filter_type:
+        query = query.filter(ActivityLog.action_type == filter_type)
+    if filter_date:
+        try:
+            from datetime import timedelta
+            date_obj = datetime.strptime(filter_date, '%Y-%m-%d')
+            query = query.filter(
+                ActivityLog.timestamp >= date_obj,
+                ActivityLog.timestamp < date_obj + timedelta(days=1)
+            )
+        except ValueError:
+            pass
+
+    total = query.count()
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    logs = query.order_by(ActivityLog.timestamp.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    teachers = TeacherAccount.query.filter_by(school_id=1).order_by(TeacherAccount.name).all()
+    settings = {s.key: s.value for s in Setting.query.all()}
+
+    return render_template('activity_log.html', logs=logs, settings=settings,
+                         filter_teacher=filter_teacher, filter_type=filter_type, filter_date=filter_date,
+                         page=page, total_pages=total_pages, total=total, teachers=teachers)
 
 @app.route('/student/<int:g_id>/<int:c_id>')
 @login_required
