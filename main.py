@@ -67,6 +67,8 @@ class WeeklyData(db.Model):
     homework = db.Column(db.Text, default='')
     subject_name = db.Column(db.String(200), default='')
     school_id = db.Column(db.Integer, nullable=True, server_default='1')
+    teacher_id = db.Column(db.Integer, nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=True)
 
 class Setting(db.Model):
     key = db.Column(db.String(100), primary_key=True)
@@ -123,6 +125,16 @@ def ensure_tables():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         '''))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+    try:
+        db.session.execute(db.text(
+            "ALTER TABLE weekly_data ADD COLUMN IF NOT EXISTS teacher_id INTEGER"
+        ))
+        db.session.execute(db.text(
+            "ALTER TABLE weekly_data ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP"
+        ))
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -280,10 +292,22 @@ def admin():
                             for period in range(1, 9):
                                 name = request.form.get(f'fixed_{day}_{period}')
                                 if name:
-                                    db.session.add(Subject(class_id=class_id, day=day, period=period, name=name))
-                                    db.session.query(WeeklyData).filter_by(class_id=class_id, day=day, period=period).update({"subject_name": name})
+                                    db.session.add(Subject(class_id=class_id, day=day, period=period, name=name, school_id=1))
+                                    db.session.query(WeeklyData).filter_by(
+                                        class_id=class_id, day=day, period=period
+                                    ).filter(
+                                        db.or_(
+                                            WeeklyData.topic == None,
+                                            WeeklyData.topic == '',
+                                        ),
+                                        db.or_(
+                                            WeeklyData.homework == None,
+                                            WeeklyData.homework == '',
+                                        )
+                                    ).update({"subject_name": name}, synchronize_session=False)
                         db.session.commit()
-                        flash('تم الحفظ بنجاح')
+                        log_activity('admin', f'حفظ الجدول الأساسي للفصل: {cls.grade.name} - {cls.name}')
+                        flash('تم الحفظ بنجاح — لم يتم تعديل الحصص التي أدخل المعلمون بياناتها')
             elif action == 'update_settings':
                 for key in ['period1_date', 'period2_date', 'final_date', 'current_week', 'school_name']:
                     val = request.form.get(key)
@@ -468,10 +492,10 @@ def upload_master():
                             db.session.query(Subject).filter_by(class_id=cls.id, day=day_en, period=period_num).delete()
                             db.session.add(Subject(class_id=cls.id, day=day_en, period=period_num, name=subject_name, school_id=1))
                             
-                            # UPSERT logic for Weekly Data
                             w_entry = WeeklyData.query.filter_by(class_id=cls.id, week_number=current_week, day=day_en, period=period_num).first()
                             if w_entry:
-                                w_entry.subject_name = subject_name
+                                if not (w_entry.topic and w_entry.topic.strip()) and not (w_entry.homework and w_entry.homework.strip()):
+                                    w_entry.subject_name = subject_name
                                 w_entry.school_id = 1
                             else:
                                 db.session.add(WeeklyData(class_id=cls.id, week_number=current_week, day=day_en, period=period_num, subject_name=subject_name, school_id=1))
@@ -544,6 +568,9 @@ def teacher():
         data = request.json
         if c_id and week:
             try:
+                saved_count = 0
+                current_teacher_id = session.get('teacher_id')
+                teacher_name = session.get('teacher_name', session.get('user_role', 'unknown'))
                 for e in data.get('entries', []):
                     day = e.get('day')
                     period = int(e.get('period'))
@@ -553,14 +580,19 @@ def teacher():
                     if not w:
                         master_sub = Subject.query.filter_by(class_id=int(c_id), day=day, period=period).first()
                         sub_name = master_sub.name if master_sub else ''
-                        w = WeeklyData(class_id=int(c_id), week_number=int(week), day=day, period=period, subject_name=sub_name)
+                        w = WeeklyData(class_id=int(c_id), week_number=int(week), day=day, period=period, subject_name=sub_name, school_id=1)
                         db.session.add(w)
                     w.topic = topic
                     w.homework = homework
+                    w.teacher_id = current_teacher_id
+                    w.updated_at = datetime.utcnow()
+                    saved_count += 1
                 db.session.commit()
-                return jsonify({'status': 'success'})
+                log_activity(teacher_name, f'حفظ {saved_count} حصة — الأسبوع {week}')
+                return jsonify({'status': 'success', 'saved': saved_count})
             except Exception as e:
                 db.session.rollback()
+                traceback.print_exc()
                 return jsonify({'status': 'error', 'message': str(e)})
         return jsonify({'status': 'error', 'message': 'Missing data'})
 

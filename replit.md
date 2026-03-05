@@ -25,7 +25,7 @@ Tables defined in `main.py`:
 - `grade` - Grade levels (e.g., اول ابتدائي)
 - `class` - Classes within grades (e.g., أ, ب)
 - `subject` - Master schedule (class_id, day, period, name, school_id)
-- `weekly_data` - Weekly teacher data (class_id, week_number, day, period, subject_name, topic, homework, school_id)
+- `weekly_data` - Weekly teacher data (class_id, week_number, day, period, subject_name, topic, homework, school_id, teacher_id, updated_at)
 - `setting` - Key-value store (admin_password, current_week, school_name, etc.)
 - `locked_day` - Days locked from teacher editing
 - `activity_log` - Audit trail
@@ -33,6 +33,10 @@ Tables defined in `main.py`:
 - `teacher_account` - Teacher login accounts (name, username, password, school_id, is_active)
 
 **Important**: `school_id` is nullable in subject and weekly_data tables but defaults to 1. The school table MUST have a record with id=1.
+
+**Data Protection**: The `save_fixed_schedule` action only updates `subject_name` in WeeklyData records where teachers have NOT entered topic/homework. Teacher-entered data (topic + homework) is never overwritten by admin master schedule saves. The `teacher_id` and `updated_at` columns on `weekly_data` track who saved each entry and when.
+
+**Database Migration**: `before_request` hook (runs once per worker) ensures `teacher_account` table and `teacher_id`/`updated_at` columns exist. Uses `CREATE TABLE IF NOT EXISTS` and `ALTER TABLE ADD COLUMN IF NOT EXISTS` — safe to run repeatedly.
 
 ### Frontend (Flask Jinja Templates)
 - `templates/index.html` - Landing page with role selection
