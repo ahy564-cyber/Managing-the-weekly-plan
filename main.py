@@ -798,8 +798,13 @@ def activity_log():
                          filter_teacher=filter_teacher, filter_type=filter_type, filter_date=filter_date,
                          page=page, total_pages=total_pages, total=total, teachers=teachers)
 
+@app.route('/student')
+def student_landing():
+    settings = {s.key: s.value for s in Setting.query.all()}
+    grades = Grade.query.all()
+    return render_template('student_landing.html', grades=grades, settings=settings)
+
 @app.route('/student/<int:g_id>/<int:c_id>')
-@login_required
 def student(g_id, c_id):
     settings = {s.key: s.value for s in Setting.query.all()}
     week = settings.get('current_week', '1')

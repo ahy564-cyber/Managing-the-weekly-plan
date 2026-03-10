@@ -14,7 +14,9 @@ Preferred communication style: Simple, everyday language.
 - **Python Flask Backend** (`main.py`) - Main application logic
   - Uses PostgreSQL database via SQLAlchemy ORM
   - Serves HTML templates from `templates/` directory
-  - Routes: `/`, `/login`, `/admin`, `/teacher`, `/student/<g_id>/<c_id>`, `/admin/upload_master`, `/admin/upload_teachers`, `/admin/audit_report`, `/admin/activity_log`, `/admin/swap_schedule` (AJAX)
+  - Routes: `/`, `/login`, `/admin`, `/teacher`, `/student` (public landing), `/student/<g_id>/<c_id>` (public view), `/admin/upload_master`, `/admin/upload_teachers`, `/admin/audit_report`, `/admin/activity_log`, `/admin/swap_schedule` (AJAX)
+  - Public routes (no login): `/`, `/student`, `/student/<g_id>/<c_id>`
+  - Protected routes: `/admin/*` (admin only), `/teacher` (login required)
 
 - **Node.js Proxy** (`server/index.ts`) - HTTP proxy on port 5000
   - Proxies all requests to Flask running on port 5001
@@ -40,7 +42,8 @@ Tables defined in `main.py`:
 
 ### Frontend (Flask Jinja Templates)
 - `templates/index.html` - Landing page with role selection
-- `templates/student.html` - Weekly schedule view for students
+- `templates/student_landing.html` - Public grade/class picker for students
+- `templates/student.html` - Weekly schedule view for students (public)
 - `templates/admin.html` - Admin panel (grades, classes, master schedule, settings, import, audit)
 - `templates/teacher.html` - Teacher portal (view subjects read-only, edit topic/homework)
 - `templates/login.html` - Unified login (admin + teacher)
