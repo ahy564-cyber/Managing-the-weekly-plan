@@ -171,27 +171,36 @@
             btn.disabled = true;
             btn.style.opacity = '0.7';
 
-            fetch(location.href, {
+            // FIX 3: Add _t timestamp to bust any proxy/browser cache on the POST target URL
+            const saveUrl = location.href.split('?')[0] + location.search + (location.search ? '&' : '?') + '_t=' + Date.now();
+            fetch(saveUrl, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
+                },
                 body: JSON.stringify({entries})
             })
             .then(response => {
-                if (!response.ok) throw new Error('Network response was not ok');
+                if (!response.ok) throw new Error('HTTP ' + response.status);
                 return response.json();
             })
             .then(data => {
                 if(data.status === 'success') {
+                    // FIX 4: Log record_ids to browser console for debugging
+                    console.log('[Save OK] حصص محفوظة:', data.saved, '| record_ids:', data.record_ids);
                     showToast();
                     btn.textContent = 'تم الحفظ بنجاح ✓';
                     btn.style.background = '#059669';
                     setTimeout(() => {
                         btn.textContent = originalText;
-                        btn.style.background = '#10b981';
+                        btn.style.background = '';
                         btn.style.opacity = '1';
                         btn.disabled = false;
-                    }, 2000);
+                    }, 2500);
                 } else {
+                    console.error('[Save FAIL]', data);
                     alert('خطأ أثناء الحفظ: ' + (data.message || 'فشل الاتصال بالخادم'));
                     btn.textContent = originalText;
                     btn.disabled = false;
@@ -199,7 +208,7 @@
                 }
             })
             .catch(error => {
-                console.error('Error:', error);
+                console.error('[Save ERROR]', error);
                 alert('حدث خطأ في الاتصال بالخادم، يرجى المحاولة مرة أخرى.');
                 btn.textContent = originalText;
                 btn.disabled = false;

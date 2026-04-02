@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, make_response
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import joinedload
 from sqlalchemy import func
@@ -600,48 +600,56 @@ def teacher():
                 cls_obj = db.session.get(Class, int(c_id))
                 class_label = f'{cls_obj.grade.name} - {cls_obj.name}' if cls_obj else f'فصل {c_id}'
                 save_details = []
+                record_ids = []
                 for e in data.get('entries', []):
                     day = e.get('day')
                     period = int(e.get('period'))
-                    topic = e.get('topic', '')
-                    homework = e.get('homework', '')
-                    w = WeeklyData.query.filter_by(class_id=int(c_id), week_number=int(week), day=day, period=period).first()
+                    topic = (e.get('topic') or '').strip()
+                    homework = (e.get('homework') or '').strip()
+                    # FIX 1: Always filter by school_id=1 to prevent cross-school record confusion
+                    # FIX 2: Use with_for_update() for row-level locking — prevents concurrent overwrites
+                    w = WeeklyData.query.filter_by(
+                        class_id=int(c_id), week_number=int(week),
+                        day=day, period=period, school_id=1
+                    ).with_for_update().first()
                     was_existing = w is not None
                     old_topic = w.topic if w and w.topic else ''
                     old_homework = w.homework if w and w.homework else ''
                     if not w:
-                        master_sub = Subject.query.filter_by(class_id=int(c_id), day=day, period=period).first()
+                        master_sub = Subject.query.filter_by(class_id=int(c_id), day=day, period=period, school_id=1).first()
                         sub_name = master_sub.name if master_sub else ''
-                        w = WeeklyData(class_id=int(c_id), week_number=int(week), day=day, period=period, subject_name=sub_name, school_id=1)
+                        w = WeeklyData(class_id=int(c_id), week_number=int(week), day=day, period=period,
+                                       subject_name=sub_name, school_id=1)
                         db.session.add(w)
+                        db.session.flush()  # get the id assigned immediately
                     subject_label = w.subject_name or f'ح{period}'
                     day_ar = DAYS_AR.get(day, day)
                     if topic or homework:
-                        if was_existing and (old_topic or old_homework):
-                            change_type = 'تعديل'
-                        else:
-                            change_type = 'إضافة'
-                        save_details.append(f'{change_type} {subject_label} ({day_ar} ح{period})')
+                        change_type = 'تعديل' if (was_existing and (old_topic or old_homework)) else 'إضافة'
+                        save_details.append(f'{change_type} {subject_label} ({day_ar} ح{period}): موضوع="{topic}" واجب="{homework}"')
                     elif was_existing and (old_topic or old_homework):
                         save_details.append(f'مسح {subject_label} ({day_ar} ح{period})')
                     w.topic = topic
                     w.homework = homework
                     w.teacher_id = current_teacher_id
                     w.updated_at = datetime.utcnow()
+                    record_ids.append(w.id)
                     saved_count += 1
                 db.session.commit()
+                # FIX 4: Log record_ids and raw data for full traceability
                 details_str = '، '.join(save_details[:10])
                 if len(save_details) > 10:
                     details_str += f' و{len(save_details)-10} أخرى'
+                ids_str = ','.join(str(i) for i in record_ids if i)
                 log_activity(
                     'teacher',
                     f'حفظ {saved_count} حصة — الأسبوع {week} — {class_label}',
                     teacher_name=teacher_name,
                     action_type='حفظ',
                     target_subject=class_label,
-                    description=f'المعلم {teacher_name} حفظ بيانات الأسبوع {week} لـ{class_label}: {details_str}' if details_str else f'المعلم {teacher_name} حفظ بيانات الأسبوع {week} لـ{class_label}'
+                    description=f'[IDs:{ids_str}] {teacher_name} | أسبوع {week} | {class_label} | {details_str}' if details_str else f'[IDs:{ids_str}] {teacher_name} | أسبوع {week} | {class_label}'
                 )
-                return jsonify({'status': 'success', 'saved': saved_count})
+                return jsonify({'status': 'success', 'saved': saved_count, 'record_ids': record_ids})
             except Exception as e:
                 db.session.rollback()
                 traceback.print_exc()
@@ -652,14 +660,22 @@ def teacher():
     classes = Class.query.filter_by(grade_id=int(g_id)).all() if g_id else []
     schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
     if c_id:
-        for f in Subject.query.filter_by(class_id=int(c_id)).all():
+        # FIX: always scope to school_id=1 on both Subject and WeeklyData reads
+        for f in Subject.query.filter_by(class_id=int(c_id), school_id=1).all():
             schedule[f.day][f.period]['subject_name'] = f.name
-        for w in WeeklyData.query.filter_by(class_id=int(c_id), week_number=int(week)).all():
+        for w in WeeklyData.query.filter_by(class_id=int(c_id), week_number=int(week), school_id=1).all():
             schedule[w.day][w.period].update({'topic': w.topic, 'homework': w.homework})
             if w.subject_name: schedule[w.day][w.period]['subject_name'] = w.subject_name
-    
+
     locked = [ld.day_name for ld in LockedDay.query.filter_by(week_number=int(week)).all()]
-    return render_template('teacher.html', grades=grades, classes=classes, schedule=schedule, selected_grade=g_id, selected_class=c_id, selected_week=week, days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings, locked_days=locked)
+    # FIX 3: No-cache headers so browser always fetches fresh data from DB
+    resp = make_response(render_template('teacher.html', grades=grades, classes=classes, schedule=schedule,
+                                         selected_grade=g_id, selected_class=c_id, selected_week=week,
+                                         days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings, locked_days=locked))
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
 
 @app.route('/admin/swap_schedule', methods=['POST'])
 @admin_required
