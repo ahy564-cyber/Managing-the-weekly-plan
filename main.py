@@ -172,6 +172,13 @@ def ensure_tables():
         db.session.commit()
     except Exception:
         db.session.rollback()
+    # Data integrity fix: heal any Subject/WeeklyData records missing school_id
+    try:
+        db.session.execute(db.text("UPDATE subject SET school_id = 1 WHERE school_id IS NULL"))
+        db.session.execute(db.text("UPDATE weekly_data SET school_id = 1 WHERE school_id IS NULL"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 def admin_required(f):
     @wraps(f)
