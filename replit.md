@@ -57,6 +57,8 @@ Tables defined in `main.py`:
 - Cleans `\n` characters from cells using `.replace('\n', ' ').strip()`
 - UPSERT logic: deletes existing Subject, creates new one; updates or creates WeeklyData
 - All records set school_id=1
+- **FIX**: Creates/updates WeeklyData for ALL 19 weeks (1-19) — not just current_week; teacher-entered topic/homework always protected
+- Pre-loads existing WeeklyData per class into dict for efficient batch processing
 
 ### Key Features
 - **Edit Grade/Class names**: Inline edit with save button in admin panel

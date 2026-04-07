@@ -102,6 +102,14 @@ class ActivityLog(db.Model):
     target_subject = db.Column(db.String(200), nullable=True)
     description = db.Column(db.Text, nullable=True)
 
+def safe_week(val, default=1):
+    """Convert week value to int safely; returns default if invalid."""
+    try:
+        v = int(str(val).strip())
+        return v if 1 <= v <= 99 else default
+    except (ValueError, TypeError):
+        return default
+
 def log_activity(role, action, teacher_name=None, action_type=None, target_subject=None, description=None):
     try:
         log = ActivityLog(
@@ -319,21 +327,23 @@ def admin():
                                 name = request.form.get(f'fixed_{day}_{period}')
                                 if name:
                                     db.session.add(Subject(class_id=class_id, day=day, period=period, name=name, school_id=1))
+                                    # FIX: Update existing WeeklyData (all weeks) where topic+homework empty
                                     db.session.query(WeeklyData).filter_by(
-                                        class_id=class_id, day=day, period=period
+                                        class_id=class_id, day=day, period=period, school_id=1
                                     ).filter(
-                                        db.or_(
-                                            WeeklyData.topic == None,
-                                            WeeklyData.topic == '',
-                                        ),
-                                        db.or_(
-                                            WeeklyData.homework == None,
-                                            WeeklyData.homework == '',
-                                        )
+                                        db.or_(WeeklyData.topic == None, WeeklyData.topic == ''),
+                                        db.or_(WeeklyData.homework == None, WeeklyData.homework == '')
                                     ).update({"subject_name": name}, synchronize_session=False)
+                                    # FIX: Create WeeklyData for weeks 1-19 that don't exist yet
+                                    existing_weeks = {w.week_number for w in WeeklyData.query.filter_by(
+                                        class_id=class_id, day=day, period=period, school_id=1).all()}
+                                    for wk in range(1, 20):
+                                        if wk not in existing_weeks:
+                                            db.session.add(WeeklyData(class_id=class_id, week_number=wk,
+                                                day=day, period=period, subject_name=name, school_id=1))
                         db.session.commit()
-                        log_activity('admin', f'حفظ الجدول الأساسي للفصل: {cls.grade.name} - {cls.name}', teacher_name='المدير', action_type='تعديل', description=f'حفظ الجدول الأساسي للفصل {cls.grade.name} - {cls.name} — البيانات التي أدخلها المعلمون محمية')
-                        flash('تم الحفظ بنجاح — لم يتم تعديل الحصص التي أدخل المعلمون بياناتها')
+                        log_activity('admin', f'حفظ الجدول الأساسي للفصل: {cls.grade.name} - {cls.name}', teacher_name='المدير', action_type='تعديل', description=f'حفظ الجدول الأساسي للفصل {cls.grade.name} - {cls.name} — تم نشر المادة للأسابيع 1-19')
+                        flash('تم الحفظ بنجاح — تم نشر المواد للأسابيع 1-19')
             elif action == 'update_settings':
                 for key in ['period1_date', 'period2_date', 'final_date', 'current_week', 'school_name']:
                     val = request.form.get(key)
@@ -345,7 +355,7 @@ def admin():
             elif action == 'update_locked_days':
                 week = request.form.get('week_number')
                 if week:
-                    w_int = int(week)
+                    w_int = safe_week(week)
                     db.session.execute(db.delete(LockedDay).where(LockedDay.week_number == w_int))
                     for d in request.form.getlist('locked_days'):
                         db.session.add(LockedDay(week_number=w_int, day_name=d, school_id=1))
@@ -356,15 +366,18 @@ def admin():
                 week = request.form.get('week')
                 if cid and cid != 'None' and week:
                     class_id = int(cid)
-                    week_num = int(week)
+                    week_num = safe_week(week)
                     for day in DAYS_ORDER:
                         for period in range(1, 9):
-                            subject_name = request.form.get(f'override_{day}_{period}', '')
-                            wd = WeeklyData.query.filter_by(class_id=class_id, week_number=week_num, day=day, period=period).first()
+                            subject_name = request.form.get(f'override_{day}_{period}', '').strip()
+                            # FIX: include school_id=1 in lookup to avoid touching orphaned records
+                            wd = WeeklyData.query.filter_by(class_id=class_id, week_number=week_num,
+                                                             day=day, period=period, school_id=1).first()
                             if wd:
                                 wd.subject_name = subject_name
                             elif subject_name:
-                                db.session.add(WeeklyData(class_id=class_id, week_number=week_num, day=day, period=period, subject_name=subject_name, topic='', homework='', school_id=1))
+                                db.session.add(WeeklyData(class_id=class_id, week_number=week_num,
+                                    day=day, period=period, subject_name=subject_name, topic='', homework='', school_id=1))
                     db.session.commit()
                     flash('تم حفظ التعديلات الأسبوعية بنجاح')
             elif action == 'add_teacher':
@@ -436,19 +449,19 @@ def admin():
             fixed_schedule[s.day][s.period] = s.name
 
     sel_class_id = request.args.get('class_id')
-    sel_week = request.args.get('week', settings.get('current_week', '1'))
+    sel_week = str(safe_week(request.args.get('week', settings.get('current_week', '1'))))
     schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
     if sel_class_id:
         for f in Subject.query.filter_by(class_id=int(sel_class_id)).all():
             schedule[f.day][f.period]['subject_name'] = f.name
-        for w in WeeklyData.query.filter_by(class_id=int(sel_class_id), week_number=int(sel_week)).all():
+        for w in WeeklyData.query.filter_by(class_id=int(sel_class_id), week_number=safe_week(sel_week)).all():
             schedule[w.day][w.period].update({'topic': w.topic, 'homework': w.homework})
             if w.subject_name: schedule[w.day][w.period]['subject_name'] = w.subject_name
 
-    l_week = request.args.get('locked_week', settings.get('current_week', '1'))
-    locked_days = [ld.day_name for ld in LockedDay.query.filter_by(week_number=int(l_week)).all()]
+    l_week = str(safe_week(request.args.get('locked_week', settings.get('current_week', '1'))))
+    locked_days = [ld.day_name for ld in LockedDay.query.filter_by(week_number=safe_week(l_week)).all()]
 
-    c_week = int(settings.get('current_week', '1'))
+    c_week = safe_week(settings.get('current_week', '1'))
     completed = [c for c in classes if WeeklyData.query.filter(WeeklyData.class_id==c.id, WeeklyData.week_number==c_week, WeeklyData.school_id==1, WeeklyData.topic!='', WeeklyData.topic!=None).first()]
     pending = [c for c in classes if c not in completed]
     percent = (len(completed)/len(classes)*100) if classes else 0
@@ -488,25 +501,27 @@ def upload_master():
             'Thursday': range(33, 41)
         }
         
-        settings = {s.key: s.value for s in Setting.query.all()}
-        current_week = int(settings.get('current_week', '1'))
-        
+        ALL_WEEKS = list(range(1, 20))  # Weeks 1-19
+
         import_count = 0
         for _, row in df.iterrows():
             grade_name = str(row[0])
             if not grade_name or grade_name.lower() in ['nan', 'none', '']: continue
             
-            # Clean newlines from grade name as well
             grade_name = grade_name.replace('\n', ' ').strip()
             
-            # Use Grade Name as Class Name if not specified, or split if "Grade - Class"
             if ' - ' in grade_name:
                 parts = grade_name.split(' - ')
                 g_n, c_n = parts[0].strip(), parts[1].strip()
             else:
-                g_n, c_n = grade_name, "أ" # Default to 'A' if only grade is provided
+                g_n, c_n = grade_name, "أ"
 
             cls = get_or_create_class(g_n, c_n)
+
+            # Pre-load all existing WeeklyData for this class (all weeks) for fast lookup
+            existing_wd = {}
+            for w in WeeklyData.query.filter_by(class_id=cls.id, school_id=1).all():
+                existing_wd[(w.week_number, w.day, w.period)] = w
             
             for day_en, col_range in day_mappings.items():
                 for idx, col_idx in enumerate(col_range):
@@ -514,22 +529,30 @@ def upload_master():
                     if col_idx < len(row):
                         subject_name = str(row[col_idx]).replace('\n', ' ').strip()
                         if subject_name and subject_name.lower() not in ['nan', 'none', '']:
-                            # UPSERT logic for Master Schedule
+                            # Update Subject master table (UPSERT)
                             db.session.query(Subject).filter_by(class_id=cls.id, day=day_en, period=period_num).delete()
                             db.session.add(Subject(class_id=cls.id, day=day_en, period=period_num, name=subject_name, school_id=1))
-                            
-                            w_entry = WeeklyData.query.filter_by(class_id=cls.id, week_number=current_week, day=day_en, period=period_num).first()
-                            if w_entry:
-                                if not (w_entry.topic and w_entry.topic.strip()) and not (w_entry.homework and w_entry.homework.strip()):
-                                    w_entry.subject_name = subject_name
-                                w_entry.school_id = 1
-                            else:
-                                db.session.add(WeeklyData(class_id=cls.id, week_number=current_week, day=day_en, period=period_num, subject_name=subject_name, school_id=1))
-                            
+
+                            # FIX: Seed WeeklyData for ALL 19 weeks — not just current_week
+                            # Teacher-entered data (topic + homework) is always protected
+                            for wk in ALL_WEEKS:
+                                key = (wk, day_en, period_num)
+                                w_entry = existing_wd.get(key)
+                                if w_entry:
+                                    # Only update subject_name if teacher hasn't filled topic/homework
+                                    if not (w_entry.topic and w_entry.topic.strip()) and \
+                                       not (w_entry.homework and w_entry.homework.strip()):
+                                        w_entry.subject_name = subject_name
+                                else:
+                                    new_w = WeeklyData(class_id=cls.id, week_number=wk, day=day_en,
+                                                       period=period_num, subject_name=subject_name, school_id=1)
+                                    db.session.add(new_w)
+                                    existing_wd[key] = new_w  # track for current loop
+
                             import_count += 1
         
         db.session.commit()
-        flash(f'تم استيراد {import_count} حصة بنجاح')
+        flash(f'تم استيراد {import_count} حصة بنجاح (تم نشر المادة في الأسابيع 1-19)')
     except Exception as e:
         db.session.rollback()
         traceback.print_exc()
@@ -584,7 +607,7 @@ def teacher():
     settings = {s.key: s.value for s in Setting.query.all()}
     g_id = request.args.get('grade_id')
     c_id = request.args.get('class_id')
-    week = request.args.get('week', settings.get('current_week', '1'))
+    week = str(safe_week(request.args.get('week', settings.get('current_week', '1'))))
     if g_id in (None, '', 'None'):
         g_id = None
     if c_id in (None, '', 'None'):
@@ -609,7 +632,7 @@ def teacher():
                     # FIX 1: Always filter by school_id=1 to prevent cross-school record confusion
                     # FIX 2: Use with_for_update() for row-level locking — prevents concurrent overwrites
                     w = WeeklyData.query.filter_by(
-                        class_id=int(c_id), week_number=int(week),
+                        class_id=int(c_id), week_number=safe_week(week),
                         day=day, period=period, school_id=1
                     ).with_for_update().first()
                     was_existing = w is not None
@@ -618,7 +641,7 @@ def teacher():
                     if not w:
                         master_sub = Subject.query.filter_by(class_id=int(c_id), day=day, period=period, school_id=1).first()
                         sub_name = master_sub.name if master_sub else ''
-                        w = WeeklyData(class_id=int(c_id), week_number=int(week), day=day, period=period,
+                        w = WeeklyData(class_id=int(c_id), week_number=safe_week(week), day=day, period=period,
                                        subject_name=sub_name, school_id=1)
                         db.session.add(w)
                         db.session.flush()  # get the id assigned immediately
@@ -663,11 +686,11 @@ def teacher():
         # FIX: always scope to school_id=1 on both Subject and WeeklyData reads
         for f in Subject.query.filter_by(class_id=int(c_id), school_id=1).all():
             schedule[f.day][f.period]['subject_name'] = f.name
-        for w in WeeklyData.query.filter_by(class_id=int(c_id), week_number=int(week), school_id=1).all():
-            schedule[w.day][w.period].update({'topic': w.topic, 'homework': w.homework})
+        for w in WeeklyData.query.filter_by(class_id=int(c_id), week_number=safe_week(week), school_id=1).all():
+            schedule[w.day][w.period].update({'topic': w.topic or '', 'homework': w.homework or ''})
             if w.subject_name: schedule[w.day][w.period]['subject_name'] = w.subject_name
 
-    locked = [ld.day_name for ld in LockedDay.query.filter_by(week_number=int(week)).all()]
+    locked = [ld.day_name for ld in LockedDay.query.filter_by(week_number=safe_week(week)).all()]
     # FIX 3: No-cache headers so browser always fetches fresh data from DB
     resp = make_response(render_template('teacher.html', grades=grades, classes=classes, schedule=schedule,
                                          selected_grade=g_id, selected_class=c_id, selected_week=week,
@@ -823,29 +846,29 @@ def student_landing():
 @app.route('/student/<int:g_id>/<int:c_id>')
 def student(g_id, c_id):
     settings = {s.key: s.value for s in Setting.query.all()}
-    week = settings.get('current_week', '1')
+    week_int = safe_week(settings.get('current_week', '1'))
+    week = str(week_int)
     grade = db.session.get(Grade, g_id)
     cls = db.session.get(Class, c_id)
     schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
     for f in Subject.query.filter_by(class_id=c_id).all():
         schedule[f.day][f.period]['subject_name'] = f.name
-    for w in WeeklyData.query.filter_by(class_id=c_id, week_number=int(week)).all():
-        schedule[w.day][w.period].update({'topic': w.topic, 'homework': w.homework})
+    for w in WeeklyData.query.filter_by(class_id=c_id, week_number=week_int).all():
+        schedule[w.day][w.period].update({'topic': w.topic or '', 'homework': w.homework or ''})
         if w.subject_name: schedule[w.day][w.period]['subject_name'] = w.subject_name
     return render_template('student.html', schedule=schedule, days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings, week=week, grade_name=grade.name if grade else '', class_name=cls.name if cls else '')
 
 @app.route('/admin/audit_report')
 @admin_required
 def audit_report():
-    week = request.args.get('week', '1')
-    if not week or not week.strip():
-        week = '1'
+    week_int = safe_week(request.args.get('week', '1'))
+    week = str(week_int)
     classes = Class.query.options(joinedload(Class.grade)).all()
     report = []
     for c in classes:
         subjects = Subject.query.filter_by(class_id=c.id, school_id=1).all()
         for subj in subjects:
-            wd = WeeklyData.query.filter_by(class_id=c.id, week_number=int(week), day=subj.day, period=subj.period, school_id=1).first()
+            wd = WeeklyData.query.filter_by(class_id=c.id, week_number=week_int, day=subj.day, period=subj.period, school_id=1).first()
             if not wd or not wd.topic or not wd.homework:
                 report.append({
                     'subject': subj.name,
