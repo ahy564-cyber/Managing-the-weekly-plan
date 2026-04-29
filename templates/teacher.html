@@ -143,10 +143,17 @@
     {% endif %}
 
     <script>
-        function showToast() {
+        function showToast(changedCount) {
             const toast = document.getElementById("toast");
+            if (changedCount === 0) {
+                toast.textContent = 'لا توجد تغييرات للحفظ';
+                toast.style.background = '#64748b';
+            } else {
+                toast.textContent = `✓ تم الحفظ — ${changedCount} تعديل`;
+                toast.style.background = '#059669';
+            }
             toast.className = "show";
-            setTimeout(function(){ toast.className = toast.className.replace("show", ""); }, 3000);
+            setTimeout(function(){ toast.className = toast.className.replace("show", ""); toast.style.background = ''; }, 3000);
         }
 
         function saveData() {
@@ -188,10 +195,8 @@
             })
             .then(data => {
                 if(data.status === 'success') {
-                    // FIX 4: Log record_ids to browser console for debugging
-                    console.log('[Save OK] حصص محفوظة:', data.saved, '| record_ids:', data.record_ids);
-                    showToast();
-                    btn.textContent = 'تم الحفظ بنجاح ✓';
+                    showToast(data.saved);
+                    btn.textContent = data.saved > 0 ? `تم الحفظ (${data.saved} تعديل) ✓` : 'لا توجد تغييرات';
                     btn.style.background = '#059669';
                     setTimeout(() => {
                         btn.textContent = originalText;

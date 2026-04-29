@@ -624,62 +624,89 @@ def teacher():
         data = request.json
         if c_id and week:
             try:
-                saved_count = 0
+                changed_count = 0
                 current_teacher_id = session.get('teacher_id')
                 teacher_name = session.get('teacher_name', session.get('user_role', 'unknown'))
                 cls_obj = db.session.get(Class, int(c_id))
                 class_label = f'{cls_obj.grade.name} - {cls_obj.name}' if cls_obj else f'فصل {c_id}'
-                save_details = []
-                record_ids = []
+                change_details = []
+
                 for e in data.get('entries', []):
                     day = e.get('day')
                     period = int(e.get('period'))
-                    topic = (e.get('topic') or '').strip()
-                    homework = (e.get('homework') or '').strip()
-                    # FIX 1: Always filter by school_id=1 to prevent cross-school record confusion
-                    # FIX 2: Use with_for_update() for row-level locking — prevents concurrent overwrites
+                    new_topic = (e.get('topic') or '').strip()
+                    new_homework = (e.get('homework') or '').strip()
+
                     w = WeeklyData.query.filter_by(
                         class_id=int(c_id), week_number=safe_week(week),
                         day=day, period=period, school_id=1
                     ).with_for_update().first()
-                    was_existing = w is not None
-                    old_topic = w.topic if w and w.topic else ''
-                    old_homework = w.homework if w and w.homework else ''
+
+                    old_topic = (w.topic or '').strip() if w else ''
+                    old_homework = (w.homework or '').strip() if w else ''
+
+                    # VALUE DIFF: only act if something actually changed
+                    topic_changed = new_topic != old_topic
+                    homework_changed = new_homework != old_homework
+                    if not topic_changed and not homework_changed:
+                        continue  # skip — no real change, nothing to write or log
+
+                    # Ensure WeeklyData record exists
                     if not w:
-                        master_sub = Subject.query.filter_by(class_id=int(c_id), day=day, period=period, school_id=1).first()
+                        master_sub = Subject.query.filter_by(
+                            class_id=int(c_id), day=day, period=period, school_id=1).first()
                         sub_name = master_sub.name if master_sub else ''
-                        w = WeeklyData(class_id=int(c_id), week_number=safe_week(week), day=day, period=period,
-                                       subject_name=sub_name, school_id=1)
+                        w = WeeklyData(class_id=int(c_id), week_number=safe_week(week),
+                                       day=day, period=period, subject_name=sub_name, school_id=1)
                         db.session.add(w)
-                        db.session.flush()  # get the id assigned immediately
+                        db.session.flush()
+
                     subject_label = w.subject_name or f'ح{period}'
                     day_ar = DAYS_AR.get(day, day)
-                    if topic or homework:
-                        change_type = 'تعديل' if (was_existing and (old_topic or old_homework)) else 'إضافة'
-                        save_details.append(f'{change_type} {subject_label} ({day_ar} ح{period}): موضوع="{topic}" واجب="{homework}"')
-                    elif was_existing and (old_topic or old_homework):
-                        save_details.append(f'مسح {subject_label} ({day_ar} ح{period})')
-                    w.topic = topic
-                    w.homework = homework
+
+                    # Build a specific, readable description of what changed
+                    parts = []
+                    if topic_changed:
+                        if old_topic and not new_topic:
+                            parts.append(f'حذف الموضوع (كان: "{old_topic}")')
+                        elif not old_topic:
+                            parts.append(f'موضوع: "{new_topic}"')
+                        else:
+                            parts.append(f'موضوع: "{old_topic}" ← "{new_topic}"')
+                    if homework_changed:
+                        if old_homework and not new_homework:
+                            parts.append(f'حذف الواجب (كان: "{old_homework}")')
+                        elif not old_homework:
+                            parts.append(f'واجب: "{new_homework}"')
+                        else:
+                            parts.append(f'واجب: "{old_homework}" ← "{new_homework}"')
+
+                    change_details.append(f'{subject_label} ({day_ar} ح{period}): {" | ".join(parts)}')
+
+                    # Write the actual change
+                    w.topic = new_topic
+                    w.homework = new_homework
                     w.teacher_id = current_teacher_id
                     w.updated_at = datetime.utcnow()
-                    record_ids.append(w.id)
-                    saved_count += 1
+                    changed_count += 1
+
                 db.session.commit()
-                # FIX 4: Log record_ids and raw data for full traceability
-                details_str = '، '.join(save_details[:10])
-                if len(save_details) > 10:
-                    details_str += f' و{len(save_details)-10} أخرى'
-                ids_str = ','.join(str(i) for i in record_ids if i)
-                log_activity(
-                    'teacher',
-                    f'حفظ {saved_count} حصة — الأسبوع {week} — {class_label}',
-                    teacher_name=teacher_name,
-                    action_type='حفظ',
-                    target_subject=class_label,
-                    description=f'[IDs:{ids_str}] {teacher_name} | أسبوع {week} | {class_label} | {details_str}' if details_str else f'[IDs:{ids_str}] {teacher_name} | أسبوع {week} | {class_label}'
-                )
-                return jsonify({'status': 'success', 'saved': saved_count, 'record_ids': record_ids})
+
+                # Only write an activity log entry when something actually changed
+                if changed_count > 0:
+                    details_str = '، '.join(change_details[:15])
+                    if len(change_details) > 15:
+                        details_str += f' و{len(change_details) - 15} أخرى'
+                    log_activity(
+                        'teacher',
+                        f'{teacher_name} عدّل {changed_count} حصة — أسبوع {week} — {class_label}',
+                        teacher_name=teacher_name,
+                        action_type='تعديل',
+                        target_subject=class_label,
+                        description=f'{teacher_name} | أسبوع {week} | {class_label} | {details_str}'
+                    )
+
+                return jsonify({'status': 'success', 'saved': changed_count})
             except Exception as e:
                 db.session.rollback()
                 traceback.print_exc()
