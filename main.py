@@ -623,13 +623,19 @@ def teacher():
     if request.method == 'POST':
         data = request.json
         if c_id and week:
+            # INTEGRITY CHECK 1: must be an authenticated session
+            current_teacher_id = session.get('teacher_id')
+            teacher_name = session.get('teacher_name', session.get('user_role', ''))
+            user_role = session.get('user_role', '')
+            if not user_role:
+                return jsonify({'status': 'error', 'message': 'انتهت جلسة العمل — يرجى تسجيل الدخول مجدداً'})
+
             try:
                 changed_count = 0
-                current_teacher_id = session.get('teacher_id')
-                teacher_name = session.get('teacher_name', session.get('user_role', 'unknown'))
                 cls_obj = db.session.get(Class, int(c_id))
                 class_label = f'{cls_obj.grade.name} - {cls_obj.name}' if cls_obj else f'فصل {c_id}'
                 change_details = []
+                week_int = safe_week(week)
 
                 for e in data.get('entries', []):
                     day = e.get('day')
@@ -637,34 +643,41 @@ def teacher():
                     new_topic = (e.get('topic') or '').strip()
                     new_homework = (e.get('homework') or '').strip()
 
+                    # RACE CONDITION GUARD: SELECT FOR UPDATE locks the row for this transaction.
+                    # A concurrent save will block here until this transaction commits/rolls back,
+                    # then read the already-committed values — value diffing will then detect no change.
                     w = WeeklyData.query.filter_by(
-                        class_id=int(c_id), week_number=safe_week(week),
+                        class_id=int(c_id), week_number=week_int,
                         day=day, period=period, school_id=1
                     ).with_for_update().first()
 
                     old_topic = (w.topic or '').strip() if w else ''
                     old_homework = (w.homework or '').strip() if w else ''
 
-                    # VALUE DIFF: only act if something actually changed
+                    # VALUE DIFF: only proceed if something actually changed
                     topic_changed = new_topic != old_topic
                     homework_changed = new_homework != old_homework
                     if not topic_changed and not homework_changed:
-                        continue  # skip — no real change, nothing to write or log
+                        continue
 
-                    # Ensure WeeklyData record exists
+                    # Ensure WeeklyData record exists (create if missing)
                     if not w:
                         master_sub = Subject.query.filter_by(
                             class_id=int(c_id), day=day, period=period, school_id=1).first()
                         sub_name = master_sub.name if master_sub else ''
-                        w = WeeklyData(class_id=int(c_id), week_number=safe_week(week),
+                        w = WeeklyData(class_id=int(c_id), week_number=week_int,
                                        day=day, period=period, subject_name=sub_name, school_id=1)
                         db.session.add(w)
                         db.session.flush()
 
+                    # INTEGRITY CHECK 2: school_id must be 1 on every record we write
+                    if w.school_id != 1:
+                        w.school_id = 1
+
                     subject_label = w.subject_name or f'ح{period}'
                     day_ar = DAYS_AR.get(day, day)
 
-                    # Build a specific, readable description of what changed
+                    # Build specific, human-readable description of what changed
                     parts = []
                     if topic_changed:
                         if old_topic and not new_topic:
@@ -683,35 +696,57 @@ def teacher():
 
                     change_details.append(f'{subject_label} ({day_ar} ح{period}): {" | ".join(parts)}')
 
-                    # Write the actual change
+                    # Write the change with explicit teacher_id + school_id
                     w.topic = new_topic
                     w.homework = new_homework
-                    w.teacher_id = current_teacher_id
+                    w.teacher_id = current_teacher_id  # may be None for admin — that is valid
                     w.updated_at = datetime.utcnow()
                     changed_count += 1
 
-                db.session.commit()
+                # COMMIT FIRST — log is written only after a confirmed successful commit
+                commit_ok = False
+                commit_error = None
+                try:
+                    db.session.commit()
+                    commit_ok = True
+                except Exception as commit_exc:
+                    db.session.rollback()
+                    commit_error = str(commit_exc)
+                    traceback.print_exc()
 
-                # Only write an activity log entry when something actually changed
+                if not commit_ok:
+                    # Log the failure then return error to teacher
+                    try:
+                        log_activity('teacher',
+                            f'{teacher_name} — فشل الحفظ — أسبوع {week} — {class_label}',
+                            teacher_name=teacher_name, action_type='خطأ',
+                            target_subject=class_label,
+                            description=f'فشل DB commit | {teacher_name} | أسبوع {week} | {class_label} | {commit_error}')
+                    except Exception:
+                        pass
+                    return jsonify({'status': 'error', 'message': f'فشل الحفظ في قاعدة البيانات — يرجى المحاولة مجدداً'})
+
+                # Log ONLY after a confirmed commit, ONLY if something actually changed
                 if changed_count > 0:
                     details_str = '، '.join(change_details[:15])
                     if len(change_details) > 15:
                         details_str += f' و{len(change_details) - 15} أخرى'
-                    log_activity(
-                        'teacher',
-                        f'{teacher_name} عدّل {changed_count} حصة — أسبوع {week} — {class_label}',
-                        teacher_name=teacher_name,
-                        action_type='تعديل',
-                        target_subject=class_label,
-                        description=f'{teacher_name} | أسبوع {week} | {class_label} | {details_str}'
-                    )
+                    try:
+                        log_activity('teacher',
+                            f'{teacher_name} عدّل {changed_count} حصة — أسبوع {week} — {class_label}',
+                            teacher_name=teacher_name, action_type='تعديل',
+                            target_subject=class_label,
+                            description=f'✓ تم الحفظ | {teacher_name} | أسبوع {week} | {class_label} | {details_str}')
+                    except Exception:
+                        pass  # log failure must never affect the data save result
 
                 return jsonify({'status': 'success', 'saved': changed_count})
+
             except Exception as e:
                 db.session.rollback()
                 traceback.print_exc()
-                return jsonify({'status': 'error', 'message': str(e)})
-        return jsonify({'status': 'error', 'message': 'Missing data'})
+                return jsonify({'status': 'error', 'message': f'خطأ غير متوقع: {str(e)}'})
+        return jsonify({'status': 'error', 'message': 'بيانات ناقصة'})
 
     grades = Grade.query.all()
     classes = Class.query.filter_by(grade_id=int(g_id)).all() if g_id else []

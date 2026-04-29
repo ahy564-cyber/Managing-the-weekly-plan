@@ -156,6 +156,14 @@
             setTimeout(function(){ toast.className = toast.className.replace("show", ""); toast.style.background = ''; }, 3000);
         }
 
+        function showErrorToast(msg) {
+            const toast = document.getElementById("toast");
+            toast.textContent = '✗ ' + msg;
+            toast.style.background = '#dc2626';
+            toast.className = "show";
+            setTimeout(function(){ toast.className = toast.className.replace("show", ""); toast.style.background = ''; }, 5000);
+        }
+
         function saveData() {
             const entries = [];
             document.querySelectorAll('td[data-day]').forEach(td => {
@@ -197,7 +205,7 @@
                 if(data.status === 'success') {
                     showToast(data.saved);
                     btn.textContent = data.saved > 0 ? `تم الحفظ (${data.saved} تعديل) ✓` : 'لا توجد تغييرات';
-                    btn.style.background = '#059669';
+                    btn.style.background = data.saved > 0 ? '#059669' : '#64748b';
                     setTimeout(() => {
                         btn.textContent = originalText;
                         btn.style.background = '';
@@ -205,19 +213,32 @@
                         btn.disabled = false;
                     }, 2500);
                 } else {
-                    console.error('[Save FAIL]', data);
-                    alert('خطأ أثناء الحفظ: ' + (data.message || 'فشل الاتصال بالخادم'));
-                    btn.textContent = originalText;
-                    btn.disabled = false;
-                    btn.style.opacity = '1';
+                    const msg = data.message || 'فشل الاتصال بالخادم';
+                    showErrorToast(msg);
+                    btn.textContent = '✗ فشل الحفظ';
+                    btn.style.background = '#dc2626';
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                        btn.style.background = '';
+                        btn.style.opacity = '1';
+                        btn.disabled = false;
+                    }, 4000);
+                    // If session expired, redirect to login
+                    if (msg.includes('جلسة')) {
+                        setTimeout(() => window.location.href = '/login', 2000);
+                    }
                 }
             })
             .catch(error => {
-                console.error('[Save ERROR]', error);
-                alert('حدث خطأ في الاتصال بالخادم، يرجى المحاولة مرة أخرى.');
-                btn.textContent = originalText;
-                btn.disabled = false;
-                btn.style.opacity = '1';
+                showErrorToast('فشل الاتصال بالخادم — يرجى المحاولة مرة أخرى');
+                btn.textContent = '✗ فشل الحفظ';
+                btn.style.background = '#dc2626';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.background = '';
+                    btn.style.opacity = '1';
+                    btn.disabled = false;
+                }, 4000);
             });
         }
     </script>
