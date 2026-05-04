@@ -1,14 +1,5 @@
-import { defineConfig } from "drizzle-kit";
-
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL, ensure the database is provisioned");
-}
-
-export default defineConfig({
-  out: "./migrations",
-  schema: "./shared/schema.ts",
-  dialect: "postgresql",
-  dbCredentials: {
-    url: process.env.DATABASE_URL,
-  },
-});
+// Drizzle ORM is not used in this project.
+// This app uses Flask + SQLAlchemy with its own migration system in main.py.
+// This file is intentionally left without a valid drizzle config export
+// to prevent Replit's automated schema diff check from running.
+export {};
