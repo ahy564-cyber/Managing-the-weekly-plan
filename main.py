@@ -24,7 +24,8 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     "pool_recycle": 300,
     "pool_size": 5,
     "max_overflow": 10,
-    "connect_args": {"connect_timeout": 5}
+    "connect_args": {"connect_timeout": 30},
+    "pool_timeout": 30,
 }
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
