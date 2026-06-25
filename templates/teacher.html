@@ -18,6 +18,8 @@
         input { width: 100%; border: 1px solid #0d9488; padding: 10px; border-radius: 6px; box-sizing: border-box; font-family: inherit; margin-bottom: 5px; font-size: 0.9em; }
         input:focus { border-color: #0f766e; outline: none; }
         .fixed-sub { font-weight: 700; color: #0d9488; background: #f0fdfa; padding: 5px; border-radius: 4px; display: block; margin-bottom: 8px; font-size: 0.95em; }
+        .locked-cell { background: #f8fafc; border: 1.5px dashed #cbd5e1; border-radius: 6px; padding: 10px 6px; color: #94a3b8; font-size: 0.8em; text-align: center; }
+        td.not-assigned { background: #fafafa; }
         .save-btn { background: #0d9488; color: white; border: none; padding: 12px 30px; border-radius: 8px; cursor: pointer; font-weight: 700; transition: all 0.2s; }
         .save-btn:hover { background: #0f766e; transform: translateY(-1px); }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
@@ -113,10 +115,14 @@
                         {% endif %}
                     </td>
                     {% for p in range(1, 9) %}
-                    <td data-day="{{ d }}" data-period="{{ p }}">
+                    {% set cell_key = d ~ '_' ~ p %}
+                    {% set is_assigned = is_admin_user or (cell_key in assigned_keys) %}
+                    <td data-day="{{ d }}" data-period="{{ p }}" {% if not is_assigned %}class="not-assigned"{% endif %}>
                         {% if is_locked %}
                             <span style="color: #94a3b8; font-size: 0.8em;">هذا اليوم مغلق</span>
-                        {% elif schedule[d][p].subject_name %}
+                        {% elif not schedule[d][p].subject_name %}
+                            <span style="color: #cbd5e1; font-size: 0.8em;">لا توجد مادة</span>
+                        {% elif is_assigned %}
                             <span class="fixed-sub">{{ schedule[d][p].subject_name }}</span>
                             <textarea class="topic" 
                                    placeholder="موضوع الدرس..." 
@@ -127,7 +133,8 @@
                                    data-day="{{ d }}" data-period="{{ p }}"
                                    style="min-width: 150px; width: 100%; border: 1px solid #0d9488; border-radius: 6px; padding: 8px; font-family: inherit;">{{ schedule[d][p].homework }}</textarea>
                         {% else %}
-                            <span style="color: #cbd5e1; font-size: 0.8em;">لا توجد مادة</span>
+                            <span class="fixed-sub" style="opacity: 0.5;">{{ schedule[d][p].subject_name }}</span>
+                            <div class="locked-cell">🔒 غير مخصص لك</div>
                         {% endif %}
                     </td>
                     {% endfor %}

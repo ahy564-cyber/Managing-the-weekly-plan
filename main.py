@@ -92,6 +92,16 @@ class TeacherAccount(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+class TeacherAssignment(db.Model):
+    __tablename__ = 'teacher_assignment'
+    id = db.Column(db.Integer, primary_key=True)
+    teacher_id = db.Column(db.Integer, db.ForeignKey('teacher_account.id', ondelete='CASCADE'), nullable=False)
+    class_id = db.Column(db.Integer, db.ForeignKey('class.id', ondelete='CASCADE'), nullable=False)
+    day = db.Column(db.String(20), nullable=False)
+    period = db.Column(db.Integer, nullable=False)
+    school_id = db.Column(db.Integer, default=1)
+    __table_args__ = (db.UniqueConstraint('teacher_id', 'class_id', 'day', 'period', name='_ta_unique'),)
+
 class ActivityLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_role = db.Column(db.String(50))
@@ -170,6 +180,21 @@ def ensure_tables():
         db.session.execute(db.text(
             "ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS description TEXT"
         ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+    try:
+        db.session.execute(db.text('''
+            CREATE TABLE IF NOT EXISTS teacher_assignment (
+                id SERIAL PRIMARY KEY,
+                teacher_id INTEGER REFERENCES teacher_account(id) ON DELETE CASCADE,
+                class_id INTEGER REFERENCES class(id) ON DELETE CASCADE,
+                day VARCHAR(20) NOT NULL,
+                period INTEGER NOT NULL,
+                school_id INTEGER DEFAULT 1,
+                CONSTRAINT _ta_unique UNIQUE (teacher_id, class_id, day, period)
+            )
+        '''))
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -478,11 +503,33 @@ def admin():
     logs = ActivityLog.query.order_by(ActivityLog.timestamp.desc()).limit(20).all()
     teachers = TeacherAccount.query.filter_by(school_id=1).order_by(TeacherAccount.name).all()
 
+    # Build subjects data for assignment UI
+    subjects_by_class = {}
+    for cls in classes:
+        subs = Subject.query.filter_by(class_id=cls.id, school_id=1).order_by(Subject.day, Subject.period).all()
+        if subs:
+            subjects_by_class[str(cls.id)] = {
+                'grade_name': cls.grade.name,
+                'class_name': cls.name,
+                'subjects': [{'day': s.day, 'period': s.period, 'name': s.name or ''} for s in subs]
+            }
+    subjects_json = json.dumps(subjects_by_class, ensure_ascii=False)
+
+    # Build current assignments per teacher
+    assignments_by_teacher = {}
+    for a in TeacherAssignment.query.filter_by(school_id=1).all():
+        tid = str(a.teacher_id)
+        if tid not in assignments_by_teacher:
+            assignments_by_teacher[tid] = []
+        assignments_by_teacher[tid].append({'class_id': a.class_id, 'day': a.day, 'period': a.period})
+    assignments_json = json.dumps(assignments_by_teacher)
+
     return render_template('admin.html', grades=grades, classes=classes, settings=settings, days_ar=DAYS_AR, days_order=DAYS_ORDER,
                          fixed_schedule=fixed_schedule, sel_fixed_class_id=sel_fixed_class_id, schedule=schedule,
                          selected_class_id=sel_class_id, selected_week=sel_week, locked_view_week=l_week, current_locked_days=locked_days,
                          completion_percent=round(percent,1), completed_classes=completed, pending_classes=pending, logs=logs,
-                         total_periods=total_periods, filled_periods=filled_periods, teachers=teachers)
+                         total_periods=total_periods, filled_periods=filled_periods, teachers=teachers,
+                         subjects_json=subjects_json, assignments_json=assignments_json)
 
 @app.route('/admin/upload_master', methods=['POST'])
 @admin_required
@@ -631,6 +678,21 @@ def teacher():
             if not user_role:
                 return jsonify({'status': 'error', 'message': 'انتهت جلسة العمل — يرجى تسجيل الدخول مجدداً'})
 
+            # ASSIGNMENT CHECK: enforce per-cell permissions for teachers
+            if user_role != 'admin' and current_teacher_id:
+                authorized_pairs = {
+                    (a.day, a.period)
+                    for a in TeacherAssignment.query.filter_by(
+                        teacher_id=current_teacher_id, class_id=int(c_id), school_id=1
+                    ).all()
+                }
+                # Only enforce if assignments are configured (at least 1 exists for this teacher anywhere)
+                teacher_has_any = TeacherAssignment.query.filter_by(teacher_id=current_teacher_id, school_id=1).first()
+                if teacher_has_any:
+                    for e in data.get('entries', []):
+                        if (e.get('day'), int(e.get('period'))) not in authorized_pairs:
+                            return jsonify({'status': 'error', 'message': 'غير مصرح — هذه المادة ليست مخصصة لك'}), 403
+
             try:
                 changed_count = 0
                 cls_obj = db.session.get(Class, int(c_id))
@@ -761,14 +823,60 @@ def teacher():
             if w.subject_name: schedule[w.day][w.period]['subject_name'] = w.subject_name
 
     locked = [ld.day_name for ld in LockedDay.query.filter_by(week_number=safe_week(week)).all()]
+
+    # Compute assigned cells for the current teacher (admin bypasses all checks)
+    is_admin_user = session.get('user_role') == 'admin'
+    assigned_keys = set()
+    if not is_admin_user and c_id:
+        t_id = session.get('teacher_id')
+        if t_id:
+            for a in TeacherAssignment.query.filter_by(teacher_id=int(t_id), class_id=int(c_id), school_id=1).all():
+                assigned_keys.add(f"{a.day}_{a.period}")
+
     # FIX 3: No-cache headers so browser always fetches fresh data from DB
     resp = make_response(render_template('teacher.html', grades=grades, classes=classes, schedule=schedule,
                                          selected_grade=g_id, selected_class=c_id, selected_week=week,
-                                         days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings, locked_days=locked))
+                                         days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings, locked_days=locked,
+                                         assigned_keys=assigned_keys, is_admin_user=is_admin_user))
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     resp.headers['Pragma'] = 'no-cache'
     resp.headers['Expires'] = '0'
     return resp
+
+@app.route('/admin/assignments', methods=['GET', 'POST'])
+@admin_required
+def admin_assignments():
+    if request.method == 'POST':
+        data = request.get_json()
+        teacher_id = int(data.get('teacher_id'))
+        cells = data.get('cells', [])
+        try:
+            TeacherAssignment.query.filter_by(teacher_id=teacher_id).delete()
+            for cell in cells:
+                db.session.add(TeacherAssignment(
+                    teacher_id=teacher_id,
+                    class_id=int(cell['class_id']),
+                    day=cell['day'],
+                    period=int(cell['period']),
+                    school_id=1
+                ))
+            db.session.commit()
+            teacher = db.session.get(TeacherAccount, teacher_id)
+            log_activity('admin', f'تحديث توزيع مواد: {teacher.name if teacher else teacher_id} — {len(cells)} مادة',
+                         action_type='توزيع', description=f'تم تعيين {len(cells)} خلية للمعلم {teacher.name if teacher else teacher_id}')
+            return jsonify({'status': 'ok', 'count': len(cells)})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'status': 'error', 'message': str(e)}), 500
+    # GET: return assignments for a teacher
+    teacher_id = request.args.get('teacher_id')
+    if teacher_id:
+        assignments = [
+            {'class_id': a.class_id, 'day': a.day, 'period': a.period}
+            for a in TeacherAssignment.query.filter_by(teacher_id=int(teacher_id), school_id=1).all()
+        ]
+        return jsonify({'assignments': assignments})
+    return jsonify({'assignments': []})
 
 @app.route('/admin/swap_schedule', methods=['POST'])
 @admin_required

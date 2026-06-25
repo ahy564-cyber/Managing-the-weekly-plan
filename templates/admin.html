@@ -549,6 +549,169 @@
         {% endif %}
     </div>
 
+    <div class="card" id="assignments-card">
+        <h2>🎯 توزيع المواد على المعلمين</h2>
+        <p style="color: #64748b; margin-bottom: 20px;">حدد المواد التي يحق لكل معلم تعديلها. الخلايا غير الموزعة ستظهر مقفلة في واجهة المعلم.</p>
+
+        {% if teachers|length > 0 %}
+        <div style="display: flex; gap: 15px; align-items: flex-end; margin-bottom: 20px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 200px;">
+                <label style="display: block; margin-bottom: 6px; font-weight: 600;">اختر المعلم:</label>
+                <select id="assign-teacher-select" onchange="loadAssignments(this.value)"
+                        style="padding: 10px; border-radius: 8px; border: 1.5px solid #cbd5e1; width: 100%; font-family: inherit; font-size: 1em;">
+                    <option value="">-- اختر معلماً --</option>
+                    {% for t in teachers %}
+                    <option value="{{ t.id }}">{{ t.name }} ({{ t.username }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div style="display: flex; gap: 8px; flex-shrink: 0;">
+                <button onclick="selectAllAssignments()" style="padding: 10px 16px; background: #f0fdfa; color: #0d9488; border: 1.5px solid #0d9488; border-radius: 8px; cursor: pointer; font-family: inherit; font-weight: 600;" data-testid="button-select-all-assignments">تحديد الكل</button>
+                <button onclick="clearAllAssignments()" style="padding: 10px 16px; background: #fff1f2; color: #e11d48; border: 1.5px solid #e11d48; border-radius: 8px; cursor: pointer; font-family: inherit; font-weight: 600;" data-testid="button-clear-all-assignments">إلغاء الكل</button>
+                <button onclick="saveAssignments()" id="save-assign-btn" style="padding: 10px 20px; background: #0d9488; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-family: inherit;" data-testid="button-save-assignments">حفظ التوزيع</button>
+            </div>
+        </div>
+
+        <div id="assign-no-teacher" style="text-align: center; padding: 30px; color: #94a3b8; background: #f8fafc; border-radius: 8px; border: 1.5px dashed #cbd5e1;">
+            اختر معلماً لعرض وتعديل المواد المخصصة له
+        </div>
+        <div id="assign-grid-container" style="display: none;"></div>
+        <div id="assign-status" style="margin-top: 12px; font-weight: 600; min-height: 24px; font-size: 0.95em;"></div>
+
+        {% else %}
+        <div style="text-align: center; padding: 25px; color: #64748b; background: #f8fafc; border-radius: 8px;">
+            أضف معلمين أولاً قبل توزيع المواد
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+    (function() {
+        const SUBJECTS_DATA = {{ subjects_json | safe }};
+        const ASSIGNMENTS_DATA = {{ assignments_json | safe }};
+        const DAYS_AR_MAP = { Sunday: 'الأحد', Monday: 'الاثنين', Tuesday: 'الثلاثاء', Wednesday: 'الأربعاء', Thursday: 'الخميس' };
+        const DAYS_ORDER_LIST = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'];
+        let currentTeacherId = null;
+
+        window.loadAssignments = function(teacherId) {
+            currentTeacherId = teacherId || null;
+            const container = document.getElementById('assign-grid-container');
+            const placeholder = document.getElementById('assign-no-teacher');
+            document.getElementById('assign-status').textContent = '';
+            if (!teacherId) {
+                container.style.display = 'none';
+                placeholder.style.display = 'block';
+                return;
+            }
+            placeholder.style.display = 'none';
+            container.style.display = 'block';
+
+            const currentAssignments = ASSIGNMENTS_DATA[String(teacherId)] || [];
+            const assignedSet = new Set(currentAssignments.map(a => `${a.class_id}_${a.day}_${a.period}`));
+
+            let html = '';
+            for (const [classId, classData] of Object.entries(SUBJECTS_DATA)) {
+                if (!classData.subjects || !classData.subjects.length) continue;
+                const gradeName = classData.grade_name;
+                const className = classData.class_name;
+                // Group subjects by day for display
+                const byDay = {};
+                for (const s of classData.subjects) {
+                    if (!byDay[s.day]) byDay[s.day] = [];
+                    byDay[s.day].push(s);
+                }
+                html += `<div style="margin-bottom: 18px; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden;">`;
+                html += `<div style="background: #f0fdfa; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ccfbf1;">
+                    <span style="font-weight: 700; color: #0d9488;">${gradeName} — ${className}</span>
+                    <div style="display: flex; gap: 8px;">
+                        <button onclick="selectClass('${classId}')" style="font-size: 0.8em; padding: 4px 10px; background: #0d9488; color: white; border: none; border-radius: 5px; cursor: pointer;">تحديد الفصل كله</button>
+                        <button onclick="clearClass('${classId}')" style="font-size: 0.8em; padding: 4px 10px; background: #e11d48; color: white; border: none; border-radius: 5px; cursor: pointer;">إلغاء الفصل</button>
+                    </div>
+                </div>`;
+                html += `<div style="padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 8px;">`;
+                for (const day of DAYS_ORDER_LIST) {
+                    if (!byDay[day]) continue;
+                    for (const s of byDay[day].sort((a,b) => a.period - b.period)) {
+                        const key = `${classId}_${s.day}_${s.period}`;
+                        const checked = assignedSet.has(key) ? 'checked' : '';
+                        const label = s.name || `(فراغ)`;
+                        html += `<label style="display: flex; align-items: center; gap: 5px; background: ${checked ? '#f0fdfa' : '#f8fafc'}; border: 1.5px solid ${checked ? '#0d9488' : '#e2e8f0'}; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 0.88em; transition: all 0.15s;"
+                                  onmouseenter="this.style.borderColor='#0d9488'" onmouseleave="this.style.borderColor=this.querySelector('input').checked?'#0d9488':'#e2e8f0'">
+                            <input type="checkbox" class="assign-cb" data-class="${classId}" data-day="${s.day}" data-period="${s.period}" ${checked}
+                                   onchange="this.closest('label').style.background=this.checked?'#f0fdfa':'#f8fafc'; this.closest('label').style.borderColor=this.checked?'#0d9488':'#e2e8f0';"
+                                   style="accent-color: #0d9488; width: 15px; height: 15px;">
+                            <span>${label}</span>
+                            <span style="color: #94a3b8; font-size: 0.85em;">${DAYS_AR_MAP[s.day]} ح${s.period}</span>
+                        </label>`;
+                    }
+                }
+                html += `</div></div>`;
+            }
+            if (!html) html = '<div style="padding: 20px; color: #94a3b8; text-align: center;">لا توجد مواد في الجدول الأساسي بعد. يرجى رفع الجدول أولاً.</div>';
+            container.innerHTML = html;
+        };
+
+        window.selectAllAssignments = function() {
+            document.querySelectorAll('.assign-cb').forEach(cb => {
+                cb.checked = true;
+                cb.closest('label').style.background = '#f0fdfa';
+                cb.closest('label').style.borderColor = '#0d9488';
+            });
+        };
+        window.clearAllAssignments = function() {
+            document.querySelectorAll('.assign-cb').forEach(cb => {
+                cb.checked = false;
+                cb.closest('label').style.background = '#f8fafc';
+                cb.closest('label').style.borderColor = '#e2e8f0';
+            });
+        };
+        window.selectClass = function(classId) {
+            document.querySelectorAll(`.assign-cb[data-class="${classId}"]`).forEach(cb => {
+                cb.checked = true;
+                cb.closest('label').style.background = '#f0fdfa';
+                cb.closest('label').style.borderColor = '#0d9488';
+            });
+        };
+        window.clearClass = function(classId) {
+            document.querySelectorAll(`.assign-cb[data-class="${classId}"]`).forEach(cb => {
+                cb.checked = false;
+                cb.closest('label').style.background = '#f8fafc';
+                cb.closest('label').style.borderColor = '#e2e8f0';
+            });
+        };
+
+        window.saveAssignments = function() {
+            if (!currentTeacherId) { alert('اختر معلماً أولاً'); return; }
+            const cells = [];
+            document.querySelectorAll('.assign-cb:checked').forEach(cb => {
+                cells.push({ class_id: parseInt(cb.dataset.class), day: cb.dataset.day, period: parseInt(cb.dataset.period) });
+            });
+            const btn = document.getElementById('save-assign-btn');
+            btn.textContent = 'جاري الحفظ...'; btn.disabled = true;
+            fetch('/admin/assignments', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ teacher_id: parseInt(currentTeacherId), cells })
+            })
+            .then(r => r.json())
+            .then(d => {
+                btn.textContent = 'حفظ التوزيع'; btn.disabled = false;
+                if (d.status === 'ok') {
+                    ASSIGNMENTS_DATA[String(currentTeacherId)] = cells;
+                    const st = document.getElementById('assign-status');
+                    st.textContent = `✓ تم حفظ ${cells.length} مادة بنجاح`;
+                    st.style.color = '#059669';
+                    setTimeout(() => { st.textContent = ''; }, 3000);
+                    showToast(`✓ تم حفظ ${cells.length} مادة للمعلم`, true);
+                } else {
+                    showToast('✗ فشل الحفظ: ' + d.message, false);
+                }
+            })
+            .catch(() => { btn.textContent = 'حفظ التوزيع'; btn.disabled = false; showToast('✗ فشل الاتصال', false); });
+        };
+    })();
+    </script>
+
     <script>
         function allowDrop(ev) {
             ev.preventDefault();
