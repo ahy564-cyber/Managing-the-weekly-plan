@@ -19,7 +19,11 @@
         input:focus { border-color: #0f766e; outline: none; }
         .fixed-sub { font-weight: 700; color: #0d9488; background: #f0fdfa; padding: 5px; border-radius: 4px; display: block; margin-bottom: 8px; font-size: 0.95em; }
         .locked-cell { background: #f8fafc; border: 1.5px dashed #cbd5e1; border-radius: 6px; padding: 10px 6px; color: #94a3b8; font-size: 0.8em; text-align: center; }
-        td.not-assigned { background: #fafafa; }
+        td.not-assigned { background: #f8fafc; }
+        .readonly-field { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; padding: 7px 9px; font-size: 0.85em; color: #475569; text-align: right; margin-bottom: 5px; min-height: 36px; cursor: not-allowed; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+        .readonly-label { font-size: 0.72em; color: #94a3b8; font-weight: 600; margin-bottom: 2px; display: block; }
+        .readonly-empty { color: #cbd5e1; font-style: italic; font-size: 0.82em; }
+        .lock-badge { display: inline-block; font-size: 0.7em; background: #f1f5f9; color: #94a3b8; border: 1px solid #e2e8f0; border-radius: 4px; padding: 1px 6px; margin-bottom: 6px; }
         .save-btn { background: #0d9488; color: white; border: none; padding: 12px 30px; border-radius: 8px; cursor: pointer; font-weight: 700; transition: all 0.2s; }
         .save-btn:hover { background: #0f766e; transform: translateY(-1px); }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
@@ -133,8 +137,16 @@
                                    data-day="{{ d }}" data-period="{{ p }}"
                                    style="min-width: 150px; width: 100%; border: 1px solid #0d9488; border-radius: 6px; padding: 8px; font-family: inherit;">{{ schedule[d][p].homework }}</textarea>
                         {% else %}
-                            <span class="fixed-sub" style="opacity: 0.5;">{{ schedule[d][p].subject_name }}</span>
-                            <div class="locked-cell">🔒 غير مخصص لك</div>
+                            <span class="lock-badge">🔒 للعرض فقط</span>
+                            <span class="fixed-sub" style="opacity: 0.6;">{{ schedule[d][p].subject_name }}</span>
+                            <span class="readonly-label">موضوع الدرس</span>
+                            <div class="readonly-field">
+                                {% if schedule[d][p].topic %}{{ schedule[d][p].topic }}{% else %}<span class="readonly-empty">—</span>{% endif %}
+                            </div>
+                            <span class="readonly-label">الواجب المنزلي</span>
+                            <div class="readonly-field">
+                                {% if schedule[d][p].homework %}{{ schedule[d][p].homework }}{% else %}<span class="readonly-empty">—</span>{% endif %}
+                            </div>
                         {% endif %}
                     </td>
                     {% endfor %}
