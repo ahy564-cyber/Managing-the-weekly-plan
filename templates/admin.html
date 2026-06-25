@@ -549,16 +549,48 @@
         {% endif %}
     </div>
 
+    <!-- ====== ASSIGNMENTS CARD ====== -->
+    <style>
+    #assignments-card .class-block { margin-bottom: 22px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+    #assignments-card .class-header { background: linear-gradient(135deg, #f0fdfa, #e6fffa); padding: 11px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ccfbf1; }
+    #assignments-card .class-header-title { font-weight: 700; color: #0d9488; font-size: 1em; }
+    #assignments-card .subj-block { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; }
+    #assignments-card .subj-block:last-child { border-bottom: none; }
+    #assignments-card .subj-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    #assignments-card .subj-name { font-weight: 700; color: #1e293b; font-size: 0.95em; background: #f8fafc; padding: 4px 10px; border-radius: 6px; border: 1px solid #e2e8f0; }
+    #assignments-card .subj-actions { display: flex; gap: 6px; }
+    #assignments-card .btn-subj-all { font-size: 0.78em; padding: 4px 10px; background: #0d9488; color: white; border: none; border-radius: 5px; cursor: pointer; font-family: inherit; }
+    #assignments-card .btn-subj-none { font-size: 0.78em; padding: 4px 10px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 5px; cursor: pointer; font-family: inherit; }
+    #assignments-card .periods-grid { display: flex; flex-wrap: wrap; gap: 7px; }
+    /* FREE cell */
+    .period-chip { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 12px; border-radius: 8px; border: 1.5px solid #e2e8f0; background: #f8fafc; cursor: pointer; transition: all 0.15s; min-width: 80px; }
+    .period-chip:hover { border-color: #0d9488; background: #f0fdfa; }
+    .period-chip input[type=checkbox] { accent-color: #0d9488; width: 14px; height: 14px; margin: 0; cursor: pointer; }
+    .period-chip .chip-day { font-size: 0.78em; color: #64748b; font-weight: 600; }
+    .period-chip .chip-period { font-size: 0.72em; color: #94a3b8; }
+    /* MINE (checked) */
+    .period-chip.mine { border-color: #0d9488; background: #f0fdfa; }
+    .period-chip.mine .chip-day { color: #0d9488; }
+    /* TAKEN (disabled) */
+    .period-chip.taken { border-color: #fcd34d; background: #fffbeb; cursor: not-allowed; opacity: 0.85; }
+    .period-chip.taken .chip-day { color: #92400e; }
+    .period-chip.taken .chip-period { color: #a16207; }
+    .taken-badge { font-size: 0.68em; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 4px; padding: 1px 5px; font-weight: 700; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+    .assign-legend { display: flex; gap: 14px; align-items: center; font-size: 0.82em; color: #64748b; margin-bottom: 16px; flex-wrap: wrap; }
+    .legend-dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+    </style>
+
     <div class="card" id="assignments-card">
         <h2>🎯 توزيع المواد على المعلمين</h2>
-        <p style="color: #64748b; margin-bottom: 20px;">حدد المواد التي يحق لكل معلم تعديلها. الخلايا غير الموزعة ستظهر مقفلة في واجهة المعلم.</p>
+        <p style="color: #64748b; margin-bottom: 16px;">خصص الحصص لكل معلم. الحصص المحجوزة لمعلم آخر تظهر باللون الأصفر ولا يمكن تعيينها.</p>
 
         {% if teachers|length > 0 %}
-        <div style="display: flex; gap: 15px; align-items: flex-end; margin-bottom: 20px; flex-wrap: wrap;">
-            <div style="flex: 1; min-width: 200px;">
-                <label style="display: block; margin-bottom: 6px; font-weight: 600;">اختر المعلم:</label>
+        <!-- Top bar -->
+        <div style="display: flex; gap: 12px; align-items: flex-end; margin-bottom: 16px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 220px;">
+                <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: 0.9em;">المعلم المحدد:</label>
                 <select id="assign-teacher-select" onchange="loadAssignments(this.value)"
-                        style="padding: 10px; border-radius: 8px; border: 1.5px solid #cbd5e1; width: 100%; font-family: inherit; font-size: 1em;">
+                        style="padding: 10px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; width: 100%; font-family: inherit; font-size: 1em;">
                     <option value="">-- اختر معلماً --</option>
                     {% for t in teachers %}
                     <option value="{{ t.id }}">{{ t.name }} ({{ t.username }})</option>
@@ -566,17 +598,27 @@
                 </select>
             </div>
             <div style="display: flex; gap: 8px; flex-shrink: 0;">
-                <button onclick="selectAllAssignments()" style="padding: 10px 16px; background: #f0fdfa; color: #0d9488; border: 1.5px solid #0d9488; border-radius: 8px; cursor: pointer; font-family: inherit; font-weight: 600;" data-testid="button-select-all-assignments">تحديد الكل</button>
-                <button onclick="clearAllAssignments()" style="padding: 10px 16px; background: #fff1f2; color: #e11d48; border: 1.5px solid #e11d48; border-radius: 8px; cursor: pointer; font-family: inherit; font-weight: 600;" data-testid="button-clear-all-assignments">إلغاء الكل</button>
-                <button onclick="saveAssignments()" id="save-assign-btn" style="padding: 10px 20px; background: #0d9488; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-family: inherit;" data-testid="button-save-assignments">حفظ التوزيع</button>
+                <button onclick="selectAllFreeAssignments()" data-testid="button-select-all-assignments"
+                        style="padding: 10px 14px; background: #f0fdfa; color: #0d9488; border: 1.5px solid #0d9488; border-radius: 8px; cursor: pointer; font-family: inherit; font-weight: 600; font-size: 0.88em;">✓ تحديد المتاح</button>
+                <button onclick="clearAllAssignments()" data-testid="button-clear-all-assignments"
+                        style="padding: 10px 14px; background: #fff1f2; color: #e11d48; border: 1.5px solid #fca5a5; border-radius: 8px; cursor: pointer; font-family: inherit; font-weight: 600; font-size: 0.88em;">✕ إلغاء الكل</button>
+                <button onclick="saveAssignments()" id="save-assign-btn" data-testid="button-save-assignments"
+                        style="padding: 10px 22px; background: #0d9488; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-family: inherit; font-size: 0.95em;">حفظ التوزيع</button>
             </div>
         </div>
 
-        <div id="assign-no-teacher" style="text-align: center; padding: 30px; color: #94a3b8; background: #f8fafc; border-radius: 8px; border: 1.5px dashed #cbd5e1;">
-            اختر معلماً لعرض وتعديل المواد المخصصة له
+        <!-- Legend -->
+        <div class="assign-legend">
+            <span><span class="legend-dot" style="background:#f0fdfa; border: 1.5px solid #0d9488;"></span> مخصص لك</span>
+            <span><span class="legend-dot" style="background:#f8fafc; border: 1.5px solid #e2e8f0;"></span> متاح (غير مخصص)</span>
+            <span><span class="legend-dot" style="background:#fffbeb; border: 1.5px solid #fcd34d;"></span> محجوز لمعلم آخر</span>
+        </div>
+
+        <div id="assign-no-teacher" style="text-align: center; padding: 35px; color: #94a3b8; background: #f8fafc; border-radius: 10px; border: 1.5px dashed #cbd5e1;">
+            اختر معلماً من القائمة أعلاه لعرض وتعديل حصصه
         </div>
         <div id="assign-grid-container" style="display: none;"></div>
-        <div id="assign-status" style="margin-top: 12px; font-weight: 600; min-height: 24px; font-size: 0.95em;"></div>
+        <div id="assign-status" style="margin-top: 12px; font-weight: 600; min-height: 22px; font-size: 0.93em;"></div>
 
         {% else %}
         <div style="text-align: center; padding: 25px; color: #64748b; background: #f8fafc; border-radius: 8px;">
@@ -587,101 +629,187 @@
 
     <script>
     (function() {
-        const SUBJECTS_DATA = {{ subjects_json | safe }};
-        const ASSIGNMENTS_DATA = {{ assignments_json | safe }};
-        const DAYS_AR_MAP = { Sunday: 'الأحد', Monday: 'الاثنين', Tuesday: 'الثلاثاء', Wednesday: 'الأربعاء', Thursday: 'الخميس' };
-        const DAYS_ORDER_LIST = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'];
-        let currentTeacherId = null;
+        const SUBJECTS_DATA    = {{ subjects_json | safe }};
+        const TEACHERS_MAP     = {{ teachers_json | safe }};   // {id: name}
+        const DAYS_AR          = { Sunday:'الأحد', Monday:'الاثنين', Tuesday:'الثلاثاء', Wednesday:'الأربعاء', Thursday:'الخميس' };
+        const DAYS_ORDER       = ['Sunday','Monday','Tuesday','Wednesday','Thursday'];
 
+        // Live assignments store: {teacher_id: [{class_id, day, period}]}
+        const ASSIGN = {{ assignments_json | safe }};
+
+        let currentTid = null;   // currently selected teacher id (string)
+
+        /* ── helpers ─────────────────────────────────── */
+
+        // Build conflict map for all teachers EXCEPT currentTid
+        // Returns: Map<"classId_day_period" → teacherName>
+        function buildConflictMap(excludeTid) {
+            const map = {};
+            for (const [tid, cells] of Object.entries(ASSIGN)) {
+                if (String(tid) === String(excludeTid)) continue;
+                const name = TEACHERS_MAP[String(tid)] || `معلم ${tid}`;
+                for (const c of cells) {
+                    map[`${c.class_id}_${c.day}_${c.period}`] = name;
+                }
+            }
+            return map;
+        }
+
+        // Build my-assignments set for the current teacher
+        function buildMySet(tid) {
+            const cells = ASSIGN[String(tid)] || [];
+            return new Set(cells.map(c => `${c.class_id}_${c.day}_${c.period}`));
+        }
+
+        /* ── chip style helpers ───────────────────────── */
+        function applyChipStyle(chip) {
+            const cb = chip.querySelector('input');
+            if (chip.classList.contains('taken')) return; // immutable
+            if (cb && cb.checked) {
+                chip.classList.add('mine');
+            } else {
+                chip.classList.remove('mine');
+            }
+        }
+
+        /* ── render ─────────────────────────────────── */
         window.loadAssignments = function(teacherId) {
-            currentTeacherId = teacherId || null;
-            const container = document.getElementById('assign-grid-container');
+            currentTid = teacherId || null;
+            const container   = document.getElementById('assign-grid-container');
             const placeholder = document.getElementById('assign-no-teacher');
             document.getElementById('assign-status').textContent = '';
+
             if (!teacherId) {
                 container.style.display = 'none';
                 placeholder.style.display = 'block';
                 return;
             }
             placeholder.style.display = 'none';
-            container.style.display = 'block';
+            container.style.display   = 'block';
 
-            const currentAssignments = ASSIGNMENTS_DATA[String(teacherId)] || [];
-            const assignedSet = new Set(currentAssignments.map(a => `${a.class_id}_${a.day}_${a.period}`));
+            const conflictMap = buildConflictMap(teacherId);
+            const mySet       = buildMySet(teacherId);
 
             let html = '';
+
             for (const [classId, classData] of Object.entries(SUBJECTS_DATA)) {
                 if (!classData.subjects || !classData.subjects.length) continue;
-                const gradeName = classData.grade_name;
-                const className = classData.class_name;
-                // Group subjects by day for display
-                const byDay = {};
+
+                // Group periods by subject name
+                const bySubject = {};
                 for (const s of classData.subjects) {
-                    if (!byDay[s.day]) byDay[s.day] = [];
-                    byDay[s.day].push(s);
+                    const subName = s.name || '(بدون اسم)';
+                    if (!bySubject[subName]) bySubject[subName] = [];
+                    bySubject[subName].push(s);
                 }
-                html += `<div style="margin-bottom: 18px; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden;">`;
-                html += `<div style="background: #f0fdfa; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ccfbf1;">
-                    <span style="font-weight: 700; color: #0d9488;">${gradeName} — ${className}</span>
-                    <div style="display: flex; gap: 8px;">
-                        <button onclick="selectClass('${classId}')" style="font-size: 0.8em; padding: 4px 10px; background: #0d9488; color: white; border: none; border-radius: 5px; cursor: pointer;">تحديد الفصل كله</button>
-                        <button onclick="clearClass('${classId}')" style="font-size: 0.8em; padding: 4px 10px; background: #e11d48; color: white; border: none; border-radius: 5px; cursor: pointer;">إلغاء الفصل</button>
+
+                html += `<div class="class-block">`;
+                html += `<div class="class-header">
+                    <span class="class-header-title">📚 ${classData.grade_name} — ${classData.class_name}</span>
+                    <div style="display:flex;gap:6px;">
+                        <button class="btn-subj-all" onclick="selectClass('${classId}')">تحديد الفصل</button>
+                        <button class="btn-subj-none" onclick="clearClass('${classId}')">إلغاء الفصل</button>
                     </div>
                 </div>`;
-                html += `<div style="padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 8px;">`;
-                for (const day of DAYS_ORDER_LIST) {
-                    if (!byDay[day]) continue;
-                    for (const s of byDay[day].sort((a,b) => a.period - b.period)) {
-                        const key = `${classId}_${s.day}_${s.period}`;
-                        const checked = assignedSet.has(key) ? 'checked' : '';
-                        const label = s.name || `(فراغ)`;
-                        html += `<label style="display: flex; align-items: center; gap: 5px; background: ${checked ? '#f0fdfa' : '#f8fafc'}; border: 1.5px solid ${checked ? '#0d9488' : '#e2e8f0'}; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 0.88em; transition: all 0.15s;"
-                                  onmouseenter="this.style.borderColor='#0d9488'" onmouseleave="this.style.borderColor=this.querySelector('input').checked?'#0d9488':'#e2e8f0'">
-                            <input type="checkbox" class="assign-cb" data-class="${classId}" data-day="${s.day}" data-period="${s.period}" ${checked}
-                                   onchange="this.closest('label').style.background=this.checked?'#f0fdfa':'#f8fafc'; this.closest('label').style.borderColor=this.checked?'#0d9488':'#e2e8f0';"
-                                   style="accent-color: #0d9488; width: 15px; height: 15px;">
-                            <span>${label}</span>
-                            <span style="color: #94a3b8; font-size: 0.85em;">${DAYS_AR_MAP[s.day]} ح${s.period}</span>
-                        </label>`;
+
+                for (const [subName, periods] of Object.entries(bySubject)) {
+                    // Sort periods by day order then period number
+                    periods.sort((a, b) => {
+                        const di = DAYS_ORDER.indexOf(a.day) - DAYS_ORDER.indexOf(b.day);
+                        return di !== 0 ? di : a.period - b.period;
+                    });
+
+                    const safeSubId = subName.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '_');
+                    const subKey    = `${classId}_${safeSubId}`;
+
+                    html += `<div class="subj-block">`;
+                    html += `<div class="subj-header">
+                        <span class="subj-name">📖 ${subName}</span>
+                        <div class="subj-actions">
+                            <button class="btn-subj-all" onclick="selectSubject('${subKey}')">تحديد المادة</button>
+                            <button class="btn-subj-none" onclick="clearSubject('${subKey}')">إلغاء</button>
+                        </div>
+                    </div>`;
+                    html += `<div class="periods-grid">`;
+
+                    for (const s of periods) {
+                        const key     = `${classId}_${s.day}_${s.period}`;
+                        const isMine  = mySet.has(key);
+                        const takenBy = conflictMap[key];
+
+                        if (takenBy) {
+                            // TAKEN by another teacher — disabled chip
+                            html += `<div class="period-chip taken" title="محجوز لـ: ${takenBy}">
+                                <span class="chip-day">${DAYS_AR[s.day]}</span>
+                                <span class="chip-period">حصة ${s.period}</span>
+                                <span class="taken-badge">🔒 ${takenBy}</span>
+                            </div>`;
+                        } else {
+                            // FREE or mine — interactive chip
+                            const checked = isMine ? 'checked' : '';
+                            const mineClass = isMine ? ' mine' : '';
+                            html += `<label class="period-chip${mineClass}"
+                                        data-subkey="${subKey}"
+                                        data-class="${classId}"
+                                        data-day="${s.day}"
+                                        data-period="${s.period}"
+                                        onclick="setTimeout(()=>applyChipStyle(this),0)">
+                                <input type="checkbox" class="assign-cb"
+                                       data-class="${classId}" data-day="${s.day}" data-period="${s.period}"
+                                       ${checked} style="accent-color:#0d9488;width:14px;height:14px;">
+                                <span class="chip-day">${DAYS_AR[s.day]}</span>
+                                <span class="chip-period">حصة ${s.period}</span>
+                            </label>`;
+                        }
                     }
+
+                    html += `</div></div>`; // periods-grid + subj-block
                 }
-                html += `</div></div>`;
+
+                html += `</div>`; // class-block
             }
-            if (!html) html = '<div style="padding: 20px; color: #94a3b8; text-align: center;">لا توجد مواد في الجدول الأساسي بعد. يرجى رفع الجدول أولاً.</div>';
+
+            if (!html) {
+                html = '<div style="padding:24px;color:#94a3b8;text-align:center;">لا توجد مواد في الجدول الأساسي بعد. يرجى رفع الجدول أولاً.</div>';
+            }
             container.innerHTML = html;
         };
 
-        window.selectAllAssignments = function() {
-            document.querySelectorAll('.assign-cb').forEach(cb => {
-                cb.checked = true;
-                cb.closest('label').style.background = '#f0fdfa';
-                cb.closest('label').style.borderColor = '#0d9488';
+        /* ── bulk select helpers ─────────────────────── */
+        window.applyChipStyle = applyChipStyle; // expose for inline onclick
+
+        function setChecked(chips, checked) {
+            chips.forEach(chip => {
+                if (chip.classList.contains('taken')) return;
+                const cb = chip.querySelector('input.assign-cb');
+                if (cb) cb.checked = checked;
+                if (checked) chip.classList.add('mine');
+                else chip.classList.remove('mine');
             });
+        }
+
+        window.selectSubject = function(subKey) {
+            setChecked(document.querySelectorAll(`.period-chip[data-subkey="${subKey}"]`), true);
         };
-        window.clearAllAssignments = function() {
-            document.querySelectorAll('.assign-cb').forEach(cb => {
-                cb.checked = false;
-                cb.closest('label').style.background = '#f8fafc';
-                cb.closest('label').style.borderColor = '#e2e8f0';
-            });
+        window.clearSubject = function(subKey) {
+            setChecked(document.querySelectorAll(`.period-chip[data-subkey="${subKey}"]`), false);
         };
         window.selectClass = function(classId) {
-            document.querySelectorAll(`.assign-cb[data-class="${classId}"]`).forEach(cb => {
-                cb.checked = true;
-                cb.closest('label').style.background = '#f0fdfa';
-                cb.closest('label').style.borderColor = '#0d9488';
-            });
+            setChecked(document.querySelectorAll(`.period-chip[data-class="${classId}"]`), true);
         };
         window.clearClass = function(classId) {
-            document.querySelectorAll(`.assign-cb[data-class="${classId}"]`).forEach(cb => {
-                cb.checked = false;
-                cb.closest('label').style.background = '#f8fafc';
-                cb.closest('label').style.borderColor = '#e2e8f0';
-            });
+            setChecked(document.querySelectorAll(`.period-chip[data-class="${classId}"]`), false);
+        };
+        window.selectAllFreeAssignments = function() {
+            setChecked(document.querySelectorAll('.period-chip'), true);
+        };
+        window.clearAllAssignments = function() {
+            setChecked(document.querySelectorAll('.period-chip'), false);
         };
 
+        /* ── save ────────────────────────────────────── */
         window.saveAssignments = function() {
-            if (!currentTeacherId) { alert('اختر معلماً أولاً'); return; }
+            if (!currentTid) { alert('اختر معلماً أولاً'); return; }
             const cells = [];
             document.querySelectorAll('.assign-cb:checked').forEach(cb => {
                 cells.push({ class_id: parseInt(cb.dataset.class), day: cb.dataset.day, period: parseInt(cb.dataset.period) });
@@ -690,19 +818,22 @@
             btn.textContent = 'جاري الحفظ...'; btn.disabled = true;
             fetch('/admin/assignments', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ teacher_id: parseInt(currentTeacherId), cells })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teacher_id: parseInt(currentTid), cells })
             })
             .then(r => r.json())
             .then(d => {
                 btn.textContent = 'حفظ التوزيع'; btn.disabled = false;
                 if (d.status === 'ok') {
-                    ASSIGNMENTS_DATA[String(currentTeacherId)] = cells;
+                    // Update live ASSIGN store so conflict map stays accurate
+                    ASSIGN[String(currentTid)] = cells;
                     const st = document.getElementById('assign-status');
-                    st.textContent = `✓ تم حفظ ${cells.length} مادة بنجاح`;
+                    st.textContent = `✓ تم حفظ ${cells.length} حصة بنجاح`;
                     st.style.color = '#059669';
-                    setTimeout(() => { st.textContent = ''; }, 3000);
-                    showToast(`✓ تم حفظ ${cells.length} مادة للمعلم`, true);
+                    setTimeout(() => { st.textContent = ''; }, 4000);
+                    showToast(`✓ تم حفظ ${cells.length} حصة للمعلم`, true);
+                    // Re-render to reflect updated conflict state for other teachers
+                    loadAssignments(currentTid);
                 } else {
                     showToast('✗ فشل الحفظ: ' + d.message, false);
                 }

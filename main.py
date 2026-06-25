@@ -524,12 +524,15 @@ def admin():
         assignments_by_teacher[tid].append({'class_id': a.class_id, 'day': a.day, 'period': a.period})
     assignments_json = json.dumps(assignments_by_teacher)
 
+    # Build teachers name map {id: name} for conflict labels
+    teachers_json = json.dumps({str(t.id): t.name for t in teachers})
+
     return render_template('admin.html', grades=grades, classes=classes, settings=settings, days_ar=DAYS_AR, days_order=DAYS_ORDER,
                          fixed_schedule=fixed_schedule, sel_fixed_class_id=sel_fixed_class_id, schedule=schedule,
                          selected_class_id=sel_class_id, selected_week=sel_week, locked_view_week=l_week, current_locked_days=locked_days,
                          completion_percent=round(percent,1), completed_classes=completed, pending_classes=pending, logs=logs,
                          total_periods=total_periods, filled_periods=filled_periods, teachers=teachers,
-                         subjects_json=subjects_json, assignments_json=assignments_json)
+                         subjects_json=subjects_json, assignments_json=assignments_json, teachers_json=teachers_json)
 
 @app.route('/admin/upload_master', methods=['POST'])
 @admin_required
