@@ -139,14 +139,12 @@
                         {% else %}
                             <span class="lock-badge">🔒 للعرض فقط</span>
                             <span class="fixed-sub" style="opacity: 0.6;">{{ schedule[d][p].subject_name }}</span>
-                            <span class="readonly-label">موضوع الدرس</span>
-                            <div class="readonly-field">
-                                {% if schedule[d][p].topic %}{{ schedule[d][p].topic }}{% else %}<span class="readonly-empty">—</span>{% endif %}
-                            </div>
-                            <span class="readonly-label">الواجب المنزلي</span>
-                            <div class="readonly-field">
-                                {% if schedule[d][p].homework %}{{ schedule[d][p].homework }}{% else %}<span class="readonly-empty">—</span>{% endif %}
-                            </div>
+                            <textarea readonly
+                                   placeholder="لم يُدخل بعد..."
+                                   style="min-width:150px;width:100%;border:1px solid #e2e8f0;border-radius:6px;padding:8px;font-family:inherit;margin-bottom:5px;background:#f1f5f9;color:#475569;cursor:not-allowed;resize:none;">{{ schedule[d][p].topic }}</textarea>
+                            <textarea readonly
+                                   placeholder="لم يُدخل بعد..."
+                                   style="min-width:150px;width:100%;border:1px solid #e2e8f0;border-radius:6px;padding:8px;font-family:inherit;background:#f1f5f9;color:#475569;cursor:not-allowed;resize:none;">{{ schedule[d][p].homework }}</textarea>
                         {% endif %}
                     </td>
                     {% endfor %}
