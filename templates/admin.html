@@ -414,6 +414,9 @@
         <button class="nav-link" onclick="document.getElementById('sec-teachers').scrollIntoView({behavior:'smooth'})">
             <span class="nav-icon"><i class="fas fa-chalkboard-teacher"></i></span> المعلمون
         </button>
+        <button class="nav-link" onclick="document.getElementById('sec-supervisors').scrollIntoView({behavior:'smooth'})">
+            <span class="nav-icon"><i class="fas fa-user-shield"></i></span> المشرفون
+        </button>
         <button class="nav-link" onclick="document.getElementById('sec-assignments').scrollIntoView({behavior:'smooth'})">
             <span class="nav-icon"><i class="fas fa-tasks"></i></span> توزيع المواد
         </button>
@@ -948,6 +951,103 @@
             <div style="margin-top:20px;text-align:center;padding:22px;color:var(--muted);background:#f8fafc;border-radius:10px;border:1.5px dashed var(--border);">
                 <i class="fas fa-user-slash" style="font-size:1.8em;display:block;margin-bottom:8px;opacity:0.3;"></i>
                 لا يوجد معلمون مسجلون بعد
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- ════════════════════════════════
+             SUPERVISORS
+        ════════════════════════════════ -->
+        <div id="sec-supervisors" class="card card-teal">
+            <h2><i class="fas fa-user-shield" style="color:var(--teal);"></i>حسابات المشرفين (مراجعة واعتماد فقط)</h2>
+            <p style="color:var(--muted);margin-bottom:16px;font-size:0.88em;">
+                حساب المشرف يدخل مباشرة على شاشة "مراجعة الجدول واعتماده" فقط، ولا يملك صلاحية الوصول للوحة التحكم الكاملة أو تعديل الجداول.
+            </p>
+            <div class="grid-2">
+                <div>
+                    <h3><i class="fas fa-user-plus" style="margin-left:5px;color:var(--teal);"></i>إضافة مشرف جديد</h3>
+                    <form method="POST" style="display:flex;flex-direction:column;gap:10px;">
+                        <input type="hidden" name="action" value="add_supervisor">
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label>اسم المشرف</label>
+                            <input type="text" name="supervisor_name" placeholder="مثال: سارة العتيبي" required data-testid="input-supervisor-name">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label>اسم المستخدم</label>
+                            <input type="text" name="supervisor_username" placeholder="مثال: sara" required data-testid="input-supervisor-username">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label>كلمة المرور</label>
+                            <input type="text" name="supervisor_password" placeholder="كلمة مرور المشرف" required data-testid="input-supervisor-password">
+                        </div>
+                        <button type="submit" class="btn-primary" data-testid="button-add-supervisor">
+                            <i class="fas fa-plus"></i>إضافة المشرف
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            {% if supervisors|length > 0 %}
+            <div style="margin-top:22px;">
+                <h3><i class="fas fa-users" style="margin-left:5px;color:var(--teal);"></i>المشرفون المسجلون ({{ supervisors|length }})</h3>
+                <div class="table-container">
+                <table style="min-width:580px;">
+                    <thead><tr>
+                        <th style="width:38px;">#</th>
+                        <th>الاسم</th>
+                        <th>اسم المستخدم</th>
+                        <th>كلمة المرور</th>
+                        <th>الحالة</th>
+                        <th style="width:250px;">إجراءات</th>
+                    </tr></thead>
+                    <tbody>
+                        {% for s in supervisors %}
+                        <tr style="{{ 'opacity:0.5;' if not s.is_active else '' }}">
+                            <td style="color:var(--muted);">{{ loop.index }}</td>
+                            <td style="font-weight:700;">{{ s.name }}</td>
+                            <td><code>{{ s.username }}</code></td>
+                            <td><code>{{ s.password }}</code></td>
+                            <td>
+                                <span class="badge {{ 'badge-green' if s.is_active else 'badge-red' }}">
+                                    {{ 'مفعل' if s.is_active else 'معطل' }}
+                                </span>
+                            </td>
+                            <td>
+                                <div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;">
+                                    <form method="POST" style="display:inline;">
+                                        <input type="hidden" name="action" value="toggle_supervisor">
+                                        <input type="hidden" name="supervisor_id" value="{{ s.id }}">
+                                        <button type="submit" class="btn-sm {{ 'btn-gold' if s.is_active else 'btn-success' }}" data-testid="button-toggle-supervisor-{{ s.id }}">
+                                            {{ 'تعطيل' if s.is_active else 'تفعيل' }}
+                                        </button>
+                                    </form>
+                                    <form method="POST" style="display:inline;" onsubmit="var p=prompt('كلمة المرور الجديدة:'); if(!p) return false; this.querySelector('[name=new_password]').value=p;">
+                                        <input type="hidden" name="action" value="reset_supervisor_password">
+                                        <input type="hidden" name="supervisor_id" value="{{ s.id }}">
+                                        <input type="hidden" name="new_password" value="">
+                                        <button type="submit" class="btn-blue btn-sm" data-testid="button-reset-supervisor-password-{{ s.id }}">
+                                            <i class="fas fa-key"></i>كلمة المرور
+                                        </button>
+                                    </form>
+                                    <form method="POST" style="display:inline;" onsubmit="return confirm('هل تريد حذف هذا المشرف؟');">
+                                        <input type="hidden" name="action" value="delete_supervisor">
+                                        <input type="hidden" name="supervisor_id" value="{{ s.id }}">
+                                        <button type="submit" class="btn-danger btn-sm" data-testid="button-delete-supervisor-{{ s.id }}">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+            </div>
+            {% else %}
+            <div style="margin-top:20px;text-align:center;padding:22px;color:var(--muted);background:#f8fafc;border-radius:10px;border:1.5px dashed var(--border);">
+                <i class="fas fa-user-slash" style="font-size:1.8em;display:block;margin-bottom:8px;opacity:0.3;"></i>
+                لا يوجد مشرفون مسجلون بعد
             </div>
             {% endif %}
         </div>

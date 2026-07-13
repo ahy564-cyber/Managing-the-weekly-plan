@@ -114,6 +114,17 @@ class TeacherAccount(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=utc_now)
 
+class SupervisorAccount(db.Model):
+    """Limited-access account: can only review and approve/publish weekly schedules."""
+    __tablename__ = 'supervisor_account'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    username = db.Column(db.String(100), unique=True, nullable=False)
+    password = db.Column(db.String(200), nullable=False)
+    school_id = db.Column(db.Integer, nullable=True, default=1)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=utc_now)
+
 class TeacherAssignment(db.Model):
     __tablename__ = 'teacher_assignment'
     id = db.Column(db.Integer, primary_key=True)
@@ -244,6 +255,15 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def review_access_required(f):
+    """Allows the admin AND limited-access supervisor accounts (review + approve only)."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if session.get('user_role') not in ('admin', 'supervisor'):
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -283,6 +303,14 @@ def login():
             log_activity('admin', 'تم تسجيل الدخول للوحة التحكم', teacher_name='المدير', action_type='تسجيل دخول')
             return redirect(url_for('admin'))
         if username:
+            supervisor = SupervisorAccount.query.filter_by(username=username, is_active=True).first()
+            if supervisor and supervisor.password == password:
+                session.clear()
+                session['user_role'] = 'supervisor'
+                session['supervisor_id'] = supervisor.id
+                session['supervisor_name'] = supervisor.name
+                log_activity('supervisor', f'تسجيل دخول المشرف: {supervisor.name}', teacher_name=supervisor.name, action_type='تسجيل دخول')
+                return redirect(url_for('audit_report'))
             teacher = TeacherAccount.query.filter_by(username=username, is_active=True).first()
             if teacher and teacher.password == password:
                 session.clear()
@@ -296,7 +324,8 @@ def login():
 
 @app.route('/logout')
 def logout():
-    log_activity(session.get('user_role', 'guest'), 'تم تسجيل الخروج', teacher_name=session.get('teacher_name', 'المدير'), action_type='تسجيل خروج')
+    display_name = session.get('teacher_name') or session.get('supervisor_name') or 'المدير'
+    log_activity(session.get('user_role', 'guest'), 'تم تسجيل الخروج', teacher_name=display_name, action_type='تسجيل خروج')
     session.clear()
     return redirect(url_for('login'))
 
@@ -486,6 +515,49 @@ def admin():
                         db.session.commit()
                         status = 'تفعيل' if teacher.is_active else 'تعطيل'
                         flash(f'تم {status} حساب: {teacher.name}')
+            elif action == 'add_supervisor':
+                s_name = request.form.get('supervisor_name', '').strip()
+                s_username = request.form.get('supervisor_username', '').strip().lower()
+                s_password = request.form.get('supervisor_password', '').strip()
+                if s_name and s_username and s_password:
+                    if s_username == 'admin':
+                        flash('لا يمكن استخدام "admin" كاسم مستخدم للمشرف')
+                    elif TeacherAccount.query.filter_by(username=s_username).first() or SupervisorAccount.query.filter_by(username=s_username).first():
+                        flash(f'اسم المستخدم "{s_username}" موجود بالفعل')
+                    else:
+                        db.session.add(SupervisorAccount(name=s_name, username=s_username, password=s_password, school_id=1))
+                        db.session.commit()
+                        log_activity('admin', f'إضافة حساب مشرف: {s_name}')
+                        flash(f'تم إضافة المشرف: {s_name}')
+            elif action == 'reset_supervisor_password':
+                s_id = request.form.get('supervisor_id')
+                new_pass = request.form.get('new_password', '').strip()
+                if s_id and new_pass:
+                    supervisor = db.session.get(SupervisorAccount, int(s_id))
+                    if supervisor:
+                        supervisor.password = new_pass
+                        db.session.commit()
+                        log_activity('admin', f'إعادة تعيين كلمة مرور المشرف: {supervisor.name}')
+                        flash(f'تم تغيير كلمة مرور: {supervisor.name}')
+            elif action == 'delete_supervisor':
+                s_id = request.form.get('supervisor_id')
+                if s_id:
+                    supervisor = db.session.get(SupervisorAccount, int(s_id))
+                    if supervisor:
+                        name = supervisor.name
+                        db.session.delete(supervisor)
+                        db.session.commit()
+                        log_activity('admin', f'حذف حساب مشرف: {name}')
+                        flash(f'تم حذف المشرف: {name}')
+            elif action == 'toggle_supervisor':
+                s_id = request.form.get('supervisor_id')
+                if s_id:
+                    supervisor = db.session.get(SupervisorAccount, int(s_id))
+                    if supervisor:
+                        supervisor.is_active = not supervisor.is_active
+                        db.session.commit()
+                        status = 'تفعيل' if supervisor.is_active else 'تعطيل'
+                        flash(f'تم {status} حساب: {supervisor.name}')
             elif action == 'upload_logo':
                 file = request.files.get('logo')
                 if file:
@@ -532,8 +604,7 @@ def admin():
     filled_periods = WeeklyData.query.filter(WeeklyData.week_number==c_week, WeeklyData.school_id==1, WeeklyData.topic!='', WeeklyData.topic!=None).count()
     logs = ActivityLog.query.order_by(ActivityLog.timestamp.desc()).limit(20).all()
     teachers = TeacherAccount.query.filter_by(school_id=1).order_by(TeacherAccount.name).all()
-
-    # Build subjects data for assignment UI
+    supervisors = SupervisorAccount.query.filter_by(school_id=1).order_by(SupervisorAccount.name).all()
     subjects_by_class = {}
     for cls in classes:
         subs = Subject.query.filter_by(class_id=cls.id, school_id=1).order_by(Subject.day, Subject.period).all()
@@ -561,7 +632,7 @@ def admin():
                          fixed_schedule=fixed_schedule, sel_fixed_class_id=sel_fixed_class_id, schedule=schedule,
                          selected_class_id=sel_class_id, selected_week=sel_week, locked_view_week=l_week, current_locked_days=locked_days,
                          completion_percent=round(percent,1), completed_classes=completed, pending_classes=pending, logs=logs,
-                         total_periods=total_periods, filled_periods=filled_periods, teachers=teachers,
+                         total_periods=total_periods, filled_periods=filled_periods, teachers=teachers, supervisors=supervisors,
                          subjects_json=subjects_json, assignments_json=assignments_json, teachers_json=teachers_json)
 
 @app.route('/admin/upload_master', methods=['POST'])
@@ -1083,7 +1154,7 @@ def student(g_id, c_id):
                             g_id=g_id, c_id=c_id)
 
 @app.route('/admin/audit_report')
-@admin_required
+@review_access_required
 def audit_report():
     week_int = safe_week(request.args.get('week', '1'))
     week = str(week_int)
@@ -1111,10 +1182,11 @@ def audit_report():
             'missing': missing,
             'published': c.id in published_ids
         })
-    return render_template('audit_report.html', report=report, week=week, class_status=class_status)
+    return render_template('audit_report.html', report=report, week=week, class_status=class_status,
+                            user_role=session.get('user_role'), display_name=session.get('supervisor_name'))
 
 @app.route('/admin/publish_week', methods=['POST'])
-@admin_required
+@review_access_required
 def publish_week():
     week_int = safe_week(request.form.get('week'))
     checked_ids = set(int(x) for x in request.form.getlist('class_ids') if x.isdigit())
@@ -1130,7 +1202,9 @@ def publish_week():
             if existing:
                 db.session.delete(existing)
     db.session.commit()
-    log_activity('admin', f'اعتماد جدول الأسبوع {week_int} لأولياء الأمور',
+    actor_role = session.get('user_role', 'admin')
+    actor_name = session.get('supervisor_name') or 'المدير'
+    log_activity(actor_role, f'اعتماد جدول الأسبوع {week_int} لأولياء الأمور', teacher_name=actor_name,
                  action_type='اعتماد', description=f'تم اعتماد الجدول لـ {published_count} فصل من أصل {len(all_classes)}')
     return redirect(url_for('audit_report', week=week_int))
 

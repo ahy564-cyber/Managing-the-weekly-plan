@@ -26,9 +26,14 @@
     </style>
 </head>
 <body>
-    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+    <div style="display: flex; gap: 10px; margin-bottom: 20px; align-items: center; flex-wrap: wrap;">
+        {% if user_role == 'admin' %}
         <a href="/admin" class="btn-back" style="margin-bottom: 0;">العودة للوحة التحكم</a>
+        {% else %}
+        <span style="color:#134e4a; font-weight:700;">مرحبًا، {{ display_name or 'مشرف' }} 👋</span>
+        {% endif %}
         <button class="btn-back" style="background: #14b8a6; margin-bottom: 0;" onclick="exportPDF()">تحميل بصيغة PDF 📥</button>
+        <a href="/logout" class="btn-back" style="background:#94a3b8; margin-bottom: 0;">تسجيل الخروج</a>
     </div>
     <div class="card">
         <h1>اعتماد الجدول لأولياء الأمور - الأسبوع {{ week }}</h1>
