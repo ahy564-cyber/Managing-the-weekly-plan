@@ -4,3 +4,11 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+*.db
+*.sqlite
+*.sqlite3
+__pycache__/
+*.pyc
+.env
+static/uploads/*
+!static/uploads/.gitkeep

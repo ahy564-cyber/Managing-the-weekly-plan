@@ -13,12 +13,69 @@
         th { background: #0d9488; color: white; font-weight: 700; }
         .no-data { text-align: center; padding: 30px; color: #64748b; font-size: 1.2em; }
         .btn-back { background: #0d9488; color: white; border: none; padding: 10px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; text-decoration: none; display: inline-block; margin-bottom: 20px; }
+        .publish-table th, .publish-table td { padding: 12px; }
+        .badge { padding: 4px 10px; border-radius: 20px; font-weight: 700; font-size: 0.82em; }
+        .badge-ok { background: #dcfce7; color: #15803d; }
+        .badge-missing { background: #fee2e2; color: #b91c1c; }
+        .badge-published { background: #ccfbf1; color: #0f766e; }
+        .badge-draft { background: #f1f5f9; color: #64748b; }
+        .week-form { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; flex-wrap: wrap; }
+        .week-form input[type=number] { padding: 8px 12px; border-radius: 8px; border: 1px solid #cbd5e1; width: 90px; }
+        .btn-publish { background: #0f766e; color: white; border: none; padding: 12px 28px; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 1em; }
+        .btn-publish:hover { background: #134e4a; }
     </style>
 </head>
 <body>
     <div style="display: flex; gap: 10px; margin-bottom: 20px;">
         <a href="/admin" class="btn-back" style="margin-bottom: 0;">العودة للوحة التحكم</a>
         <button class="btn-back" style="background: #14b8a6; margin-bottom: 0;" onclick="exportPDF()">تحميل بصيغة PDF 📥</button>
+    </div>
+    <div class="card">
+        <h1>اعتماد الجدول لأولياء الأمور - الأسبوع {{ week }}</h1>
+        <form method="get" class="week-form">
+            <label>عرض الأسبوع رقم:</label>
+            <input type="number" name="week" min="1" max="99" value="{{ week }}">
+            <button type="submit" class="btn-publish" style="background:#0d9488;">عرض</button>
+        </form>
+        <form method="post" action="/admin/publish_week">
+            <input type="hidden" name="week" value="{{ week }}">
+            <table class="publish-table">
+                <thead>
+                    <tr style="background: #0d9488; color: white;">
+                        <th></th>
+                        <th>الفصل</th>
+                        <th>حالة التحضير</th>
+                        <th>حالة الاعتماد الحالية</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in class_status %}
+                    <tr>
+                        <td><input type="checkbox" name="class_ids" value="{{ c.id }}" {% if c.published %}checked{% endif %} style="width:20px; height:20px;"></td>
+                        <td style="text-align:right; padding-right: 15px;">{{ c.name }}</td>
+                        <td>
+                            {% if c.missing == 0 %}
+                            <span class="badge badge-ok">مكتمل ✓</span>
+                            {% else %}
+                            <span class="badge badge-missing">ناقص {{ c.missing }} من {{ c.total }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if c.published %}
+                            <span class="badge badge-published">معتمد ومرئي لأولياء الأمور</span>
+                            {% else %}
+                            <span class="badge badge-draft">مسودة (غير مرئي)</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <p style="color:#64748b; font-size:0.9em; margin-top:12px;">
+                ملاحظة: الفصول التي بها بيانات ناقصة يمكن اعتمادها أيضًا، لكن يُفضّل إكمالها أولًا. إلغاء تحديد فصل معتمد سيسحب الاعتماد عنه فورًا.
+            </p>
+            <button type="submit" class="btn-publish">✅ اعتماد الجدول المحدد لأولياء الأمور</button>
+        </form>
     </div>
     <div id="capture">
         <div class="card">

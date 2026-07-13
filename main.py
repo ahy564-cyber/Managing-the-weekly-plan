@@ -5,7 +5,11 @@ from sqlalchemy import func
 import os
 import json
 import io
-from datetime import datetime
+from datetime import datetime, timezone
+
+def utc_now():
+    """Timezone-aware UTC now, stored as naive to match existing DateTime columns."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 from functools import wraps
 from werkzeug.utils import secure_filename
 import re
@@ -37,6 +41,14 @@ if not os.path.exists(UPLOAD_FOLDER):
 
 DAYS_AR = {'Sunday': 'الأحد', 'Monday': 'الاثنين', 'Tuesday': 'الثلاثاء', 'Wednesday': 'الأربعاء', 'Thursday': 'الخميس'}
 DAYS_ORDER = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday']
+
+class School(db.Model):
+    __tablename__ = 'school'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    slug = db.Column(db.String(100), unique=True, nullable=True)
+    admin_username = db.Column(db.String(100), nullable=True)
+    password = db.Column(db.String(200), nullable=True)
 
 class Grade(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -83,6 +95,16 @@ class LockedDay(db.Model):
     school_id = db.Column(db.Integer, nullable=True)
     __table_args__ = (db.UniqueConstraint('week_number', 'day_name', name='_week_day_uc'),)
 
+class WeekPublication(db.Model):
+    """Tracks which class/week combinations the admin has approved for parents to view."""
+    __tablename__ = 'week_publication'
+    id = db.Column(db.Integer, primary_key=True)
+    class_id = db.Column(db.Integer, db.ForeignKey('class.id'), nullable=False)
+    week_number = db.Column(db.Integer, nullable=False)
+    school_id = db.Column(db.Integer, nullable=True, server_default='1')
+    published_at = db.Column(db.DateTime, default=utc_now)
+    __table_args__ = (db.UniqueConstraint('class_id', 'week_number', name='_class_week_pub_uc'),)
+
 class TeacherAccount(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
@@ -90,7 +112,7 @@ class TeacherAccount(db.Model):
     password = db.Column(db.String(200), nullable=False)
     school_id = db.Column(db.Integer, nullable=True, default=1)
     is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utc_now)
 
 class TeacherAssignment(db.Model):
     __tablename__ = 'teacher_assignment'
@@ -106,7 +128,7 @@ class ActivityLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_role = db.Column(db.String(50))
     action = db.Column(db.Text)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    timestamp = db.Column(db.DateTime, default=utc_now)
     school_id = db.Column(db.Integer, nullable=True, default=1)
     teacher_name = db.Column(db.String(200), nullable=True)
     action_type = db.Column(db.String(50), nullable=True)
@@ -126,7 +148,7 @@ def log_activity(role, action, teacher_name=None, action_type=None, target_subje
         log = ActivityLog(
             user_role=role,
             action=action,
-            timestamp=datetime.utcnow(),
+            timestamp=utc_now(),
             school_id=1,
             teacher_name=teacher_name or (role if role != 'admin' else 'المدير'),
             action_type=action_type or 'عام',
@@ -474,7 +496,7 @@ def admin():
     grades = Grade.query.order_by(Grade.name).all()
     classes = Class.query.options(joinedload(Class.grade)).order_by(Class.name).all()
     settings = {s.key: s.value for s in Setting.query.all()}
-    
+
     sel_fixed_class_id = request.args.get('fixed_class_id')
     fixed_schedule = {day: {p: '' for p in range(1, 9)} for day in DAYS_ORDER}
     if sel_fixed_class_id:
@@ -546,10 +568,10 @@ def upload_master():
             df = pd.read_csv(file, skiprows=2, header=None)
         else:
             df = pd.read_excel(file, skiprows=2, header=None)
-        
+
         # Clean data: remove newlines and strip whitespace
         df = df.map(lambda x: str(x).replace('\n', ' ').strip() if pd.notnull(x) else '')
-        
+
         # Every 8 columns is a new day (1-8 Sun, 9-16 Mon, etc.)
         day_mappings = {
             'Sunday': range(1, 9),
@@ -558,16 +580,16 @@ def upload_master():
             'Wednesday': range(25, 33),
             'Thursday': range(33, 41)
         }
-        
+
         ALL_WEEKS = list(range(1, 20))  # Weeks 1-19
 
         import_count = 0
         for _, row in df.iterrows():
             grade_name = str(row[0])
             if not grade_name or grade_name.lower() in ['nan', 'none', '']: continue
-            
+
             grade_name = grade_name.replace('\n', ' ').strip()
-            
+
             if ' - ' in grade_name:
                 parts = grade_name.split(' - ')
                 g_n, c_n = parts[0].strip(), parts[1].strip()
@@ -580,7 +602,7 @@ def upload_master():
             existing_wd = {}
             for w in WeeklyData.query.filter_by(class_id=cls.id, school_id=1).all():
                 existing_wd[(w.week_number, w.day, w.period)] = w
-            
+
             for day_en, col_range in day_mappings.items():
                 for idx, col_idx in enumerate(col_range):
                     period_num = idx + 1
@@ -608,7 +630,7 @@ def upload_master():
                                     existing_wd[key] = new_w  # track for current loop
 
                             import_count += 1
-        
+
         db.session.commit()
         flash(f'تم استيراد {import_count} حصة بنجاح (تم نشر المادة في الأسابيع 1-19)')
     except Exception as e:
@@ -670,7 +692,7 @@ def teacher():
         g_id = None
     if c_id in (None, '', 'None'):
         c_id = None
-    
+
     if request.method == 'POST':
         data = request.json
         if c_id and week:
@@ -766,7 +788,7 @@ def teacher():
                     w.topic = new_topic
                     w.homework = new_homework
                     w.teacher_id = current_teacher_id  # may be None for admin — that is valid
-                    w.updated_at = datetime.utcnow()
+                    w.updated_at = utc_now()
                     changed_count += 1
 
                 # COMMIT FIRST — log is written only after a confirmed successful commit
@@ -1027,17 +1049,30 @@ def student_landing():
 @app.route('/student/<int:g_id>/<int:c_id>')
 def student(g_id, c_id):
     settings = {s.key: s.value for s in Setting.query.all()}
-    week_int = safe_week(settings.get('current_week', '1'))
-    week = str(week_int)
     grade = db.session.get(Grade, g_id)
     cls = db.session.get(Class, c_id)
+    published_weeks = [wp.week_number for wp in WeekPublication.query.filter_by(class_id=c_id)
+                        .order_by(WeekPublication.week_number.desc()).all()]
+
+    requested = request.args.get('week')
+    week_int = safe_week(requested) if requested and safe_week(requested) in published_weeks else (published_weeks[0] if published_weeks else None)
+
+    if week_int is None:
+        return render_template('student.html', not_published=True, published_weeks=[],
+                                settings=settings, grade_name=grade.name if grade else '',
+                                class_name=cls.name if cls else '', g_id=g_id, c_id=c_id)
+
+    week = str(week_int)
     schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
     for f in Subject.query.filter_by(class_id=c_id).all():
         schedule[f.day][f.period]['subject_name'] = f.name
     for w in WeeklyData.query.filter_by(class_id=c_id, week_number=week_int).all():
         schedule[w.day][w.period].update({'topic': w.topic or '', 'homework': w.homework or ''})
         if w.subject_name: schedule[w.day][w.period]['subject_name'] = w.subject_name
-    return render_template('student.html', schedule=schedule, days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings, week=week, grade_name=grade.name if grade else '', class_name=cls.name if cls else '')
+    return render_template('student.html', schedule=schedule, days_ar=DAYS_AR, days_order=DAYS_ORDER,
+                            settings=settings, week=week, published_weeks=published_weeks, not_published=False,
+                            grade_name=grade.name if grade else '', class_name=cls.name if cls else '',
+                            g_id=g_id, c_id=c_id)
 
 @app.route('/admin/audit_report')
 @admin_required
@@ -1046,18 +1081,50 @@ def audit_report():
     week = str(week_int)
     classes = Class.query.options(joinedload(Class.grade)).all()
     report = []
+    class_status = []
+    published_ids = {wp.class_id for wp in WeekPublication.query.filter_by(week_number=week_int).all()}
     for c in classes:
         subjects = Subject.query.filter_by(class_id=c.id, school_id=1).all()
+        missing = 0
         for subj in subjects:
             wd = WeeklyData.query.filter_by(class_id=c.id, week_number=week_int, day=subj.day, period=subj.period, school_id=1).first()
             if not wd or not wd.topic or not wd.homework:
+                missing += 1
                 report.append({
                     'subject': subj.name,
                     'grade': f"{c.grade.name} - {c.name}",
                     'day': DAYS_AR.get(subj.day, subj.day),
                     'period': subj.period
                 })
-    return render_template('audit_report.html', report=report, week=week)
+        class_status.append({
+            'id': c.id,
+            'name': f"{c.grade.name} - {c.name}" if c.grade else c.name,
+            'total': len(subjects),
+            'missing': missing,
+            'published': c.id in published_ids
+        })
+    return render_template('audit_report.html', report=report, week=week, class_status=class_status)
+
+@app.route('/admin/publish_week', methods=['POST'])
+@admin_required
+def publish_week():
+    week_int = safe_week(request.form.get('week'))
+    checked_ids = set(int(x) for x in request.form.getlist('class_ids') if x.isdigit())
+    all_classes = Class.query.all()
+    published_count = 0
+    for c in all_classes:
+        existing = WeekPublication.query.filter_by(class_id=c.id, week_number=week_int).first()
+        if c.id in checked_ids:
+            if not existing:
+                db.session.add(WeekPublication(class_id=c.id, week_number=week_int, school_id=1))
+            published_count += 1
+        else:
+            if existing:
+                db.session.delete(existing)
+    db.session.commit()
+    log_activity('admin', f'اعتماد جدول الأسبوع {week_int} لأولياء الأمور',
+                 action_type='اعتماد', description=f'تم اعتماد الجدول لـ {published_count} فصل من أصل {len(all_classes)}')
+    return redirect(url_for('audit_report', week=week_int))
 
 @app.route('/admin/delete_date/<key>', methods=['POST'])
 @admin_required
