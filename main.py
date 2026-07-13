@@ -169,6 +169,14 @@ def ensure_tables():
         return
     _tables_ensured = True
     try:
+        db.create_all()
+    except Exception:
+        db.session.rollback()
+    try:
+        seed_db()
+    except Exception:
+        db.session.rollback()
+    try:
         db.session.execute(db.text('''
             CREATE TABLE IF NOT EXISTS teacher_account (
                 id SERIAL PRIMARY KEY,
