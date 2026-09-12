@@ -1572,6 +1572,7 @@
             'كلمة المرور': 'Password',
             'إضافة المعلم': 'Add teacher',
             'رفع واستيراد المعلمين': 'Upload & import teachers',
+            '* أعمدة الملف: الاسم، اسم المستخدم، كلمة المرور': '* File columns: name, username, password',
             'المعلمون المسجلون': 'Registered teachers',
             'الحالة': 'Status',
             'إجراءات': 'Actions',
@@ -1582,6 +1583,7 @@
             'كلمة المرور': 'Password',
             'لا يوجد معلمون مسجلون بعد': 'No teachers registered yet',
             'حسابات المشرفين (مراجعة واعتماد فقط)': 'Supervisor accounts (review & approval only)',
+            'حساب المشرف يدخل مباشرة على شاشة "مراجعة الجدول واعتماده" فقط، ولا يملك صلاحية الوصول للوحة التحكم الكاملة أو تعديل الجداول.': 'Supervisors go directly to schedule review and approval. They cannot access the full dashboard or edit schedules.',
             'إضافة مشرف جديد': 'Add a new supervisor',
             'اسم المشرف': 'Supervisor name',
             'إضافة المشرف': 'Add supervisor',
@@ -1589,6 +1591,7 @@
             'المشرفون المسجلون': 'Registered supervisors',
             'لا يوجد مشرفون مسجلون بعد': 'No supervisors registered yet',
             'توزيع المواد على المعلمين': 'Assign subjects to teachers',
+            'خصص الحصص لكل معلم. الحصص المحجوزة لمعلم آخر تظهر باللون الأصفر ولا يمكن تعيينها.': 'Assign periods to each teacher. Periods reserved for another teacher appear in yellow and cannot be selected.',
             'المعلم المحدد:': 'Selected teacher:',
             'تحديد المتاح': 'Select available',
             'إلغاء الكل': 'Clear all',
@@ -1598,10 +1601,14 @@
             'محجوز لمعلم آخر': 'Reserved for another teacher',
             'اختر معلماً من القائمة أعلاه لعرض وتعديل حصصه': 'Choose a teacher above to view and edit their periods',
             'أضف معلمين أولاً قبل توزيع المواد': 'Add teachers before assigning periods',
+            'تحديد الفصل': 'Select class',
+            'إلغاء الفصل': 'Clear class',
+            'تحديد المادة': 'Select subject',
+            'إلغاء': 'Clear',
             'روابط الطلاب للفصول': 'Student links by class',
             'رابط الطالب': 'Student link',
             'نسخ': 'Copy',
-            'أنشئ هذا الموقع بواسطة أحمد الفيفي': 'Built by Ahmed Al-Fيفي',
+            'أنشئ هذا الموقع بواسطة أحمد الفيفي': 'Built by Ahmed Al-Faifi',
             'مكتمل': 'Completed',
             'عام': 'General',
             'المدير': 'Admin',
@@ -1615,6 +1622,13 @@
             'كلمة مرور المعلم': 'Teacher password',
             'كلمة مرور المشرف': 'Supervisor password',
             'اختر معلماً': 'Choose a teacher',
+            '-- اختر الفصل --': '-- Choose a class --',
+            '-- اختر معلماً --': '-- Choose a teacher --',
+            'الأحد': 'Sunday',
+            'الاثنين': 'Monday',
+            'الثلاثاء': 'Tuesday',
+            'الأربعاء': 'Wednesday',
+            'الخميس': 'Thursday',
             'لا توجد مواد في الجدول الأساسي بعد. يرجى رفع الجدول أولاً.': 'No subjects in the master schedule yet. Upload the schedule first.',
             'تم الحفظ بنجاح ✓': 'Saved successfully ✓'
         };
@@ -1645,6 +1659,10 @@
             if (match) return `Completed (${match[1]})`;
             match = trimmed.match(/^قيد الانتظار\s*\((\d+)\)$/);
             if (match) return `Pending (${match[1]})`;
+            match = trimmed.match(/^المعلمون المسجلون\s*\((\d+)\)$/);
+            if (match) return `Registered teachers (${match[1]})`;
+            match = trimmed.match(/^المشرفون المسجلون\s*\((\d+)\)$/);
+            if (match) return `Registered supervisors (${match[1]})`;
             match = trimmed.match(/^أسبوع\s+(\d+)$/);
             if (match) return `Week ${match[1]}`;
             match = trimmed.match(/^حصة\s+(\d+)$/);
@@ -1655,6 +1673,8 @@
             if (match) return `${match[1]} periods saved successfully`;
             match = trimmed.match(/^تم حفظ\s+(\d+)\s+حصة للمعلم$/);
             if (match) return `${match[1]} periods saved for the teacher`;
+            match = trimmed.match(/^محجوز لـ:\s*(.+)$/);
+            if (match) return `Reserved for: ${match[1]}`;
             return null;
         }
 
@@ -1695,10 +1715,13 @@
                 }
                 if (element.dataset.originalTitle) {
                     element.setAttribute('title', language === 'en'
-                        ? (attributeTranslations[element.dataset.originalTitle] || element.dataset.originalTitle)
+                        ? (translate(element.dataset.originalTitle, language) || attributeTranslations[element.dataset.originalTitle] || element.dataset.originalTitle)
                         : element.dataset.originalTitle);
                 } else if (element.getAttribute('title')) {
                     element.dataset.originalTitle = element.getAttribute('title');
+                    if (language === 'en') {
+                        element.setAttribute('title', translate(element.dataset.originalTitle, language) || element.dataset.originalTitle);
+                    }
                 }
             });
         }
