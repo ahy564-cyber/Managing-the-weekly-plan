@@ -2,13 +2,18 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>جدول الطالب - {{ grade_name }} - {{ class_name }}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body { font-family: 'Cairo', sans-serif; margin: 0; padding: 20px; background: #f8fafc; color: #1e293b; }
         .container { width: 100%; max-width: 100%; margin: 0 auto; }
+        .language-bar { display: flex; justify-content: flex-start; margin-bottom: 14px; }
+        .language-switcher { display: inline-flex; direction: ltr; gap: 3px; padding: 4px; background: white; border: 1px solid #e2e8f0; border-radius: 11px; box-shadow: 0 3px 12px rgba(15,23,42,0.07); }
+        .language-switcher button { border: 0; border-radius: 8px; padding: 7px 12px; background: transparent; color: #64748b; cursor: pointer; font: 700 0.78em 'Inter', sans-serif; transition: all 0.2s; }
+        .language-switcher button.active { background: #0f766e; color: white; box-shadow: 0 2px 7px rgba(15,118,110,0.25); }
         .header { background: white; padding: 25px; border-radius: 16px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); border-bottom: 5px solid #0d9488; display: flex; align-items: center; position: relative; min-height: 150px; }
         .logo-container { position: absolute; left: 25px; top: 50%; transform: translateY(-50%); z-index: 10; }
         .logo { width: 150px; height: auto; display: block; max-width: 150px; }
@@ -40,6 +45,20 @@
         .btn-img { background: #14b8a6; color: white; }
         .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
 
+        html[lang="en"] { direction: ltr; }
+        html[lang="en"] body { font-family: 'Inter', sans-serif; background: #f4f7fb; }
+        html[lang="en"] .language-bar { justify-content: flex-end; }
+        html[lang="en"] .header { border-bottom-color: #1d4ed8; }
+        html[lang="en"] .logo-container { left: auto; right: 25px; }
+        html[lang="en"] .subject-box { text-align: left; }
+        html[lang="en"] .subject-name { color: #1d4ed8; border-bottom-color: #dbeafe; }
+        html[lang="en"] th { background: linear-gradient(135deg, #172554, #1d4ed8); letter-spacing: 0.025em; }
+        html[lang="en"] .day-cell { background: #eff6ff; color: #1e3a8a; }
+        html[lang="en"] .hw-text { color: #b91c1c; }
+        html[lang="en"] .btn-pdf { background: #1d4ed8; }
+        html[lang="en"] .btn-img { background: #2563eb; }
+        html[lang="en"] table { box-shadow: inset 4px 0 0 #1d4ed8; }
+
         @media (max-width: 600px) {
             body { padding: 10px; }
             .header { flex-direction: column; min-height: auto; padding: 15px; }
@@ -63,6 +82,12 @@
 </head>
 <body>
     <div class="container">
+        <div class="language-bar">
+            <div class="language-switcher" role="group" aria-label="اختيار اللغة">
+                <button type="button" data-student-language="ar" aria-pressed="true">العربية</button>
+                <button type="button" data-student-language="en" aria-pressed="false">English</button>
+            </div>
+        </div>
         <div style="background: #f0fdfa; border: 2px solid #0d9488; border-radius: 12px; padding: 20px; margin-bottom: 25px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
             <p style="margin: 0; color: #134e4a; font-size: 1.1em; font-weight: 700; line-height: 1.6;">
                 أعزاءنا أولياء الأمور والطلاب الكرام.. نرحب بكم في منصة (الجدول الذكي)؛ وجهتكم المعتمدة للاطلاع على الخطة الأسبوعية، والتي نوافيكم بها بدقة وموعد ثابت كل يوم خميس بنهاية دوامنا الدراسي، لنعينكم على التخطيط المبكر لأسبوعكم القادم.
@@ -123,14 +148,14 @@
                     <thead>
                         <tr>
                             <th class="day-cell">اليوم</th>
-                            {% for p in range(1, 9) %}<th class="period-header">ح {{ p }}</th>{% endfor %}
+                            {% for p in range(1, periods_per_day + 1) %}<th class="period-header">ح {{ p }}</th>{% endfor %}
                         </tr>
                     </thead>
                     <tbody>
                         {% for d in days_order %}
                         <tr>
                             <td class="day-cell">{{ days_ar[d] }}</td>
-                            {% for p in range(1, 9) %}
+                            {% for p in range(1, periods_per_day + 1) %}
                             <td>
                                 {% if schedule[d][p].subject_name %}
                                 <div class="subject-box">
@@ -169,7 +194,9 @@
             const diff = target - now;
             if (diff > 0) {
                 const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-                el.querySelector('span').textContent = days + ' يوم متبقي';
+                el.querySelector('span').textContent = document.documentElement.lang === 'en'
+                    ? `${days} days remaining`
+                    : `${days} يوم متبقي`;
             } else {
                 el.style.display = 'none';
             }
@@ -183,7 +210,7 @@
         function exportPDF() {
             const btn = document.querySelector('.btn-pdf');
             const original = btn.innerHTML;
-            btn.innerHTML = '⏳ جاري التجهيز...';
+            btn.innerHTML = document.documentElement.lang === 'en' ? '⏳ Preparing...' : '⏳ جاري التجهيز...';
             btn.disabled = true;
             const element = document.getElementById('capture');
             html2canvas(element, {
@@ -206,7 +233,7 @@
                 pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', x, y, w, h);
                 pdf.save('Weekly_Schedule_{{ class_name }}.pdf');
             }).catch(() => {
-                alert('حدث خطأ أثناء إنشاء ملف PDF، حاول مرة أخرى');
+                alert(document.documentElement.lang === 'en' ? 'Could not create the PDF. Please try again.' : 'حدث خطأ أثناء إنشاء ملف PDF، حاول مرة أخرى');
             }).finally(() => {
                 btn.innerHTML = original;
                 btn.disabled = false;
@@ -216,7 +243,7 @@
         function exportImage() {
             const btn = document.querySelector('.btn-img');
             const original = btn.innerHTML;
-            btn.innerHTML = '⏳ جاري التجهيز...';
+            btn.innerHTML = document.documentElement.lang === 'en' ? '⏳ Preparing...' : '⏳ جاري التجهيز...';
             btn.disabled = true;
             const element = document.getElementById('capture');
             html2canvas(element, {
@@ -231,12 +258,98 @@
                 link.href = canvas.toDataURL('image/png');
                 link.click();
             }).catch(() => {
-                alert('حدث خطأ أثناء حفظ الصورة، حاول مرة أخرى');
+                alert(document.documentElement.lang === 'en' ? 'Could not save the image. Please try again.' : 'حدث خطأ أثناء حفظ الصورة، حاول مرة أخرى');
             }).finally(() => {
                 btn.innerHTML = original;
                 btn.disabled = false;
             });
         }
+    </script>
+    <script>
+        (function () {
+            const originalText = new WeakMap();
+            const translations = {
+                'أعزاءنا أولياء الأمور والطلاب الكرام.. نرحب بكم في منصة (الجدول الذكي)؛ وجهتكم المعتمدة للاطلاع على الخطة الأسبوعية، والتي نوافيكم بها بدقة وموعد ثابت كل يوم خميس بنهاية دوامنا الدراسي، لنعينكم على التخطيط المبكر لأسبوعكم القادم.': 'Dear parents and students, welcome to the Smart Schedule platform—your trusted place to view the weekly plan, published every Thursday at the end of the school day to help you plan the coming week.',
+                'لم يتم اعتماد الجدول بعد': 'The schedule has not been published yet',
+                'عرض أسبوع سابق:': 'View a previous week:',
+                'اختبارات الفترة الأولى:': 'First assessment:',
+                'اختبارات الفترة الثانية:': 'Second assessment:',
+                'الاختبار النهائي:': 'Final exam:',
+                'اختبارات الفترة الأولى': 'First assessment',
+                'اختبارات الفترة الثانية': 'Second assessment',
+                'الاختبار النهائي': 'Final exam',
+                'اليوم': 'Day',
+                'الأحد': 'Sunday',
+                'الاثنين': 'Monday',
+                'الثلاثاء': 'Tuesday',
+                'الأربعاء': 'Wednesday',
+                'الخميس': 'Thursday',
+                '📥 تحميل بصيغة PDF': '📥 Download PDF',
+                '🖼️ حفظ كصورة': '🖼️ Save as image',
+                'أنشئ هذا الموقع بواسطة أحمد الفيفي': 'Built by Ahmed Al-Faifi'
+            };
+
+            function translateText(source, language) {
+                const value = source.trim();
+                if (language === 'ar') return value;
+                if (translations[value]) return translations[value];
+                let match = value.match(/^الأسبوع الدراسي:\s*(\d+)$/);
+                if (match) return `School week: ${match[1]}`;
+                match = value.match(/^الأسبوع\s+(\d+)(\s+\(الأحدث\))?$/);
+                if (match) return `Week ${match[1]}${match[2] ? ' (latest)' : ''}`;
+                match = value.match(/^ح\s*(\d+)$/);
+                if (match) return `P${match[1]}`;
+                match = value.match(/^(\d+)\s+يوم متبقي$/);
+                if (match) return `${match[1]} days remaining`;
+                match = value.match(/^جاري تحضير خطة\s+(.+)، وسيتم نشرها هنا فور اعتمادها من إدارة المدرسة\.$/);
+                if (match) return `The ${match[1]} plan is being prepared and will appear here once approved by the school administration.`;
+                return null;
+            }
+
+            function preserveWhitespace(source, replacement) {
+                return source.match(/^\s*/)[0] + replacement + source.match(/\s*$/)[0];
+            }
+
+            function setStudentLanguage(language) {
+                const selected = language === 'en' ? 'en' : 'ar';
+                document.documentElement.lang = selected;
+                document.documentElement.dir = selected === 'en' ? 'ltr' : 'rtl';
+                localStorage.setItem('student-language', selected);
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set('lang', selected);
+                window.history.replaceState({}, '', currentUrl);
+                const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+                const nodes = [];
+                let node;
+                while ((node = walker.nextNode())) {
+                    if (node.parentElement && !node.parentElement.closest('script,style')) nodes.push(node);
+                }
+                nodes.forEach(textNode => {
+                    if (!originalText.has(textNode)) originalText.set(textNode, textNode.nodeValue);
+                    const source = originalText.get(textNode);
+                    if (selected === 'ar') {
+                        textNode.nodeValue = source;
+                        return;
+                    }
+                    const translated = translateText(source, selected);
+                    if (translated !== null) textNode.nodeValue = preserveWhitespace(source, translated);
+                });
+                document.title = selected === 'en'
+                    ? 'Student Schedule - {{ grade_name }} - {{ class_name }}'
+                    : 'جدول الطالب - {{ grade_name }} - {{ class_name }}';
+                document.querySelectorAll('[data-student-language]').forEach(button => {
+                    const active = button.dataset.studentLanguage === selected;
+                    button.classList.toggle('active', active);
+                    button.setAttribute('aria-pressed', String(active));
+                });
+            }
+
+            document.querySelectorAll('[data-student-language]').forEach(button => {
+                button.addEventListener('click', () => setStudentLanguage(button.dataset.studentLanguage));
+            });
+            const requestedLanguage = new URLSearchParams(window.location.search).get('lang');
+            setStudentLanguage(requestedLanguage || localStorage.getItem('student-language') || 'ar');
+        })();
     </script>
     <footer style="text-align: center; padding: 20px; color: #64748b; font-size: 0.85em; margin-top: 40px; border-top: 1px solid #e2e8f0;">
         أنشئ هذا الموقع بواسطة أحمد الفيفي

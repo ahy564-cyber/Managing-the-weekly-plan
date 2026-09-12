@@ -664,7 +664,7 @@
             </form>
             <p style="color:var(--muted);font-size:0.8em;margin-top:10px;">
                 <i class="fas fa-info-circle" style="margin-left:4px;"></i>
-                يجب أن يحتوي الملف على عمود للصف وأعمدة للحصص مسماة باليوم والرقم.
+                يجب أن يحتوي الملف على عمود للصف، ثم {{ periods_per_day }} أعمدة لكل يوم حسب عدد الحصص المحدد في الإعدادات.
             </p>
         </div>
 
@@ -699,13 +699,13 @@
                 <table class="sched-table">
                     <thead><tr>
                         <th style="width:80px;">اليوم</th>
-                        {% for p in range(1, 9) %}<th>حصة {{ p }}</th>{% endfor %}
+                        {% for p in range(1, periods_per_day + 1) %}<th>حصة {{ p }}</th>{% endfor %}
                     </tr></thead>
                     <tbody>
                         {% for d in days_order %}
                         <tr>
                             <td class="day-cell">{{ days_ar[d] }}</td>
-                            {% for p in range(1, 9) %}
+                            {% for p in range(1, periods_per_day + 1) %}
                             <td>
                                 <div style="font-size:0.72em;color:var(--muted);margin-bottom:3px;">{{ schedule[d][p].subject_name or '—' }}</div>
                                 <input type="text" name="override_{{ d }}_{{ p }}" value="{{ schedule[d][p].subject_name }}"
@@ -753,6 +753,10 @@
                     <div class="form-group">
                         <label><i class="fas fa-calendar-week" style="margin-left:4px;"></i>الأسبوع الدراسي الحالي:</label>
                         <input type="number" name="current_week" value="{{ settings.get('current_week', '1') }}">
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-list-ol" style="margin-left:4px;"></i>عدد الحصص اليومية:</label>
+                        <input type="number" name="periods_per_day" value="{{ periods_per_day }}" min="1" max="12" required>
                     </div>
                     <div class="form-group">
                         <label>تاريخ اختبارات الفترة الأولى:</label>
@@ -927,13 +931,13 @@
                 <table class="sched-table">
                     <thead><tr>
                         <th style="width:80px;">اليوم</th>
-                        {% for p in range(1, 9) %}<th>حصة {{ p }}</th>{% endfor %}
+                        {% for p in range(1, periods_per_day + 1) %}<th>حصة {{ p }}</th>{% endfor %}
                     </tr></thead>
                     <tbody>
                         {% for d in days_order %}
                         <tr>
                             <td class="day-cell">{{ days_ar[d] }}</td>
-                            {% for p in range(1, 9) %}
+                            {% for p in range(1, periods_per_day + 1) %}
                             <td>
                                 <input type="text" name="fixed_{{ d }}_{{ p }}" value="{{ fixed_schedule[d][p] }}"
                                        placeholder="المادة..."
@@ -1604,6 +1608,7 @@
             'رفع الشعار': 'Upload logo',
             'اسم المدرسة:': 'School name:',
             'الأسبوع الدراسي الحالي:': 'Current school week:',
+            'عدد الحصص اليومية:': 'Periods per day:',
             'تاريخ اختبارات الفترة الأولى:': 'First assessment date:',
             'تاريخ اختبارات الفترة الثانية:': 'Second assessment date:',
             'تاريخ الاختبار النهائي:': 'Final exam date:',
@@ -1742,6 +1747,8 @@
             if (match) return `${match[1]} periods saved for the teacher`;
             match = trimmed.match(/^محجوز لـ:\s*(.+)$/);
             if (match) return `Reserved for: ${match[1]}`;
+            match = trimmed.match(/^يجب أن يحتوي الملف على عمود للصف، ثم\s+(\d+)\s+أعمدة لكل يوم حسب عدد الحصص المحدد في الإعدادات\.$/);
+            if (match) return `The file must include a class column followed by ${match[1]} columns per day, matching the configured period count.`;
             return null;
         }
 

@@ -154,6 +154,17 @@ def safe_week(val, default=1):
     except (ValueError, TypeError):
         return default
 
+def get_periods_per_day(settings=None):
+    """Return the configured daily period count, clamped to a safe UI range."""
+    raw_value = settings.get('periods_per_day', '8') if settings is not None else None
+    if raw_value is None:
+        stored = db.session.get(Setting, 'periods_per_day')
+        raw_value = stored.value if stored else '8'
+    try:
+        return max(1, min(12, int(str(raw_value).strip())))
+    except (ValueError, TypeError):
+        return 8
+
 def log_activity(role, action, teacher_name=None, action_type=None, target_subject=None, description=None):
     try:
         log = ActivityLog(
@@ -439,11 +450,15 @@ def admin():
                 cid = request.form.get('class_id')
                 if cid and cid != 'None':
                     class_id = int(cid)
+                    periods_per_day = get_periods_per_day()
                     cls = db.session.get(Class, class_id)
                     if cls:
-                        db.session.query(Subject).filter_by(class_id=class_id).delete()
+                        db.session.query(Subject).filter(
+                            Subject.class_id==class_id,
+                            Subject.period <= periods_per_day
+                        ).delete(synchronize_session=False)
                         for day in DAYS_ORDER:
-                            for period in range(1, 9):
+                            for period in range(1, periods_per_day + 1):
                                 name = request.form.get(f'fixed_{day}_{period}')
                                 if name:
                                     db.session.add(Subject(class_id=class_id, day=day, period=period, name=name, school_id=1))
@@ -465,8 +480,13 @@ def admin():
                         log_activity('admin', f'حفظ الجدول الأساسي للفصل: {cls.grade.name} - {cls.name}', teacher_name='المدير', action_type='تعديل', description=f'حفظ الجدول الأساسي للفصل {cls.grade.name} - {cls.name} — تم نشر المادة للأسابيع 1-19')
                         flash('تم الحفظ بنجاح — تم نشر المواد للأسابيع 1-19')
             elif action == 'update_settings':
-                for key in ['period1_date', 'period2_date', 'final_date', 'current_week', 'school_name']:
+                for key in ['period1_date', 'period2_date', 'final_date', 'current_week', 'school_name', 'periods_per_day']:
                     val = request.form.get(key)
+                    if key == 'periods_per_day':
+                        try:
+                            val = str(max(1, min(12, int(val))))
+                        except (ValueError, TypeError):
+                            val = '8'
                     s = db.session.get(Setting, key)
                     if s: s.value = val
                     else: db.session.add(Setting(key=key, value=val))
@@ -487,8 +507,9 @@ def admin():
                 if cid and cid != 'None' and week:
                     class_id = int(cid)
                     week_num = safe_week(week)
+                    periods_per_day = get_periods_per_day()
                     for day in DAYS_ORDER:
-                        for period in range(1, 9):
+                        for period in range(1, periods_per_day + 1):
                             subject_name = request.form.get(f'override_{day}_{period}', '').strip()
                             # FIX: include school_id=1 in lookup to avoid touching orphaned records
                             wd = WeeklyData.query.filter_by(class_id=class_id, week_number=week_num,
@@ -637,22 +658,26 @@ def admin():
     grades = Grade.query.order_by(Grade.name).all()
     classes = Class.query.options(joinedload(Class.grade)).order_by(Class.name).all()
     settings = {s.key: s.value for s in Setting.query.all()}
+    periods_per_day = get_periods_per_day(settings)
 
     sel_fixed_class_id = request.args.get('fixed_class_id')
-    fixed_schedule = {day: {p: '' for p in range(1, 9)} for day in DAYS_ORDER}
+    fixed_schedule = {day: {p: '' for p in range(1, periods_per_day + 1)} for day in DAYS_ORDER}
     if sel_fixed_class_id:
         for s in Subject.query.filter_by(class_id=int(sel_fixed_class_id)).all():
-            fixed_schedule[s.day][s.period] = s.name
+            if s.day in fixed_schedule and s.period in fixed_schedule[s.day]:
+                fixed_schedule[s.day][s.period] = s.name
 
     sel_class_id = request.args.get('class_id')
     sel_week = str(safe_week(request.args.get('week', settings.get('current_week', '1'))))
-    schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
+    schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, periods_per_day + 1)} for day in DAYS_ORDER}
     if sel_class_id:
         for f in Subject.query.filter_by(class_id=int(sel_class_id)).all():
-            schedule[f.day][f.period]['subject_name'] = f.name
+            if f.day in schedule and f.period in schedule[f.day]:
+                schedule[f.day][f.period]['subject_name'] = f.name
         for w in WeeklyData.query.filter_by(class_id=int(sel_class_id), week_number=safe_week(sel_week)).all():
-            schedule[w.day][w.period].update({'topic': w.topic, 'homework': w.homework})
-            if w.subject_name: schedule[w.day][w.period]['subject_name'] = w.subject_name
+            if w.day in schedule and w.period in schedule[w.day]:
+                schedule[w.day][w.period].update({'topic': w.topic, 'homework': w.homework})
+                if w.subject_name: schedule[w.day][w.period]['subject_name'] = w.subject_name
 
     l_week = str(safe_week(request.args.get('locked_week', settings.get('current_week', '1'))))
     locked_days = [ld.day_name for ld in LockedDay.query.filter_by(week_number=safe_week(l_week)).all()]
@@ -661,14 +686,16 @@ def admin():
     completed = [c for c in classes if WeeklyData.query.filter(WeeklyData.class_id==c.id, WeeklyData.week_number==c_week, WeeklyData.school_id==1, WeeklyData.topic!='', WeeklyData.topic!=None).first()]
     pending = [c for c in classes if c not in completed]
     percent = (len(completed)/len(classes)*100) if classes else 0
-    total_periods = Subject.query.filter_by(school_id=1).count()
-    filled_periods = WeeklyData.query.filter(WeeklyData.week_number==c_week, WeeklyData.school_id==1, WeeklyData.topic!='', WeeklyData.topic!=None).count()
+    total_periods = Subject.query.filter(Subject.school_id==1, Subject.period <= periods_per_day).count()
+    filled_periods = WeeklyData.query.filter(WeeklyData.week_number==c_week, WeeklyData.school_id==1, WeeklyData.period <= periods_per_day, WeeklyData.topic!='', WeeklyData.topic!=None).count()
     logs = ActivityLog.query.order_by(ActivityLog.timestamp.desc()).limit(20).all()
     teachers = TeacherAccount.query.filter_by(school_id=1).order_by(TeacherAccount.name).all()
     supervisors = SupervisorAccount.query.filter_by(school_id=1).order_by(SupervisorAccount.name).all()
     subjects_by_class = {}
     for cls in classes:
-        subs = Subject.query.filter_by(class_id=cls.id, school_id=1).order_by(Subject.day, Subject.period).all()
+        subs = Subject.query.filter(
+            Subject.class_id==cls.id, Subject.school_id==1, Subject.period <= periods_per_day
+        ).order_by(Subject.day, Subject.period).all()
         if subs:
             subjects_by_class[str(cls.id)] = {
                 'grade_name': cls.grade.name,
@@ -679,7 +706,9 @@ def admin():
 
     # Build current assignments per teacher
     assignments_by_teacher = {}
-    for a in TeacherAssignment.query.filter_by(school_id=1).all():
+    for a in TeacherAssignment.query.filter(
+        TeacherAssignment.school_id==1, TeacherAssignment.period <= periods_per_day
+    ).all():
         tid = str(a.teacher_id)
         if tid not in assignments_by_teacher:
             assignments_by_teacher[tid] = []
@@ -694,7 +723,8 @@ def admin():
                          selected_class_id=sel_class_id, selected_week=sel_week, locked_view_week=l_week, current_locked_days=locked_days,
                          completion_percent=round(percent,1), completed_classes=completed, pending_classes=pending, logs=logs,
                          total_periods=total_periods, filled_periods=filled_periods, teachers=teachers, supervisors=supervisors,
-                         subjects_json=subjects_json, assignments_json=assignments_json, teachers_json=teachers_json)
+                         subjects_json=subjects_json, assignments_json=assignments_json, teachers_json=teachers_json,
+                         periods_per_day=periods_per_day)
 
 @app.route('/admin/upload_master', methods=['POST'])
 @admin_required
@@ -712,13 +742,11 @@ def upload_master():
         # Clean data: remove newlines and strip whitespace
         df = df.map(lambda x: str(x).replace('\n', ' ').strip() if pd.notnull(x) else '')
 
-        # Every 8 columns is a new day (1-8 Sun, 9-16 Mon, etc.)
+        periods_per_day = get_periods_per_day()
+        # Column 0 is the class; each day then occupies the configured number of columns.
         day_mappings = {
-            'Sunday': range(1, 9),
-            'Monday': range(9, 17),
-            'Tuesday': range(17, 25),
-            'Wednesday': range(25, 33),
-            'Thursday': range(33, 41)
+            day: range(1 + day_index * periods_per_day, 1 + (day_index + 1) * periods_per_day)
+            for day_index, day in enumerate(DAYS_ORDER)
         }
 
         ALL_WEEKS = list(range(1, 20))  # Weeks 1-19
@@ -825,6 +853,7 @@ def upload_teachers():
 @login_required
 def teacher():
     settings = {s.key: s.value for s in Setting.query.all()}
+    periods_per_day = get_periods_per_day(settings)
     g_id = request.args.get('grade_id')
     c_id = request.args.get('class_id')
     week = str(safe_week(request.args.get('week', settings.get('current_week', '1'))))
@@ -868,6 +897,8 @@ def teacher():
                 for e in data.get('entries', []):
                     day = e.get('day')
                     period = int(e.get('period'))
+                    if day not in DAYS_ORDER or period < 1 or period > periods_per_day:
+                        return jsonify({'status': 'error', 'message': 'رقم الحصة خارج النطاق المسموح'}), 400
                     new_topic = (e.get('topic') or '').strip()
                     new_homework = (e.get('homework') or '').strip()
 
@@ -978,14 +1009,23 @@ def teacher():
 
     grades = Grade.query.all()
     classes = Class.query.filter_by(grade_id=int(g_id)).all() if g_id else []
-    schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
+    schedule = {
+        day: {
+            p: {'subject_name': '', 'topic': '', 'homework': ''}
+            for p in range(1, periods_per_day + 1)
+        }
+        for day in DAYS_ORDER
+    }
     if c_id:
         # FIX: always scope to school_id=1 on both Subject and WeeklyData reads
         for f in Subject.query.filter_by(class_id=int(c_id), school_id=1).all():
-            schedule[f.day][f.period]['subject_name'] = f.name
+            if f.day in schedule and f.period in schedule[f.day]:
+                schedule[f.day][f.period]['subject_name'] = f.name
         for w in WeeklyData.query.filter_by(class_id=int(c_id), week_number=safe_week(week), school_id=1).all():
-            schedule[w.day][w.period].update({'topic': w.topic or '', 'homework': w.homework or ''})
-            if w.subject_name: schedule[w.day][w.period]['subject_name'] = w.subject_name
+            if w.day in schedule and w.period in schedule[w.day]:
+                schedule[w.day][w.period].update({'topic': w.topic or '', 'homework': w.homework or ''})
+                if w.subject_name:
+                    schedule[w.day][w.period]['subject_name'] = w.subject_name
 
     locked = [ld.day_name for ld in LockedDay.query.filter_by(week_number=safe_week(week)).all()]
 
@@ -1002,7 +1042,8 @@ def teacher():
     resp = make_response(render_template('teacher.html', grades=grades, classes=classes, schedule=schedule,
                                          selected_grade=g_id, selected_class=c_id, selected_week=week,
                                          days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings, locked_days=locked,
-                                         assigned_keys=assigned_keys, is_admin_user=is_admin_user))
+                                         assigned_keys=assigned_keys, is_admin_user=is_admin_user,
+                                         periods_per_day=periods_per_day))
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     resp.headers['Pragma'] = 'no-cache'
     resp.headers['Expires'] = '0'
@@ -1015,30 +1056,41 @@ def admin_assignments():
         data = request.get_json()
         teacher_id = int(data.get('teacher_id'))
         cells = data.get('cells', [])
+        periods_per_day = get_periods_per_day()
         try:
             TeacherAssignment.query.filter_by(teacher_id=teacher_id).delete()
+            saved_count = 0
             for cell in cells:
+                period = int(cell['period'])
+                if cell['day'] not in DAYS_ORDER or period < 1 or period > periods_per_day:
+                    continue
                 db.session.add(TeacherAssignment(
                     teacher_id=teacher_id,
                     class_id=int(cell['class_id']),
                     day=cell['day'],
-                    period=int(cell['period']),
+                    period=period,
                     school_id=1
                 ))
+                saved_count += 1
             db.session.commit()
             teacher = db.session.get(TeacherAccount, teacher_id)
-            log_activity('admin', f'تحديث توزيع مواد: {teacher.name if teacher else teacher_id} — {len(cells)} مادة',
-                         action_type='توزيع', description=f'تم تعيين {len(cells)} خلية للمعلم {teacher.name if teacher else teacher_id}')
-            return jsonify({'status': 'ok', 'count': len(cells)})
+            log_activity('admin', f'تحديث توزيع مواد: {teacher.name if teacher else teacher_id} — {saved_count} مادة',
+                         action_type='توزيع', description=f'تم تعيين {saved_count} خلية للمعلم {teacher.name if teacher else teacher_id}')
+            return jsonify({'status': 'ok', 'count': saved_count})
         except Exception as e:
             db.session.rollback()
             return jsonify({'status': 'error', 'message': str(e)}), 500
     # GET: return assignments for a teacher
     teacher_id = request.args.get('teacher_id')
     if teacher_id:
+        periods_per_day = get_periods_per_day()
         assignments = [
             {'class_id': a.class_id, 'day': a.day, 'period': a.period}
-            for a in TeacherAssignment.query.filter_by(teacher_id=int(teacher_id), school_id=1).all()
+            for a in TeacherAssignment.query.filter(
+                TeacherAssignment.teacher_id==int(teacher_id),
+                TeacherAssignment.school_id==1,
+                TeacherAssignment.period <= periods_per_day
+            ).all()
         ]
         return jsonify({'assignments': assignments})
     return jsonify({'assignments': []})
@@ -1189,6 +1241,7 @@ def student_landing():
 @app.route('/student/<int:g_id>/<int:c_id>')
 def student(g_id, c_id):
     settings = {s.key: s.value for s in Setting.query.all()}
+    periods_per_day = get_periods_per_day(settings)
     grade = db.session.get(Grade, g_id)
     cls = db.session.get(Class, c_id)
     published_weeks = [wp.week_number for wp in WeekPublication.query.filter_by(class_id=c_id)
@@ -1200,31 +1253,46 @@ def student(g_id, c_id):
     if week_int is None:
         return render_template('student.html', not_published=True, published_weeks=[],
                                 settings=settings, grade_name=grade.name if grade else '',
-                                class_name=cls.name if cls else '', g_id=g_id, c_id=c_id)
+                                class_name=cls.name if cls else '', g_id=g_id, c_id=c_id,
+                                periods_per_day=periods_per_day)
 
     week = str(week_int)
-    schedule = {day: {p: {'subject_name': '', 'topic': '', 'homework': ''} for p in range(1, 9)} for day in DAYS_ORDER}
+    schedule = {
+        day: {
+            p: {'subject_name': '', 'topic': '', 'homework': ''}
+            for p in range(1, periods_per_day + 1)
+        }
+        for day in DAYS_ORDER
+    }
     for f in Subject.query.filter_by(class_id=c_id).all():
-        schedule[f.day][f.period]['subject_name'] = f.name
+        if f.day in schedule and f.period in schedule[f.day]:
+            schedule[f.day][f.period]['subject_name'] = f.name
     for w in WeeklyData.query.filter_by(class_id=c_id, week_number=week_int).all():
-        schedule[w.day][w.period].update({'topic': w.topic or '', 'homework': w.homework or ''})
-        if w.subject_name: schedule[w.day][w.period]['subject_name'] = w.subject_name
+        if w.day in schedule and w.period in schedule[w.day]:
+            schedule[w.day][w.period].update({'topic': w.topic or '', 'homework': w.homework or ''})
+            if w.subject_name:
+                schedule[w.day][w.period]['subject_name'] = w.subject_name
     return render_template('student.html', schedule=schedule, days_ar=DAYS_AR, days_order=DAYS_ORDER,
                             settings=settings, week=week, published_weeks=published_weeks, not_published=False,
                             grade_name=grade.name if grade else '', class_name=cls.name if cls else '',
-                            g_id=g_id, c_id=c_id)
+                             g_id=g_id, c_id=c_id, periods_per_day=periods_per_day)
 
 @app.route('/admin/audit_report')
 @review_access_required
 def audit_report():
     week_int = safe_week(request.args.get('week', '1'))
     week = str(week_int)
+    periods_per_day = get_periods_per_day()
     classes = Class.query.options(joinedload(Class.grade)).all()
     report = []
     class_status = []
     published_ids = {wp.class_id for wp in WeekPublication.query.filter_by(week_number=week_int).all()}
     for c in classes:
-        subjects = Subject.query.filter_by(class_id=c.id, school_id=1).all()
+        subjects = Subject.query.filter(
+            Subject.class_id==c.id,
+            Subject.school_id==1,
+            Subject.period <= periods_per_day
+        ).all()
         missing = 0
         for subj in subjects:
             wd = WeeklyData.query.filter_by(class_id=c.id, week_number=week_int, day=subj.day, period=subj.period, school_id=1).first()
