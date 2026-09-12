@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>لوحة تحكم المدير</title>
-    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
         :root {
@@ -30,6 +30,7 @@
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html { scroll-behavior: smooth; }
         body { font-family: 'Tajawal', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; }
+        html[lang="en"] body { font-family: 'Inter', sans-serif; }
 
         /* ══ SIDEBAR ══ */
         .sidebar {
@@ -152,6 +153,21 @@
             font-size: 0.85em;
             font-weight: 700;
             display: flex; align-items: center; gap: 6px;
+        }
+        .language-tools { display: flex; align-items: center; gap: 12px; }
+        .language-switcher {
+            display: inline-flex; align-items: center; gap: 3px;
+            padding: 4px; background: #f1f5f9; border: 1px solid var(--border);
+            border-radius: 10px; direction: ltr;
+        }
+        .language-switcher button {
+            padding: 6px 10px; border-radius: 7px; border: 0;
+            background: transparent; color: var(--muted); font-size: 0.75em;
+            font-family: 'Inter', sans-serif; min-width: 62px;
+        }
+        .language-switcher button:hover { transform: none; background: #e2e8f0; color: var(--navy); }
+        .language-switcher button.active {
+            color: #fff; background: var(--navy); box-shadow: 0 2px 6px rgba(15,23,42,0.2);
         }
 
         /* ══ PAGE BODY ══ */
@@ -371,11 +387,80 @@
         .assign-legend { display: flex; gap: 14px; align-items: center; font-size: 0.8em; color: #64748b; margin-bottom: 16px; flex-wrap: wrap; }
         .legend-dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
 
+        /* ══ ENGLISH VISUAL SYSTEM ══
+           English uses a deliberately different LTR table treatment so the
+           selected language is immediately visible, not just translated. */
+        html[lang="en"] { direction: ltr; }
+        html[lang="en"] .sidebar {
+            right: auto; left: 0;
+            box-shadow: 6px 0 32px rgba(0,0,0,0.25);
+        }
+        html[lang="en"] .main-content { margin-right: 0; margin-left: var(--sidebar-w); }
+        html[lang="en"] .nav-link { text-align: left; }
+        html[lang="en"] .nav-link:hover { padding-right: 12px; padding-left: 16px; }
+        html[lang="en"] .card-teal,
+        html[lang="en"] .card-emerald,
+        html[lang="en"] .card-indigo,
+        html[lang="en"] .card-gold,
+        html[lang="en"] .card-red,
+        html[lang="en"] .card-blue {
+            border-right: 1px solid var(--border);
+            border-left-width: 5px;
+        }
+        html[lang="en"] .topbar-title,
+        html[lang="en"] .topbar-week { letter-spacing: -0.01em; }
+        html[lang="en"] .table-container {
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(15,23,42,0.06);
+            background: #f8fafc;
+            padding: 4px;
+        }
+        html[lang="en"] table {
+            border-collapse: separate;
+            border-spacing: 0;
+            min-width: 560px;
+        }
+        html[lang="en"] thead th {
+            background: linear-gradient(135deg, #172554, #1e3a8a);
+            text-align: left;
+            text-transform: uppercase;
+            letter-spacing: 0.035em;
+            font-size: 0.74em;
+            padding: 15px 16px;
+        }
+        html[lang="en"] thead th:first-child { border-radius: 10px 0 0 0; }
+        html[lang="en"] thead th:last-child { border-radius: 0 10px 0 0; }
+        html[lang="en"] tbody td {
+            text-align: left;
+            padding: 14px 16px;
+            border-bottom: 1px solid #e8eef5;
+        }
+        html[lang="en"] tbody tr:nth-child(even) { background: #f8fafc; }
+        html[lang="en"] tbody tr:hover {
+            background: #eff6ff;
+            box-shadow: inset 3px 0 0 #3b82f6;
+        }
+        html[lang="en"] .sched-table thead th { background: linear-gradient(135deg, #0f766e, #0f766e 55%, #0d9488); text-align: center; }
+        html[lang="en"] .sched-table tbody td { text-align: center; }
+        html[lang="en"] .sched-table .day-cell {
+            background: linear-gradient(135deg, #eef2ff, #dbeafe);
+            color: #1e3a8a;
+            text-align: left;
+        }
+        html[lang="en"] .log-table thead th { background: linear-gradient(135deg, #3730a3, #4f46e5); }
+        html[lang="en"] .log-table tbody td:last-child { text-align: left; }
+        html[lang="en"] .assign-legend { direction: ltr; }
+        html[lang="en"] .sidebar-footer a { flex-direction: row; }
+        html[lang="en"] i[style*="margin-left"] { margin-left: 0 !important; margin-right: 4px !important; }
+
         @media (max-width: 900px) {
             .sidebar { display: none; }
-            .main-content { margin-right: 0; }
+            .main-content, html[lang="en"] .main-content { margin-right: 0; margin-left: 0; }
             .grid-2 { grid-template-columns: 1fr; }
             .page-body { padding: 16px; }
+            .language-tools { gap: 6px; }
+            .topbar { padding: 12px 16px; }
+            .topbar-week { display: none; }
         }
     </style>
 </head>
@@ -446,9 +531,15 @@
             <i class="fas fa-layer-group"></i>
             {{ settings.school_name or 'لوحة تحكم المدير' }}
         </div>
+        <div class="language-tools">
         <div class="topbar-week">
             <i class="fas fa-calendar-alt"></i>
             الأسبوع الحالي: {{ settings.current_week }}
+        </div>
+        <div class="language-switcher" role="group" aria-label="اختيار اللغة">
+            <button type="button" data-language-option="ar" aria-pressed="true">العربية</button>
+            <button type="button" data-language-option="en" aria-pressed="false">English</button>
+        </div>
         </div>
     </div>
 
@@ -1242,6 +1333,7 @@
         }
         if (!html) html = '<div style="padding:24px;color:#94a3b8;text-align:center;">لا توجد مواد في الجدول الأساسي بعد. يرجى رفع الجدول أولاً.</div>';
         container.innerHTML = html;
+        if (window.applyDashboardLanguage) window.applyDashboardLanguage();
     };
 
     window.applyChipStyle = applyChipStyle;
@@ -1387,8 +1479,254 @@
 
     function copyLink(id) {
         const text = document.getElementById(id).innerText;
-        navigator.clipboard.writeText(text).then(() => { alert('تم نسخ الرابط بنجاح!'); });
+        navigator.clipboard.writeText(text).then(() => {
+            alert(document.documentElement.lang === 'en' ? 'Link copied successfully!' : 'تم نسخ الرابط بنجاح!');
+        });
     }
+</script>
+<script>
+    /*
+     * The dashboard keeps one source of truth for its Arabic copy and
+     * translates it in-place. This means language changes do not reload the
+     * page, lose selected classes, or affect any form submission.
+     */
+    (function () {
+        const originalText = new WeakMap();
+        const textTranslations = {
+            'لوحة تحكم المدير': 'Admin dashboard',
+            'الرئيسية': 'Overview',
+            'الإحصائيات': 'Statistics',
+            'استيراد Excel': 'Import Excel',
+            'إدارة الجدول': 'Schedule management',
+            'الجدول الأساسي': 'Master schedule',
+            'التجاوز الأسبوعي': 'Weekly overrides',
+            'المستخدمون': 'Users',
+            'الصفوف والفصول': 'Grades & classes',
+            'المعلمون': 'Teachers',
+            'المشرفون': 'Supervisors',
+            'توزيع المواد': 'Assignments',
+            'أخرى': 'Other',
+            'روابط الطلاب': 'Student links',
+            'الإعدادات': 'Settings',
+            'تسجيل الخروج': 'Sign out',
+            'الأسبوع الحالي': 'Current week',
+            'إحصائيات الإنجاز': 'Completion statistics',
+            'لا توجد بيانات بعد — قم برفع ملف Excel أولاً': 'No data yet — upload an Excel file first',
+            'نسبة اكتمال الخطط': 'Plan completion',
+            'حصص مكتملة': 'Completed periods',
+            'إجمالي الحصص': 'Total periods',
+            'مراجعة الجدول واعتماده لأولياء الأمور': 'Review schedule & publish for parents',
+            'مكتمل': 'Completed',
+            'قيد الانتظار': 'Pending',
+            'لا توجد فصول مكتملة بعد': 'No completed classes yet',
+            'جميع الفصول مكتملة 🎉': 'All classes are complete 🎉',
+            'سجل العمليات': 'Activity log',
+            'السجل الكامل': 'Full log',
+            'الوقت': 'Time',
+            'المستخدم': 'User',
+            'النوع': 'Type',
+            'التفاصيل': 'Details',
+            'استيراد الجدول المدرسي من Excel': 'Import master schedule from Excel',
+            'اختر ملف Excel (.xlsx) أو CSV': 'Choose an Excel (.xlsx) or CSV file',
+            'رفع واستيراد': 'Upload & import',
+            'جاري الرفع...': 'Uploading...',
+            'يجب أن يحتوي الملف على عمود للصف وأعمدة للحصص مسماة باليوم والرقم.': 'The file must include a class column and period columns named by day and number.',
+            'إدارة التجاوز الأسبوعي': 'Weekly overrides',
+            'اختر الفصل:': 'Choose class:',
+            'اختر الأسبوع:': 'Choose week:',
+            'تغيير المادة...': 'Change subject...',
+            'حفظ التعديلات الأسبوعية بالكامل': 'Save all weekly changes',
+            'يرجى اختيار الفصل لعرض وتعديل التجاوزات الأسبوعية': 'Choose a class to view and edit weekly overrides',
+            'الإعدادات العامة وشعار المدرسة': 'General settings & school branding',
+            'تغيير شعار المدرسة:': 'Change school logo:',
+            'رفع الشعار': 'Upload logo',
+            'اسم المدرسة:': 'School name:',
+            'الأسبوع الدراسي الحالي:': 'Current school week:',
+            'تاريخ اختبارات الفترة الأولى:': 'First assessment date:',
+            'تاريخ اختبارات الفترة الثانية:': 'Second assessment date:',
+            'تاريخ الاختبار النهائي:': 'Final exam date:',
+            'حفظ الإعدادات': 'Save settings',
+            'قفل الأيام حسب الأسبوع': 'Lock days by week',
+            'اختر الأسبوع لإدارته:': 'Choose a week to manage:',
+            'تحديث حالة القفل للأسبوع': 'Update lock status for week',
+            'مسح مواعيد الاختبارات:': 'Clear assessment dates:',
+            'مسح تاريخ الفترة 1': 'Clear assessment 1 date',
+            'مسح تاريخ الفترة 2': 'Clear assessment 2 date',
+            'مسح التاريخ النهائي': 'Clear final exam date',
+            'إدارة الصفوف': 'Manage grades',
+            'إدارة الفصول': 'Manage classes',
+            'اسم الصف': 'Grade name',
+            'اسم الصف': 'Grade',
+            'حذف': 'Delete',
+            'الصف': 'Grade',
+            'الفصل': 'Class',
+            'إضافة': 'Add',
+            'إدارة الجدول الأساسي': 'Manage master schedule',
+            'اختر الفصل لتعديل جدوله الأساسي:': 'Choose a class to edit its master schedule:',
+            'حفظ الجدول الأساسي بالكامل': 'Save entire master schedule',
+            'إدارة حسابات المعلمين': 'Manage teacher accounts',
+            'إضافة معلم جديد': 'Add a new teacher',
+            'رفع حسابات المعلمين من Excel': 'Import teacher accounts from Excel',
+            'اسم المعلم': 'Teacher name',
+            'اسم المستخدم': 'Username',
+            'كلمة المرور': 'Password',
+            'إضافة المعلم': 'Add teacher',
+            'رفع واستيراد المعلمين': 'Upload & import teachers',
+            'المعلمون المسجلون': 'Registered teachers',
+            'الحالة': 'Status',
+            'إجراءات': 'Actions',
+            'مفعل': 'Active',
+            'معطل': 'Inactive',
+            'تعطيل': 'Disable',
+            'تفعيل': 'Enable',
+            'كلمة المرور': 'Password',
+            'لا يوجد معلمون مسجلون بعد': 'No teachers registered yet',
+            'حسابات المشرفين (مراجعة واعتماد فقط)': 'Supervisor accounts (review & approval only)',
+            'إضافة مشرف جديد': 'Add a new supervisor',
+            'اسم المشرف': 'Supervisor name',
+            'إضافة المشرف': 'Add supervisor',
+            'رفع واستيراد المشرفين': 'Upload & import supervisors',
+            'المشرفون المسجلون': 'Registered supervisors',
+            'لا يوجد مشرفون مسجلون بعد': 'No supervisors registered yet',
+            'توزيع المواد على المعلمين': 'Assign subjects to teachers',
+            'المعلم المحدد:': 'Selected teacher:',
+            'تحديد المتاح': 'Select available',
+            'إلغاء الكل': 'Clear all',
+            'حفظ التوزيع': 'Save assignments',
+            'مخصص لك': 'Assigned to this teacher',
+            'متاح': 'Available',
+            'محجوز لمعلم آخر': 'Reserved for another teacher',
+            'اختر معلماً من القائمة أعلاه لعرض وتعديل حصصه': 'Choose a teacher above to view and edit their periods',
+            'أضف معلمين أولاً قبل توزيع المواد': 'Add teachers before assigning periods',
+            'روابط الطلاب للفصول': 'Student links by class',
+            'رابط الطالب': 'Student link',
+            'نسخ': 'Copy',
+            'أنشئ هذا الموقع بواسطة أحمد الفيفي': 'Built by Ahmed Al-Fيفي',
+            'مكتمل': 'Completed',
+            'عام': 'General',
+            'المدير': 'Admin',
+            'للمادة...': 'Subject...',
+            'المادة...': 'Subject...',
+            'اختر الصف...': 'Choose a grade...',
+            'مثال: الصف الأول': 'Example: First grade',
+            'مثال: أ': 'Example: A',
+            'مثال: أحمد محمد': 'Example: Ahmed Mohammed',
+            'مثال: سارة العتيبي': 'Example: Sara Alotaibi',
+            'كلمة مرور المعلم': 'Teacher password',
+            'كلمة مرور المشرف': 'Supervisor password',
+            'اختر معلماً': 'Choose a teacher',
+            'لا توجد مواد في الجدول الأساسي بعد. يرجى رفع الجدول أولاً.': 'No subjects in the master schedule yet. Upload the schedule first.',
+            'تم الحفظ بنجاح ✓': 'Saved successfully ✓'
+        };
+        const attributeTranslations = {
+            'اختر ملف Excel (.xlsx) أو CSV': 'Choose an Excel (.xlsx) or CSV file',
+            'تغيير المادة...': 'Change subject...',
+            'المادة...': 'Subject...',
+            'مثال: الصف الأول': 'Example: First grade',
+            'مثال: أ': 'Example: A',
+            'مثال: أحمد محمد': 'Example: Ahmed Mohammed',
+            'مثال: ahmed': 'Example: ahmed',
+            'كلمة مرور المعلم': 'Teacher password',
+            'مثال: سارة العتيبي': 'Example: Sara Alotaibi',
+            'مثال: sara': 'Example: sara',
+            'كلمة مرور المشرف': 'Supervisor password'
+        };
+
+        function translate(value, language) {
+            const trimmed = value.trim();
+            if (language === 'ar') return trimmed;
+            if (textTranslations[trimmed]) return textTranslations[trimmed];
+
+            let match = trimmed.match(/^الأسبوع الحالي:\s*(.+)$/);
+            if (match) return `Current week: ${match[1]}`;
+            match = trimmed.match(/^إحصائيات الإنجاز\s*—\s*الأسبوع\s*(.+)$/);
+            if (match) return `Completion statistics — Week ${match[1]}`;
+            match = trimmed.match(/^مكتمل\s*\((\d+)\)$/);
+            if (match) return `Completed (${match[1]})`;
+            match = trimmed.match(/^قيد الانتظار\s*\((\d+)\)$/);
+            if (match) return `Pending (${match[1]})`;
+            match = trimmed.match(/^أسبوع\s+(\d+)$/);
+            if (match) return `Week ${match[1]}`;
+            match = trimmed.match(/^حصة\s+(\d+)$/);
+            if (match) return `Period ${match[1]}`;
+            match = trimmed.match(/^تحديث حالة القفل للأسبوع\s+(\d+)$/);
+            if (match) return `Update lock status for week ${match[1]}`;
+            match = trimmed.match(/^تم حفظ\s+(\d+)\s+حصة بنجاح$/);
+            if (match) return `${match[1]} periods saved successfully`;
+            match = trimmed.match(/^تم حفظ\s+(\d+)\s+حصة للمعلم$/);
+            if (match) return `${match[1]} periods saved for the teacher`;
+            return null;
+        }
+
+        function preserveWhitespace(original, replacement) {
+            const leading = original.match(/^\s*/)[0];
+            const trailing = original.match(/\s*$/)[0];
+            return leading + replacement + trailing;
+        }
+
+        function translateTextNodes(language) {
+            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+            const nodes = [];
+            let node;
+            while ((node = walker.nextNode())) {
+                if (node.parentElement && !node.parentElement.closest('script,style')) nodes.push(node);
+            }
+            nodes.forEach(textNode => {
+                if (!originalText.has(textNode)) originalText.set(textNode, textNode.nodeValue);
+                const source = originalText.get(textNode);
+                if (language === 'ar') {
+                    textNode.nodeValue = source;
+                    return;
+                }
+                const replacement = translate(source, language);
+                if (replacement !== null) textNode.nodeValue = preserveWhitespace(source, replacement);
+            });
+        }
+
+        function translateAttributes(language) {
+            document.querySelectorAll('input, select, textarea, [title]').forEach(element => {
+                if (!element.dataset.originalPlaceholder && element.getAttribute('placeholder')) {
+                    element.dataset.originalPlaceholder = element.getAttribute('placeholder');
+                }
+                const originalPlaceholder = element.dataset.originalPlaceholder;
+                if (originalPlaceholder) {
+                    element.setAttribute('placeholder',
+                        language === 'en' ? (attributeTranslations[originalPlaceholder] || originalPlaceholder) : originalPlaceholder);
+                }
+                if (element.dataset.originalTitle) {
+                    element.setAttribute('title', language === 'en'
+                        ? (attributeTranslations[element.dataset.originalTitle] || element.dataset.originalTitle)
+                        : element.dataset.originalTitle);
+                } else if (element.getAttribute('title')) {
+                    element.dataset.originalTitle = element.getAttribute('title');
+                }
+            });
+        }
+
+        function setLanguage(language) {
+            const selected = language === 'en' ? 'en' : 'ar';
+            document.documentElement.lang = selected;
+            document.documentElement.dir = selected === 'en' ? 'ltr' : 'rtl';
+            document.body.dataset.language = selected;
+            localStorage.setItem('admin-language', selected);
+            translateTextNodes(selected);
+            translateAttributes(selected);
+            document.title = selected === 'en' ? 'Admin Dashboard' : 'لوحة تحكم المدير';
+            document.querySelectorAll('[data-language-option]').forEach(button => {
+                const isActive = button.dataset.languageOption === selected;
+                button.classList.toggle('active', isActive);
+                button.setAttribute('aria-pressed', String(isActive));
+            });
+        }
+
+        window.applyDashboardLanguage = function () {
+            setLanguage(localStorage.getItem('admin-language') || 'ar');
+        };
+        document.querySelectorAll('[data-language-option]').forEach(button => {
+            button.addEventListener('click', () => setLanguage(button.dataset.languageOption));
+        });
+        setLanguage(localStorage.getItem('admin-language') || 'ar');
+    })();
 </script>
 </body>
 </html>
