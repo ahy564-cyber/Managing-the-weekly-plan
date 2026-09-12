@@ -329,6 +329,14 @@
         hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
         .danger-zone { background: #fff5f5; border: 1.5px solid #fecaca; border-radius: 12px; padding: 18px; margin-top: 4px; }
         .danger-zone h2 { border-bottom-color: #fecaca; color: #991b1b; }
+        .bulk-delete-panel {
+            margin-top: 16px; padding: 14px 16px;
+            display: flex; align-items: center; justify-content: space-between; gap: 14px;
+            background: #fff7f7; border: 1px solid #fecaca; border-radius: 10px;
+        }
+        .bulk-delete-copy { color: #7f1d1d; font-size: 0.8em; line-height: 1.55; }
+        .bulk-delete-copy strong { display: block; font-size: 1.05em; margin-bottom: 2px; }
+        .bulk-delete-panel form { flex-shrink: 0; }
         .gov-info { display: none !important; }
 
         /* ══ IMPORT CARD ══ */
@@ -461,6 +469,8 @@
             .language-tools { gap: 6px; }
             .topbar { padding: 12px 16px; }
             .topbar-week { display: none; }
+            .bulk-delete-panel { align-items: stretch; flex-direction: column; }
+            .bulk-delete-panel form, .bulk-delete-panel button { width: 100%; justify-content: center; }
         }
     </style>
 </head>
@@ -839,6 +849,21 @@
                     {% endfor %}
                 </tbody>
             </table>
+            {% if grades|length > 0 %}
+            <div class="bulk-delete-panel">
+                <div class="bulk-delete-copy">
+                    <strong><i class="fas fa-triangle-exclamation"></i> حذف جميع الصفوف</strong>
+                    يحذف جميع الصفوف والفصول والجداول والخطط الأسبوعية وتوزيعات الحصص المرتبطة بها. لا يمكن التراجع عن هذه العملية.
+                </div>
+                <form method="POST" onsubmit="return confirmBulkDelete(this, 'grades')">
+                    <input type="hidden" name="action" value="delete_all_grades">
+                    <input type="hidden" name="confirmation" value="">
+                    <button type="submit" class="btn-danger" data-testid="button-delete-all-grades">
+                        <i class="fas fa-trash-alt"></i>حذف جميع الصفوف
+                    </button>
+                </form>
+            </div>
+            {% endif %}
         </div>
 
         <div class="card card-gold">
@@ -1037,6 +1062,19 @@
                     </tbody>
                 </table>
                 </div>
+            </div>
+            <div class="bulk-delete-panel">
+                <div class="bulk-delete-copy">
+                    <strong><i class="fas fa-triangle-exclamation"></i> حذف جميع حسابات المعلمين</strong>
+                    يحذف الحسابات وتوزيعات الحصص، مع الاحتفاظ بموضوعات الدروس والواجبات المحفوظة في الخطط الأسبوعية.
+                </div>
+                <form method="POST" onsubmit="return confirmBulkDelete(this, 'teachers')">
+                    <input type="hidden" name="action" value="delete_all_teachers">
+                    <input type="hidden" name="confirmation" value="">
+                    <button type="submit" class="btn-danger" data-testid="button-delete-all-teachers">
+                        <i class="fas fa-user-slash"></i>حذف جميع الحسابات
+                    </button>
+                </form>
             </div>
             {% else %}
             <div style="margin-top:20px;text-align:center;padding:22px;color:var(--muted);background:#f8fafc;border-radius:10px;border:1.5px dashed var(--border);">
@@ -1477,6 +1515,30 @@
         ev.dataTransfer.setData("value", ev.target.value);
     }
 
+    function confirmBulkDelete(form, type) {
+        const isEnglish = document.documentElement.lang === 'en';
+        const isGrades = type === 'grades';
+        const requiredPhrase = isEnglish
+            ? (isGrades ? 'DELETE ALL GRADES' : 'DELETE ALL TEACHERS')
+            : (isGrades ? 'حذف جميع الصفوف' : 'حذف جميع المعلمين');
+        const itemLabel = isEnglish
+            ? (isGrades ? 'all grades and their related data' : 'all teacher accounts and assignments')
+            : (isGrades ? 'جميع الصفوف والبيانات المرتبطة بها' : 'جميع حسابات المعلمين وتوزيعاتهم');
+        const message = isEnglish
+            ? `This permanently deletes ${itemLabel}.\nType "${requiredPhrase}" to confirm:`
+            : `سيتم حذف ${itemLabel} نهائيًا.\nاكتب "${requiredPhrase}" للتأكيد:`;
+        const entered = window.prompt(message);
+        if (entered !== requiredPhrase) {
+            if (entered !== null) {
+                window.alert(isEnglish ? 'The confirmation phrase is incorrect. Nothing was deleted.' : 'عبارة التأكيد غير صحيحة. لم يتم حذف أي شيء.');
+            }
+            return false;
+        }
+        form.querySelector('input[name="confirmation"]').value =
+            isGrades ? 'DELETE_ALL_GRADES' : 'DELETE_ALL_TEACHERS';
+        return true;
+    }
+
     function copyLink(id) {
         const text = document.getElementById(id).innerText;
         navigator.clipboard.writeText(text).then(() => {
@@ -1554,6 +1616,8 @@
             'مسح تاريخ الفترة 2': 'Clear assessment 2 date',
             'مسح التاريخ النهائي': 'Clear final exam date',
             'إدارة الصفوف': 'Manage grades',
+            'حذف جميع الصفوف': 'Delete all grades',
+            'يحذف جميع الصفوف والفصول والجداول والخطط الأسبوعية وتوزيعات الحصص المرتبطة بها. لا يمكن التراجع عن هذه العملية.': 'Deletes all grades, classes, schedules, weekly plans, and related period assignments. This action cannot be undone.',
             'إدارة الفصول': 'Manage classes',
             'اسم الصف': 'Grade name',
             'اسم الصف': 'Grade',
@@ -1582,6 +1646,9 @@
             'تفعيل': 'Enable',
             'كلمة المرور': 'Password',
             'لا يوجد معلمون مسجلون بعد': 'No teachers registered yet',
+            'حذف جميع حسابات المعلمين': 'Delete all teacher accounts',
+            'يحذف الحسابات وتوزيعات الحصص، مع الاحتفاظ بموضوعات الدروس والواجبات المحفوظة في الخطط الأسبوعية.': 'Deletes accounts and period assignments while preserving lesson topics and homework saved in weekly plans.',
+            'حذف جميع الحسابات': 'Delete all accounts',
             'حسابات المشرفين (مراجعة واعتماد فقط)': 'Supervisor accounts (review & approval only)',
             'حساب المشرف يدخل مباشرة على شاشة "مراجعة الجدول واعتماده" فقط، ولا يملك صلاحية الوصول للوحة التحكم الكاملة أو تعديل الجداول.': 'Supervisors go directly to schedule review and approval. They cannot access the full dashboard or edit schedules.',
             'إضافة مشرف جديد': 'Add a new supervisor',

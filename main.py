@@ -363,6 +363,10 @@ def admin():
                     grade = db.session.get(Grade, int(gid))
                     if grade:
                         name = grade.name
+                        class_ids = [cls_obj.id for cls_obj in grade.classes]
+                        if class_ids:
+                            TeacherAssignment.query.filter(TeacherAssignment.class_id.in_(class_ids)).delete(synchronize_session=False)
+                            WeekPublication.query.filter(WeekPublication.class_id.in_(class_ids)).delete(synchronize_session=False)
                         for cls_obj in grade.classes:
                             db.session.execute(db.delete(Subject).where(Subject.class_id == cls_obj.id))
                             db.session.execute(db.delete(WeeklyData).where(WeeklyData.class_id == cls_obj.id))
@@ -371,6 +375,28 @@ def admin():
                         db.session.commit()
                         log_activity('admin', f'حذف صف: {name}', teacher_name='المدير', action_type='حذف', description=f'حذف صف: {name} وجميع فصوله وبياناته')
                         flash('تم حذف الصف بنجاح')
+            elif action == 'delete_all_grades':
+                if request.form.get('confirmation') != 'DELETE_ALL_GRADES':
+                    flash('تم إلغاء العملية: تأكيد حذف جميع الصفوف غير صحيح')
+                else:
+                    grade_count = Grade.query.count()
+                    class_ids = [class_id for (class_id,) in db.session.query(Class.id).all()]
+                    if class_ids:
+                        TeacherAssignment.query.filter(TeacherAssignment.class_id.in_(class_ids)).delete(synchronize_session=False)
+                        WeekPublication.query.filter(WeekPublication.class_id.in_(class_ids)).delete(synchronize_session=False)
+                        Subject.query.filter(Subject.class_id.in_(class_ids)).delete(synchronize_session=False)
+                        WeeklyData.query.filter(WeeklyData.class_id.in_(class_ids)).delete(synchronize_session=False)
+                        Class.query.filter(Class.id.in_(class_ids)).delete(synchronize_session=False)
+                    Grade.query.delete(synchronize_session=False)
+                    db.session.commit()
+                    log_activity(
+                        'admin',
+                        f'حذف جميع الصفوف ({grade_count})',
+                        teacher_name='المدير',
+                        action_type='حذف',
+                        description=f'تم حذف جميع الصفوف وعددها {grade_count} مع الفصول والجداول والخطط والتوزيعات المرتبطة'
+                    )
+                    flash(f'تم حذف جميع الصفوف بنجاح ({grade_count} صف)')
             elif action == 'edit_class':
                 cid = request.form.get('class_id')
                 new_name = request.form.get('name')
@@ -398,6 +424,8 @@ def admin():
                 cid = request.form.get('class_id')
                 if cid and cid.isdigit():
                     class_id = int(cid)
+                    TeacherAssignment.query.filter_by(class_id=class_id).delete(synchronize_session=False)
+                    WeekPublication.query.filter_by(class_id=class_id).delete(synchronize_session=False)
                     db.session.execute(db.delete(Subject).where(Subject.class_id == class_id))
                     db.session.execute(db.delete(WeeklyData).where(WeeklyData.class_id == class_id))
                     cls = db.session.get(Class, class_id)
@@ -498,14 +526,47 @@ def admin():
                         flash(f'تم تغيير كلمة مرور: {teacher.name}')
             elif action == 'delete_teacher':
                 t_id = request.form.get('teacher_id')
-                if t_id:
-                    teacher = db.session.get(TeacherAccount, int(t_id))
+                if t_id and t_id.isdigit():
+                    teacher_id = int(t_id)
+                    teacher = db.session.get(TeacherAccount, teacher_id)
                     if teacher:
                         name = teacher.name
+                        TeacherAssignment.query.filter_by(teacher_id=teacher_id).delete(synchronize_session=False)
+                        WeeklyData.query.filter_by(teacher_id=teacher_id).update(
+                            {'teacher_id': None}, synchronize_session=False
+                        )
                         db.session.delete(teacher)
                         db.session.commit()
                         log_activity('admin', f'حذف حساب معلم: {name}')
                         flash(f'تم حذف المعلم: {name}')
+            elif action == 'delete_all_teachers':
+                if request.form.get('confirmation') != 'DELETE_ALL_TEACHERS':
+                    flash('تم إلغاء العملية: تأكيد حذف جميع حسابات المعلمين غير صحيح')
+                else:
+                    teacher_ids = [
+                        teacher_id for (teacher_id,) in
+                        db.session.query(TeacherAccount.id).filter_by(school_id=1).all()
+                    ]
+                    teacher_count = len(teacher_ids)
+                    if teacher_ids:
+                        TeacherAssignment.query.filter(
+                            TeacherAssignment.teacher_id.in_(teacher_ids)
+                        ).delete(synchronize_session=False)
+                        WeeklyData.query.filter(
+                            WeeklyData.teacher_id.in_(teacher_ids)
+                        ).update({'teacher_id': None}, synchronize_session=False)
+                        TeacherAccount.query.filter(
+                            TeacherAccount.id.in_(teacher_ids)
+                        ).delete(synchronize_session=False)
+                    db.session.commit()
+                    log_activity(
+                        'admin',
+                        f'حذف جميع حسابات المعلمين ({teacher_count})',
+                        teacher_name='المدير',
+                        action_type='حذف',
+                        description=f'تم حذف جميع حسابات المعلمين وعددها {teacher_count} وتوزيعاتهم مع الاحتفاظ ببيانات الخطط الأسبوعية'
+                    )
+                    flash(f'تم حذف جميع حسابات المعلمين بنجاح ({teacher_count} حساب)')
             elif action == 'toggle_teacher':
                 t_id = request.form.get('teacher_id')
                 if t_id:
