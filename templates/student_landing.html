@@ -4,53 +4,53 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>عرض الجداول - {{ settings.school_name or 'نظام الخطة الدراسية' }}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/plan.css') }}">
     <style>
-        body { font-family: 'Cairo', sans-serif; margin: 0; background: #f0fdfa; color: #1e293b; min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
-        .header { background: linear-gradient(135deg, #0d9488 0%, #134e4a 100%); color: white; padding: 40px 20px 30px; width: 100%; text-align: center; margin-bottom: 30px; }
-        .header h1 { margin: 0 0 8px; font-size: 2em; }
-        .header p { margin: 0; opacity: 0.85; font-size: 1.1em; }
-        .container { max-width: 900px; width: 100%; padding: 0 20px 40px; }
-        .grade-section { background: white; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #e2e8f0; overflow: hidden; }
-        .grade-header { background: #f0fdfa; padding: 15px 20px; font-weight: 700; font-size: 1.15em; color: #134e4a; border-bottom: 2px solid #0d9488; }
-        .class-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; padding: 20px; }
-        .class-link { display: flex; align-items: center; justify-content: center; padding: 16px 12px; background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 10px; text-decoration: none; color: #0f766e; font-weight: 700; font-size: 1.05em; transition: all 0.2s; }
-        .class-link:hover { background: #0d9488; color: white; border-color: #0d9488; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(13,148,136,0.25); }
-        .back-link { display: inline-block; margin-bottom: 20px; color: #0d9488; text-decoration: none; font-weight: 600; }
-        .back-link:hover { text-decoration: underline; }
-        .empty { text-align: center; padding: 60px 20px; color: #94a3b8; font-size: 1.1em; }
-        .week-badge { background: rgba(255,255,255,0.2); padding: 5px 16px; border-radius: 20px; display: inline-block; margin-top: 10px; font-size: 0.9em; }
+        .page { width: min(100%, 980px); margin: 0 auto; padding: 2rem clamp(1rem, 3vw, 2rem) 3rem; }
+        .intro h1 { margin: 0; font-weight: 900; font-size: clamp(2.2rem, 6vw, 3.4rem); line-height: 1.05; }
+        .intro p { margin: .6rem 0 2rem; color: var(--muted); font-size: 1.05rem; }
+        .grade { display: grid; grid-template-columns: 11rem 1fr; gap: 1rem; align-items: start; padding: 1.1rem 0; border-top: 1px solid var(--line); }
+        .grade h2 { margin: .45rem 0 0; font-size: 1.1rem; font-weight: 800; }
+        .classes { display: flex; flex-wrap: wrap; gap: .5rem; }
+        .class-link { min-width: 4.5rem; min-height: 46px; display: inline-flex; align-items: center; justify-content: center; padding: .4rem 1.2rem; border-radius: var(--r-pill); background: var(--paper); border: 1.5px solid var(--line); color: var(--ink); font-weight: 800; font-size: 1.05rem; text-decoration: none; transition: background-color .2s, border-color .2s, color .2s; }
+        .class-link:hover { background: var(--ink); border-color: var(--ink); color: #fff; }
+        .none { color: var(--faint); padding-top: .5rem; }
+        .empty { padding: 3rem 1rem; text-align: center; color: var(--muted); background: var(--paper); border-radius: var(--r-panel); border: 1px solid var(--line); }
+        @media (max-width: 600px) { .grade { grid-template-columns: 1fr; gap: .5rem; } .grade h2 { margin: 0; } }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>{{ settings.school_name or 'نظام الخطة الدراسية' }}</h1>
-        <p>اختر الصف والفصل لعرض الجدول الأسبوعي</p>
-        <div class="week-badge">الأسبوع الحالي: {{ settings.current_week or '1' }}</div>
-    </div>
-
-    <div class="container">
-        <a href="/" class="back-link" data-testid="link-back-home">← الصفحة الرئيسية</a>
-
+    <header class="topbar">
+        <a class="brand" href="/" data-testid="link-back-home">
+            <span class="brand-mark" aria-hidden="true"><span></span></span>
+            <span class="brand-name">{{ settings.school_name or 'نظام الخطة الدراسية' }}</span>
+        </a>
+        <span class="chip"><span class="chip-dot"></span>الأسبوع الحالي: {{ settings.current_week or '1' }}</span>
+    </header>
+    <main class="page">
+        <div class="intro">
+            <h1>اختر الفصل</h1>
+            <p>لعرض الجدول الأسبوعي والدروس والواجبات والملفات.</p>
+        </div>
         {% if grades|length > 0 %}
             {% for grade in grades %}
-            <div class="grade-section" data-testid="section-grade-{{ grade.id }}">
-                <div class="grade-header">{{ grade.name }}</div>
-                <div class="class-grid">
+            <section class="grade" data-testid="section-grade-{{ grade.id }}">
+                <h2>{{ grade.name }}</h2>
+                <div class="classes">
                     {% for cls in grade.classes %}
-                    <a href="/student/{{ grade.id }}/{{ cls.id }}" class="class-link" data-testid="link-class-{{ cls.id }}">
-                        {{ cls.name }}
-                    </a>
+                    <a href="/student/{{ grade.id }}/{{ cls.id }}" class="class-link" data-testid="link-class-{{ cls.id }}">{{ cls.name }}</a>
                     {% endfor %}
-                    {% if grade.classes|length == 0 %}
-                    <div style="color: #94a3b8; padding: 10px; grid-column: 1 / -1; text-align: center;">لا توجد فصول</div>
-                    {% endif %}
+                    {% if grade.classes|length == 0 %}<span class="none">لا توجد فصول</span>{% endif %}
                 </div>
-            </div>
+            </section>
             {% endfor %}
         {% else %}
             <div class="empty">لا توجد صفوف مسجلة حالياً</div>
         {% endif %}
-    </div>
+    </main>
+    <footer class="site-footer">أنشئ هذا الموقع بواسطة أحمد الفيفي</footer>
 </body>
 </html>

@@ -4,47 +4,153 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>تسجيل الدخول - نظام الخطة الدراسية</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/plan.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/motion@12.23.12/dist/motion.js" defer></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f0fdfa; }
-        .login-card { background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; max-width: 420px; width: 100%; }
-        h1 { color: #0d9488; margin-bottom: 10px; }
-        .subtitle { color: #7f8c8d; margin-bottom: 25px; font-size: 0.95em; }
-        .form-group { margin-bottom: 16px; text-align: right; }
-        label { display: block; margin-bottom: 6px; font-weight: 600; color: #334155; font-size: 0.9em; }
-        input { width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box; font-size: 1em; text-align: right; transition: border 0.3s; }
-        input:focus { outline: none; border-color: #0d9488; box-shadow: 0 0 0 3px rgba(13,148,136,0.1); }
-        button { background: #0d9488; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; width: 100%; font-weight: bold; font-size: 1.1em; transition: background 0.3s; margin-top: 10px; }
-        button:hover { background: #0f766e; }
-        .error { color: #e74c3c; margin-bottom: 15px; font-weight: bold; background: #fef2f2; padding: 10px; border-radius: 6px; }
-        .back { margin-top: 20px; display: block; color: #7f8c8d; text-decoration: none; }
-        .back:hover { color: #0d9488; }
-        .hint { color: #94a3b8; font-size: 0.85em; margin-top: 6px; }
+        body { min-height: 100vh; display: grid; }
+        .shell { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); min-height: 100vh; }
+
+        /* ---- Brand side: a miniature week with today highlighted ---- */
+        .side { background: var(--ink); color: #fff; padding: clamp(2rem, 5vw, 4rem); display: flex; flex-direction: column; justify-content: space-between; gap: 2.5rem; position: relative; overflow: hidden; }
+        .side-brand { display: flex; align-items: center; gap: .75rem; font-weight: 800; }
+        .side-brand .brand-mark { background: rgba(255,255,255,.08); }
+        .side h1 { margin: 0; font-weight: 900; font-size: clamp(2.6rem, 5.5vw, 4.6rem); line-height: 1; letter-spacing: -.01em; }
+        .side p { margin: 1rem 0 0; max-width: 34ch; color: #b9d3cf; font-size: 1.05rem; }
+
+        .mini { display: grid; grid-template-columns: 4.2rem repeat(6, 1fr); gap: 6px; max-width: 520px; }
+        .mini-day { font-size: .8rem; font-weight: 700; color: #b9d3cf; display: flex; align-items: center; }
+        .mini-cell { height: 30px; border-radius: 7px; background: rgba(255,255,255,.07); }
+        .mini-cell.filled { background: rgba(255,255,255,.16); }
+        .mini-row-today .mini-day { color: var(--mark); }
+        .mini-row-today .mini-cell { background: var(--mark); }
+        .mini-row-today .mini-cell:not(.filled) { background: rgba(255,225,90,.45); }
+        .mini > div { display: contents; }
+
+        /* ---- Form side ---- */
+        .form-side { display: grid; place-items: center; padding: clamp(1.5rem, 5vw, 4rem); background: var(--canvas); }
+        .form-card { width: min(100%, 420px); }
+        .form-card h2 { margin: 0; font-size: 2rem; font-weight: 900; }
+        .form-card .lead { margin: .35rem 0 2rem; color: var(--muted); }
+        form { display: grid; gap: 1.2rem; }
+        .pw-wrap { position: relative; }
+        .pw-wrap .input { padding-inline-end: 3.2rem; }
+        .pw-toggle { position: absolute; inset-inline-end: .4rem; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border: 0; border-radius: 50%; background: none; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+        .pw-toggle:hover { background: var(--teal-wash); color: var(--ink); }
+        .pw-toggle svg { width: 20px; height: 20px; }
+        .submit { width: 100%; min-height: 52px; font-size: 1.05rem; margin-top: .3rem; }
+        .error { display: flex; gap: .6rem; align-items: flex-start; padding: .8rem 1rem; border-radius: var(--r-cell); background: var(--hw-wash); color: var(--hw); font-weight: 700; font-size: .92rem; margin-bottom: 1.2rem; }
+        .error svg { width: 20px; height: 20px; flex: none; margin-top: 2px; }
+        .alt { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-top: 1.75rem; padding-top: 1.25rem; border-top: 1px solid var(--line); font-size: .92rem; }
+        .alt a { color: var(--ink); font-weight: 700; text-underline-offset: 4px; }
+        .alt a:hover { color: var(--teal); }
+
+        @media (max-width: 860px) {
+            .shell { grid-template-columns: 1fr; }
+            .side { padding-bottom: 2rem; gap: 1.5rem; }
+            .side p { display: none; }
+            .mini { max-width: 100%; }
+            .mini-cell { height: 20px; }
+        }
     </style>
 </head>
 <body>
-    <div class="login-card">
-        <h1>تسجيل الدخول</h1>
-        <p class="subtitle">نظام الخطة الدراسية الأسبوعية</p>
-        {% with messages = get_flashed_messages() %}
-          {% if messages %}
-            {% for message in messages %}
-              <div class="error">{{ message }}</div>
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
-        <form method="POST">
-            <div class="form-group">
-                <label for="username">اسم المستخدم</label>
-                <input type="text" id="username" name="username" placeholder="اتركه فارغاً للمدير" autocomplete="username">
-                <div class="hint">للمدير: اتركه فارغاً أو اكتب admin</div>
+    <div class="shell">
+        <aside class="side" aria-hidden="true">
+            <div class="side-brand"><span class="brand-mark"><span></span></span><span>نظام الخطة الدراسية</span></div>
+            <div>
+                <h1 class="side-title">الخطة<br>الأسبوعية</h1>
+                <p>دروس الأسبوع وواجباته وملفاته، في جدول واحد يصل للطالب وولي الأمر.</p>
             </div>
-            <div class="form-group">
-                <label for="password">كلمة المرور</label>
-                <input type="password" id="password" name="password" placeholder="أدخل كلمة المرور" required autocomplete="current-password">
+            <div class="mini" id="mini"></div>
+        </aside>
+
+        <main class="form-side">
+            <div class="form-card">
+                <h2>تسجيل الدخول</h2>
+                <p class="lead">للمعلمين والمشرفين وإدارة المدرسة</p>
+
+                {% with messages = get_flashed_messages() %}
+                  {% if messages %}
+                    {% for message in messages %}
+                    <div class="error" role="alert">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5h.01"/></svg>
+                        <span>{{ message }}</span>
+                    </div>
+                    {% endfor %}
+                  {% endif %}
+                {% endwith %}
+
+                <form method="POST" id="loginForm">
+                    <div class="field">
+                        <label for="username">اسم المستخدم</label>
+                        <input class="input" type="text" id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" dir="ltr" style="text-align: right;">
+                        <span class="hint">للمدير: اتركه فارغاً أو اكتب admin</span>
+                    </div>
+                    <div class="field">
+                        <label for="password">كلمة المرور</label>
+                        <div class="pw-wrap">
+                            <input class="input" type="password" id="password" name="password" required autocomplete="current-password">
+                            <button type="button" class="pw-toggle" id="pwToggle" aria-label="إظهار كلمة المرور" aria-pressed="false">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary submit" id="submitBtn">تسجيل الدخول</button>
+                </form>
+
+                <div class="alt">
+                    <a href="/student">عرض جدول الطالب</a>
+                    <a href="/">الصفحة الرئيسية</a>
+                </div>
             </div>
-            <button type="submit">دخول</button>
-        </form>
-        <a href="/" class="back">العودة للقائمة الرئيسية</a>
+        </main>
     </div>
+
+    <script>
+    (function () {
+        // Build the miniature week; today's row (school timezone) is highlighted
+        const days = [['Sunday', 'الأحد'], ['Monday', 'الاثنين'], ['Tuesday', 'الثلاثاء'], ['Wednesday', 'الأربعاء'], ['Thursday', 'الخميس']];
+        const today = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: 'Asia/Riyadh' }).format(new Date());
+        const pattern = ['111011', '110111', '111101', '101111', '111110'];
+        const mini = document.getElementById('mini');
+        days.forEach(([key, ar], i) => {
+            const row = document.createElement('div');
+            if (key === today) row.className = 'mini-row-today';
+            row.innerHTML = `<span class="mini-day">${ar}</span>` + pattern[i].split('').map(f => `<span class="mini-cell${f === '1' ? ' filled' : ''}"></span>`).join('');
+            mini.appendChild(row);
+        });
+
+        // Password visibility
+        const pw = document.getElementById('password'), toggle = document.getElementById('pwToggle');
+        toggle.addEventListener('click', () => {
+            const show = pw.type === 'password';
+            pw.type = show ? 'text' : 'password';
+            toggle.setAttribute('aria-pressed', String(show));
+            toggle.setAttribute('aria-label', show ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور');
+            pw.focus();
+        });
+
+        // Prevent double submit
+        document.getElementById('loginForm').addEventListener('submit', () => {
+            const b = document.getElementById('submitBtn');
+            b.disabled = true; b.textContent = 'جاري الدخول...';
+        });
+
+        document.getElementById('{{ "password" if get_flashed_messages() else "username" }}').focus();
+
+        // One entrance: cells fill in, then today's row lights up
+        window.addEventListener('load', () => {
+            if (!window.Motion || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+            const { animate, stagger } = Motion;
+            animate('.side-title', { opacity: [0, 1], y: [16, 0] }, { duration: 0.6, ease: [0.2, 0.8, 0.2, 1] });
+            animate('.mini-cell', { opacity: [0, 1], scale: [0.6, 1] }, { duration: 0.3, delay: stagger(0.015, { startDelay: 0.2 }) });
+            const todayCells = document.querySelectorAll('.mini-row-today .mini-cell');
+            if (todayCells.length) animate(todayCells, { scaleY: [1, 1.35, 1] }, { duration: 0.45, delay: stagger(0.05, { startDelay: 0.85 }) });
+        });
+    })();
+    </script>
 </body>
 </html>

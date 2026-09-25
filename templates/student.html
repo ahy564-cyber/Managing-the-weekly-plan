@@ -4,288 +4,429 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>جدول الطالب - {{ grade_name }} - {{ class_name }}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/plan.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/motion@12.23.12/dist/motion.js" defer></script>
     <style>
-        body { font-family: 'Cairo', sans-serif; margin: 0; padding: 20px; background: #f8fafc; color: #1e293b; }
-        .container { width: 100%; max-width: 100%; margin: 0 auto; }
-        .language-bar { display: flex; justify-content: flex-start; margin-bottom: 14px; }
-        .language-switcher { display: inline-flex; direction: ltr; gap: 3px; padding: 4px; background: white; border: 1px solid #e2e8f0; border-radius: 11px; box-shadow: 0 3px 12px rgba(15,23,42,0.07); }
-        .language-switcher button { border: 0; border-radius: 8px; padding: 7px 12px; background: transparent; color: #64748b; cursor: pointer; font: 700 0.78em 'Inter', sans-serif; transition: all 0.2s; }
-        .language-switcher button.active { background: #0f766e; color: white; box-shadow: 0 2px 7px rgba(15,118,110,0.25); }
-        .header { background: white; padding: 25px; border-radius: 16px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); border-bottom: 5px solid #0d9488; display: flex; align-items: center; position: relative; min-height: 150px; }
-        .logo-container { position: absolute; left: 25px; top: 50%; transform: translateY(-50%); z-index: 10; }
-        .logo { width: 150px; height: auto; display: block; max-width: 150px; }
-        .header-text { text-align: center; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 160px; }
+        .page { width: min(100%, 1480px); margin: 0 auto; padding: 0 clamp(.75rem, 2.5vw, 2rem) 2rem; }
 
-        .gov-info { display: none !important; }
+        .notice { margin: 1.25rem 0 0; padding: .9rem 1.2rem; border-radius: var(--r-card); background: var(--teal-wash); color: var(--ink); font-weight: 600; font-size: .95rem; line-height: 1.8; }
 
-        .timers { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px; width: 100%; }
-        .timer { background: #1e293b; color: white; padding: 15px; border-radius: 12px; text-align: center; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); }
-        .timer h4 { margin: 0 0 5px 0; font-size: 0.9em; color: #94a3b8; }
-        .timer span { font-size: 1.4em; font-weight: 700; color: #0d9488; }
+        /* ---- Hero: the week number is the headline ---- */
+        .hero { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 1.5rem 2rem; padding: 2rem .25rem 1.5rem; }
+        .hero-class { margin: 0 0 .35rem; font-size: clamp(1.05rem, 2vw, 1.3rem); font-weight: 700; color: var(--muted); }
+        .hero-week { margin: 0; font-weight: 900; font-size: clamp(2.6rem, 7vw, 5rem); line-height: .95; letter-spacing: -.01em; }
+        .hero-week .num { display: inline-block; min-width: 1ch; }
+        .hero-meta { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+        .countdowns { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+        .count { display: grid; justify-items: start; }
+        .count[hidden] { display: none; }
+        .count-num { font-size: 2.1rem; font-weight: 900; line-height: 1; }
+        .count-unit { font-size: .8rem; font-weight: 700; color: var(--muted); }
+        .count-label { font-size: .85rem; font-weight: 600; color: var(--ink); }
 
-        .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 16px; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); }
-        table { width: 100%; border-collapse: separate; border-spacing: 0; background: white; min-width: 900px; }
-        th, td { border: 1px solid #e2e8f0; padding: 15px 10px; text-align: center; white-space: normal; word-wrap: break-word; overflow-wrap: break-word; }
-        th { background: #0d9488; color: white; font-weight: 700; font-size: 1em; white-space: nowrap; }
-        .day-cell { background: #f1f5f9; font-weight: 700; color: #134e4a; width: 80px; min-width: 80px; }
-        .period-header { min-width: 120px; }
-        td { min-width: 120px; }
-
-        .subject-box { text-align: right; }
-        .subject-name { font-weight: 800; color: #0f766e; display: block; font-size: 0.95em; margin-bottom: 6px; border-bottom: 1px solid #f0fdfa; padding-bottom: 4px; white-space: normal; }
-        .topic-text { color: #334155; font-size: 0.85em; line-height: 1.5; display: block; white-space: normal; }
-        .hw-text { color: #be123c; font-size: 0.82em; font-weight: 700; margin-top: 8px; display: block; border-top: 1px dashed #fecdd3; padding-top: 6px; white-space: normal; }
-
-        .actions { text-align: center; margin-top: 30px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; }
-        .btn { padding: 12px 25px; border-radius: 10px; border: none; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; font-family: inherit; }
-        .btn-pdf { background: #0d9488; color: white; }
-        .btn-img { background: #14b8a6; color: white; }
-        .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-
-        html[lang="en"] { direction: ltr; }
-        html[lang="en"] body { font-family: 'Inter', sans-serif; background: #f4f7fb; }
-        html[lang="en"] .language-bar { justify-content: flex-end; }
-        html[lang="en"] .header { border-bottom-color: #1d4ed8; }
-        html[lang="en"] .logo-container { left: auto; right: 25px; }
-        html[lang="en"] .subject-box { text-align: left; }
-        html[lang="en"] .subject-name { color: #1d4ed8; border-bottom-color: #dbeafe; }
-        html[lang="en"] th { background: linear-gradient(135deg, #172554, #1d4ed8); letter-spacing: 0.025em; }
-        html[lang="en"] .day-cell { background: #eff6ff; color: #1e3a8a; }
-        html[lang="en"] .hw-text { color: #b91c1c; }
-        html[lang="en"] .btn-pdf { background: #1d4ed8; }
-        html[lang="en"] .btn-img { background: #2563eb; }
-        html[lang="en"] table { box-shadow: inset 4px 0 0 #1d4ed8; }
-
-        @media (max-width: 600px) {
-            body { padding: 10px; }
-            .header { flex-direction: column; min-height: auto; padding: 15px; }
-            .logo-container { position: static; transform: none; margin-bottom: 10px; }
-            .logo { width: 100px; }
-            .header-text { padding: 0; }
-            .header-text h1 { font-size: 1.3em; }
-            .header-text h2 { font-size: 1.1em; }
-            .timers { grid-template-columns: 1fr; gap: 8px; }
-            table { font-size: 0.82em; }
-            th, td { padding: 8px 5px; }
-            .subject-name { font-size: 0.85em; }
-            .topic-text { font-size: 0.78em; }
-            .hw-text { font-size: 0.75em; }
-            .actions { gap: 10px; }
-            .btn { padding: 10px 18px; font-size: 0.9em; }
+        /* ---- Timetable grid ---- */
+        .tt-wrap { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-panel); padding: .6rem; }
+        .tt-help { display: flex; align-items: center; gap: .5rem; margin: 0 .5rem .6rem; font-size: .85rem; color: var(--muted); }
+        .tt-help svg { width: 16px; height: 16px; flex: none; }
+        .tt-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; border-radius: 18px; }
+        .tt {
+            --daycol: 6.75rem;
+            display: grid;
+            grid-template-columns: var(--daycol) repeat(var(--periods), minmax(0, 1fr));
+            gap: 4px;
+            min-width: calc(var(--daycol) + var(--periods) * 8.25rem);
+            transition: grid-template-columns .5s var(--ease-out), min-width .5s var(--ease-out);
         }
+        .tt.has-open { min-width: calc(var(--daycol) + var(--periods) * 8.25rem + 14rem); }
 
-        @media print { .actions { display: none; } }
+        .tt-corner, .tt-ph { padding: .55rem .4rem; text-align: center; font-weight: 800; font-size: .88rem; color: var(--muted); border-radius: var(--r-cell); transition: background-color .3s, color .3s; }
+        .tt-corner { font-size: .75rem; font-weight: 700; }
+        .tt-ph.is-active { background: var(--ink); color: #fff; }
+
+        .tt-day {
+            position: sticky; inset-inline-start: 0; z-index: 2;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .15rem;
+            padding: .6rem .3rem; border-radius: var(--r-cell);
+            background: var(--canvas); font-weight: 800; font-size: 1rem; text-align: center;
+        }
+        .tt-day .today-tag { display: none; font-size: .7rem; font-weight: 800; padding: 0 .55rem; border-radius: var(--r-pill); background: var(--ink); color: var(--mark); }
+        .tt-day.is-today { background: var(--mark); }
+        .tt-day.is-today .today-tag { display: inline-block; }
+
+        .tt-cell, .tt-empty { border-radius: var(--r-cell); min-height: 7.5rem; }
+        .tt-empty { display: grid; place-items: center; background: repeating-linear-gradient(-45deg, transparent 0 7px, rgba(14,59,55,.04) 7px 8px); color: var(--faint); }
+        .tt-cell {
+            position: relative; display: flex; flex-direction: column; gap: .3rem;
+            padding: .7rem .75rem .75rem; text-align: start;
+            background: var(--paper); border: 1.5px solid var(--line);
+            cursor: pointer; transition: border-color .2s, background-color .3s, opacity .3s, box-shadow .3s;
+        }
+        .tt-cell:hover { border-color: var(--ink); }
+        .tt-cell.is-today { background: var(--mark-soft); border-color: #f1d85a; }
+        .tt-cell.is-today:hover { border-color: var(--ink); }
+        .tt.has-open .tt-cell:not(.is-open) { opacity: .62; }
+        .tt.has-open .tt-cell.in-col:not(.is-open), .tt.has-open .tt-cell.in-row:not(.is-open) { opacity: .9; }
+        .tt-cell.is-open { border-color: var(--ink); box-shadow: var(--shadow-float); z-index: 3; opacity: 1; }
+
+        .tt-subj { font-weight: 800; font-size: .95rem; line-height: 1.35; }
+        .tt-topic { font-size: .84rem; line-height: 1.6; color: #2c4a46; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+        .tt-hw { font-size: .8rem; font-weight: 700; line-height: 1.55; color: var(--hw); padding-top: .3rem; border-top: 1px dashed #efc4c4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .tt-hw b { font-weight: 800; }
+        .tt-clip { position: absolute; top: .55rem; inset-inline-end: .55rem; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--ink); color: #fff; }
+        .tt-clip svg { width: 14px; height: 14px; }
+        .tt-cell.has-file .tt-subj { padding-inline-end: 1.9rem; }
+
+        .tt-cell.is-open .tt-topic, .tt-cell.is-open .tt-hw { -webkit-line-clamp: unset; display: block; }
+        .tt-cell.is-open .tt-topic { font-size: .92rem; }
+        .tt-cell.is-open .tt-hw { font-size: .88rem; }
+
+        /* Detail drawer inside the cell — grows the row smoothly */
+        .tt-more { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .45s var(--ease-out); }
+        .tt-cell.is-open .tt-more { grid-template-rows: 1fr; }
+        .tt-more-inner { overflow: hidden; min-height: 0; display: grid; gap: .6rem; }
+        .tt-cell.is-open .tt-more-inner { padding-top: .5rem; }
+        .tt-nofile { font-size: .8rem; color: var(--muted); }
+        .tt-close { justify-self: start; border: 0; background: none; padding: .2rem 0; font-size: .8rem; font-weight: 700; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+
+        /* ---- Actions ---- */
+        .actions { display: flex; justify-content: center; align-items: center; gap: 1rem; flex-wrap: wrap; margin-top: 1.75rem; }
+
+        .empty-state { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-panel); padding: 3.5rem 1.5rem; text-align: center; margin-top: 1.5rem; }
+        .empty-state h2 { margin: 0 0 .5rem; font-weight: 900; font-size: 1.6rem; }
+        .empty-state p { margin: 0 auto; color: var(--muted); max-width: 46ch; }
+
+        /* Export: show everything, no clamps, no scroll */
+        body.is-exporting .tt-scroll { overflow: visible; }
+        body.is-exporting #capture { width: max-content; background: var(--canvas); padding: 1rem; }
+        body.is-exporting .tt-topic, body.is-exporting .tt-hw { -webkit-line-clamp: unset; display: block; }
+        body.is-exporting .tt-help { display: none; }
+
+        @media (max-width: 720px) {
+            .hero { grid-template-columns: 1fr; padding-top: 1.4rem; }
+            .tt { --daycol: 4.75rem; min-width: calc(var(--daycol) + var(--periods) * 7.25rem); }
+            .tt.has-open { min-width: calc(var(--daycol) + var(--periods) * 7.25rem + 11rem); }
+            .tt-day { font-size: .88rem; }
+            .brand-name { max-width: 52vw; }
+        }
+        @media print { .actions, .topbar, .tt-help, .notice { display: none; } }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="language-bar">
-            <div class="language-switcher" role="group" aria-label="اختيار اللغة">
+    <header class="topbar">
+        <a class="brand" href="/student">
+            {% if settings.school_logo %}
+            <img src="/static/uploads/{{ settings.school_logo }}" alt="">
+            {% else %}
+            <span class="brand-mark" aria-hidden="true"><span></span></span>
+            {% endif %}
+            <span class="brand-name">{{ settings.school_name or 'مدارس ثقافة الجيل' }}</span>
+        </a>
+        <div class="topbar-actions">
+            {% if not not_published and published_weeks|length > 1 %}
+            <form method="get" id="weekForm">
+                <label class="sr-only" for="weekSelect">اختيار الأسبوع</label>
+                <select class="select-pill" id="weekSelect" name="week" onchange="this.form.submit()">
+                    {% for w in published_weeks %}
+                    <option value="{{ w }}" {% if w|string == week %}selected{% endif %}>الأسبوع {{ w }}{% if loop.first %} (الأحدث){% endif %}</option>
+                    {% endfor %}
+                </select>
+            </form>
+            {% endif %}
+            <div class="seg" role="group" aria-label="اختيار اللغة">
                 <button type="button" data-student-language="ar" aria-pressed="true">العربية</button>
                 <button type="button" data-student-language="en" aria-pressed="false">English</button>
             </div>
         </div>
-        <div style="background: #f0fdfa; border: 2px solid #0d9488; border-radius: 12px; padding: 20px; margin-bottom: 25px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-            <p style="margin: 0; color: #134e4a; font-size: 1.1em; font-weight: 700; line-height: 1.6;">
-                أعزاءنا أولياء الأمور والطلاب الكرام.. نرحب بكم في منصة (الجدول الذكي)؛ وجهتكم المعتمدة للاطلاع على الخطة الأسبوعية، والتي نوافيكم بها بدقة وموعد ثابت كل يوم خميس بنهاية دوامنا الدراسي، لنعينكم على التخطيط المبكر لأسبوعكم القادم.
-            </p>
-        </div>
+    </header>
+
+    <main class="page">
+        <p class="notice">أعزاءنا أولياء الأمور والطلاب الكرام.. نرحب بكم في منصة (الجدول الذكي)؛ وجهتكم المعتمدة للاطلاع على الخطة الأسبوعية، والتي نوافيكم بها بدقة وموعد ثابت كل يوم خميس بنهاية دوامنا الدراسي، لنعينكم على التخطيط المبكر لأسبوعكم القادم.</p>
 
         {% if not_published %}
-        <div style="background: white; border-radius: 16px; padding: 50px 25px; text-align: center; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
-            <div style="font-size: 3em; margin-bottom: 10px;">🕓</div>
-            <h2 style="color: #134e4a; margin-bottom: 8px;">لم يتم اعتماد الجدول بعد</h2>
-            <p style="color: #64748b;">جاري تحضير خطة {{ grade_name }} - {{ class_name }}، وسيتم نشرها هنا فور اعتمادها من إدارة المدرسة.</p>
-        </div>
+        <section class="empty-state">
+            <h2>لم يتم اعتماد الجدول بعد</h2>
+            <p>جاري تحضير خطة {{ grade_name }} - {{ class_name }}، وسيتم نشرها هنا فور اعتمادها من إدارة المدرسة.</p>
+        </section>
         {% else %}
-        {% if published_weeks|length > 1 %}
-        <form method="get" style="text-align:center; margin-bottom: 20px;">
-            <label style="font-weight:700; color:#134e4a;">عرض أسبوع سابق:</label>
-            <select name="week" onchange="this.form.submit()" style="padding:8px 14px; border-radius:8px; border:1px solid #0d9488; font-family:inherit; font-weight:700;">
-                {% for w in published_weeks %}
-                <option value="{{ w }}" {% if w|string == week %}selected{% endif %}>الأسبوع {{ w }}{% if loop.first %} (الأحدث){% endif %}</option>
-                {% endfor %}
-            </select>
-        </form>
-        {% endif %}
         <div id="capture">
-            <div class="header">
-                <div class="logo-container">
-                    {% if settings.school_logo %}
-                    <img src="/static/uploads/{{ settings.school_logo }}" class="logo">
-                    {% endif %}
-                </div>
-                <div class="header-text">
-                    <h1 style="margin:0; color:#134e4a; font-size: 1.8em;">{{ settings.school_name or 'مدارس ثقافة الجيل' }}</h1>
-                    <h2 style="margin:5px 0; color:#0d9488; font-size: 1.4em;">{{ grade_name }} - {{ class_name }}</h2>
-                    <span style="background: #f0fdfa; color: #0f766e; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 0.9em; display: inline-block; margin-top: 5px;">الأسبوع الدراسي: {{ week }}</span>
-                    
-                    <div class="timers" style="margin-top: 20px; margin-bottom: 0; box-shadow: none;">
-                        <div class="timer" id="t1" style="box-shadow: none; background: transparent; color: #1e293b; padding: 5px;">
-                            <h4 style="color: #475569; display: inline;">اختبارات الفترة الأولى:</h4> <span style="font-size: 1.1em;">-</span>
-                        </div>
-                        <div class="timer" id="t2" style="box-shadow: none; background: transparent; color: #1e293b; padding: 5px;">
-                            <h4 style="color: #475569; display: inline;">اختبارات الفترة الثانية:</h4> <span style="font-size: 1.1em;">-</span>
-                        </div>
-                        <div class="timer" id="tf" style="box-shadow: none; background: transparent; color: #1e293b; padding: 5px;">
-                            <h4 style="color: #475569; display: inline;">الاختبار النهائي:</h4> <span style="font-size: 1.1em;">-</span>
-                        </div>
+            <section class="hero">
+                <div>
+                    <p class="hero-class">{{ grade_name }} - {{ class_name }}</p>
+                    <h1 class="hero-week"><span class="hero-week-label">الأسبوع</span> <span class="num" id="weekNum">{{ week }}</span></h1>
+                    <div class="hero-meta">
+                        <span class="chip chip-today" id="todayChip" hidden><span class="chip-dot"></span><span id="todayText"></span></span>
                     </div>
                 </div>
-            </div>
+                <div class="countdowns">
+                    <div class="count" id="t1" data-date="{{ settings.period1_date or '' }}" hidden>
+                        <span class="count-num">-</span><span class="count-unit">يوم متبقٍ</span><span class="count-label">اختبارات الفترة الأولى</span>
+                    </div>
+                    <div class="count" id="t2" data-date="{{ settings.period2_date or '' }}" hidden>
+                        <span class="count-num">-</span><span class="count-unit">يوم متبقٍ</span><span class="count-label">اختبارات الفترة الثانية</span>
+                    </div>
+                    <div class="count" id="tf" data-date="{{ settings.final_date or '' }}" hidden>
+                        <span class="count-num">-</span><span class="count-unit">يوم متبقٍ</span><span class="count-label">الاختبار النهائي</span>
+                    </div>
+                </div>
+            </section>
 
-            <div class="timers" style="display: none;">
-                <div class="timer" id="t1_old"><h4>اختبارات الفترة الأولى</h4><span>-</span></div>
-                <div class="timer" id="t2_old"><h4>اختبارات الفترة الثانية</h4><span>-</span></div>
-                <div class="timer" id="tf_old"><h4>الاختبار النهائي</h4><span>-</span></div>
-            </div>
+            <section class="tt-wrap" aria-label="الجدول الأسبوعي">
+                <p class="tt-help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><span>اضغط على أي مادة لعرض التفاصيل والملفات</span></p>
+                <div class="tt-scroll" id="ttScroll">
+                    <div class="tt" id="tt" style="--periods: {{ periods_per_day }}" data-periods="{{ periods_per_day }}">
+                        <div class="tt-corner">اليوم / الحصة</div>
+                        {% for p in range(1, periods_per_day + 1) %}<div class="tt-ph" data-col="{{ p }}">ح {{ p }}</div>{% endfor %}
 
-            <div class="table-responsive">
-                <table>
-                    <thead>
-                        <tr>
-                            <th class="day-cell">اليوم</th>
-                            {% for p in range(1, periods_per_day + 1) %}<th class="period-header">ح {{ p }}</th>{% endfor %}
-                        </tr>
-                    </thead>
-                    <tbody>
                         {% for d in days_order %}
-                        <tr>
-                            <td class="day-cell">{{ days_ar[d] }}</td>
-                            {% for p in range(1, periods_per_day + 1) %}
-                            <td>
-                                {% if schedule[d][p].subject_name %}
-                                <div class="subject-box">
-                                    <span class="subject-name">{{ schedule[d][p].subject_name }}</span>
-                                    <span class="topic-text">{{ schedule[d][p].topic }}</span>
-                                    {% if schedule[d][p].homework %}
-                                    <span class="hw-text">📝 {{ schedule[d][p].homework }}</span>
+                        <div class="tt-day" data-day="{{ d }}"><span>{{ days_ar[d] }}</span><span class="today-tag">اليوم</span></div>
+                        {% for p in range(1, periods_per_day + 1) %}
+                        {% set c = schedule[d][p] %}
+                        {% if c.subject_name %}
+                        <div class="tt-cell{% if c.attachment %} has-file{% endif %}" role="button" tabindex="0" aria-expanded="false"
+                             data-day="{{ d }}" data-col="{{ p }}" aria-label="{{ c.subject_name }} - {{ days_ar[d] }} ح {{ p }}">
+                            {% if c.attachment %}<span class="tt-clip" title="يوجد ملف مرفق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 01-7.8-7.8l8.6-8.6a3.7 3.7 0 015.2 5.2l-8.6 8.6a1.8 1.8 0 01-2.6-2.6l7.9-7.9"/></svg></span>{% endif %}
+                            <span class="tt-subj">{{ c.subject_name }}</span>
+                            {% if c.topic %}<span class="tt-topic">{{ c.topic }}</span>{% endif %}
+                            {% if c.homework %}<span class="tt-hw"><b>الواجب:</b> {{ c.homework }}</span>{% endif %}
+                            <span class="tt-more">
+                                <span class="tt-more-inner">
+                                    {% if c.attachment %}
+                                    <a class="file-pill" href="{{ c.attachment.url }}" download>
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>
+                                        {% set nm = c.attachment.name.rsplit(' ', 1) %}<span class="file-name">{% if nm|length > 1 %}<bdi>{{ nm[0] }}</bdi> {% endif %}<bdi dir="ltr">{{ nm[-1] }}</bdi></span>
+                                        <span class="file-size" data-bytes="{{ c.attachment.size }}"></span>
+                                    </a>
+                                    {% else %}
+                                    <span class="tt-nofile">لا يوجد ملف مرفق لهذه الحصة</span>
                                     {% endif %}
-                                </div>
-                                {% else %}
-                                <span style="color: #cbd5e1;">-</span>
-                                {% endif %}
-                            </td>
-                            {% endfor %}
-                        </tr>
+                                    <button type="button" class="tt-close">إغلاق</button>
+                                </span>
+                            </span>
+                        </div>
+                        {% else %}
+                        <div class="tt-empty" data-day="{{ d }}" data-col="{{ p }}" aria-hidden="true">–</div>
+                        {% endif %}
                         {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </section>
         </div>
 
         <div class="actions">
-            <button class="btn btn-pdf" onclick="exportPDF()">📥 تحميل بصيغة PDF</button>
-            <button class="btn btn-img" onclick="exportImage()">🖼️ حفظ كصورة</button>
+            <button type="button" class="btn btn-primary btn-pdf" onclick="exportPDF()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>
+                <span>تحميل بصيغة PDF</span>
+            </button>
+            <button type="button" class="btn btn-text btn-img" onclick="exportImage()"><span>حفظ كصورة</span></button>
         </div>
         {% endif %}
-    </div>
+    </main>
+
+    <footer class="site-footer">أنشئ هذا الموقع بواسطة أحمد الفيفي</footer>
 
     <script>
-        function updateTimer(id, dateStr) {
-            const el = document.getElementById(id);
-            if (!el) return;
-            if (!dateStr) { el.style.display = 'none'; return; }
-            const target = new Date(dateStr).getTime();
-            const now = new Date().getTime();
-            const diff = target - now;
-            if (diff > 0) {
-                const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-                el.querySelector('span').textContent = document.documentElement.lang === 'en'
-                    ? `${days} days remaining`
-                    : `${days} يوم متبقي`;
+    /* ===== Today (school timezone), countdowns, sizes ===== */
+    const SCHOOL_TZ = 'Asia/Riyadh';
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const lang = () => document.documentElement.lang === 'en' ? 'en' : 'ar';
+
+    function todayKey() {
+        return new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: SCHOOL_TZ }).format(new Date());
+    }
+
+    function markToday() {
+        const key = todayKey();
+        document.querySelectorAll('.is-today').forEach(el => el.classList.remove('is-today'));
+        const isSchoolDay = !!document.querySelector(`.tt-day[data-day="${key}"]`);
+        document.querySelectorAll(`[data-day="${key}"]`).forEach(el => el.classList.add('is-today'));
+
+        const chip = document.getElementById('todayChip');
+        if (chip) {
+            const locale = lang() === 'en' ? 'en-GB' : 'ar-SA-u-ca-gregory-nu-arab';
+            const dateText = new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'long', timeZone: SCHOOL_TZ }).format(new Date());
+            const weekend = lang() === 'en' ? ' — weekend' : ' — عطلة نهاية الأسبوع';
+            document.getElementById('todayText').textContent = (lang() === 'en' ? 'Today: ' : 'اليوم: ') + dateText + (isSchoolDay ? '' : weekend);
+            chip.hidden = false;
+        }
+        return key;
+    }
+
+    function updateCountdowns() {
+        document.querySelectorAll('.count[data-date]').forEach(el => {
+            const target = el.dataset.date ? new Date(el.dataset.date).getTime() : NaN;
+            const days = Math.ceil((target - Date.now()) / 86400000);
+            if (!isNaN(days) && days > 0) {
+                el.querySelector('.count-num').textContent = days;
+                el.hidden = false;
             } else {
-                el.style.display = 'none';
+                el.hidden = true;
             }
-        }
-        {% if not not_published %}
-        updateTimer('t1', '{{ settings.period1_date }}');
-        updateTimer('t2', '{{ settings.period2_date }}');
-        updateTimer('tf', '{{ settings.final_date }}');
-        {% endif %}
+        });
+    }
 
-        function exportPDF() {
-            const btn = document.querySelector('.btn-pdf');
-            const original = btn.innerHTML;
-            btn.innerHTML = document.documentElement.lang === 'en' ? '⏳ Preparing...' : '⏳ جاري التجهيز...';
-            btn.disabled = true;
-            const element = document.getElementById('capture');
-            html2canvas(element, {
-                scale: 2,
-                useCORS: true,
-                backgroundColor: '#ffffff',
-                width: element.scrollWidth,
-                windowWidth: element.scrollWidth
-            }).then(canvas => {
-                const { jsPDF } = window.jspdf;
-                const pageWidth = 297, pageHeight = 210, margin = 8;
-                const usableWidth = pageWidth - margin * 2;
-                const usableHeight = pageHeight - margin * 2;
-                const ratio = canvas.width / canvas.height;
-                let w = usableWidth, h = w / ratio;
-                if (h > usableHeight) { h = usableHeight; w = h * ratio; }
-                const x = (pageWidth - w) / 2;
-                const y = (pageHeight - h) / 2;
-                const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-                pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', x, y, w, h);
-                pdf.save('Weekly_Schedule_{{ class_name }}.pdf');
-            }).catch(() => {
-                alert(document.documentElement.lang === 'en' ? 'Could not create the PDF. Please try again.' : 'حدث خطأ أثناء إنشاء ملف PDF، حاول مرة أخرى');
-            }).finally(() => {
-                btn.innerHTML = original;
-                btn.disabled = false;
-            });
-        }
+    function formatSizes() {
+        document.querySelectorAll('.file-size[data-bytes]').forEach(el => {
+            const b = +el.dataset.bytes;
+            const en = lang() === 'en';
+            el.textContent = b >= 1048576 ? (b / 1048576).toFixed(1) + (en ? ' MB' : ' م.ب') : Math.max(1, Math.round(b / 1024)) + (en ? ' KB' : ' ك.ب');
+        });
+    }
 
-        function exportImage() {
-            const btn = document.querySelector('.btn-img');
-            const original = btn.innerHTML;
-            btn.innerHTML = document.documentElement.lang === 'en' ? '⏳ Preparing...' : '⏳ جاري التجهيز...';
-            btn.disabled = true;
-            const element = document.getElementById('capture');
-            html2canvas(element, {
-                useCORS: true,
-                scale: 2,
-                backgroundColor: '#ffffff',
-                width: element.scrollWidth,
-                windowWidth: element.scrollWidth
-            }).then(canvas => {
-                const link = document.createElement('a');
-                link.download = 'Weekly_Schedule_{{ class_name }}.png';
-                link.href = canvas.toDataURL('image/png');
-                link.click();
-            }).catch(() => {
-                alert(document.documentElement.lang === 'en' ? 'Could not save the image. Please try again.' : 'حدث خطأ أثناء حفظ الصورة، حاول مرة أخرى');
-            }).finally(() => {
-                btn.innerHTML = original;
-                btn.disabled = false;
-            });
+    /* ===== Expanding cells ===== */
+    const tt = document.getElementById('tt');
+    const periods = tt ? +tt.dataset.periods : 0;
+    let openCell = null;
+
+    function setColumns(activeCol) {
+        if (!tt) return;
+        const cols = [];
+        for (let p = 1; p <= periods; p++) cols.push(p === activeCol ? '2.6fr' : '1fr');
+        tt.style.gridTemplateColumns = `var(--daycol) ${cols.join(' ')}`;
+    }
+
+    function closeCell(cell) {
+        if (!cell) return;
+        cell.classList.remove('is-open');
+        cell.setAttribute('aria-expanded', 'false');
+        tt.classList.remove('has-open');
+        tt.querySelectorAll('.in-row, .in-col').forEach(el => el.classList.remove('in-row', 'in-col'));
+        tt.querySelectorAll('.tt-ph.is-active').forEach(el => el.classList.remove('is-active'));
+        setColumns(0);
+        openCell = null;
+    }
+
+    function openCellFn(cell) {
+        if (openCell && openCell !== cell) closeCell(openCell);
+        const col = +cell.dataset.col, day = cell.dataset.day;
+        cell.classList.add('is-open');
+        cell.setAttribute('aria-expanded', 'true');
+        tt.classList.add('has-open');
+        tt.querySelectorAll(`.tt-cell[data-col="${col}"]`).forEach(el => el.classList.add('in-col'));
+        tt.querySelectorAll(`.tt-cell[data-day="${day}"]`).forEach(el => el.classList.add('in-row'));
+        const ph = tt.querySelector(`.tt-ph[data-col="${col}"]`);
+        if (ph) ph.classList.add('is-active');
+        setColumns(col);
+        openCell = cell;
+
+        if (window.Motion && !reduceMotion) {
+            const items = cell.querySelectorAll('.tt-more-inner > *');
+            Motion.animate(items, { opacity: [0, 1], y: [8, 0] }, { duration: 0.35, delay: Motion.stagger(0.06, { startDelay: 0.12 }), ease: [0.2, 0.8, 0.2, 1] });
         }
+        setTimeout(() => cell.scrollIntoView({ block: 'nearest', inline: 'center', behavior: reduceMotion ? 'auto' : 'smooth' }), 260);
+    }
+
+    if (tt) {
+        setColumns(0);
+        tt.addEventListener('click', e => {
+            if (e.target.closest('a')) return;              // let the download link work
+            const cell = e.target.closest('.tt-cell');
+            if (!cell) return;
+            if (e.target.closest('.tt-close') || cell === openCell) { closeCell(cell); cell.focus(); return; }
+            openCellFn(cell);
+        });
+        tt.addEventListener('keydown', e => {
+            const cell = e.target.closest('.tt-cell');
+            if (!cell || e.target !== cell) return;
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cell === openCell ? closeCell(cell) : openCellFn(cell); }
+        });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape' && openCell) { const c = openCell; closeCell(c); c.focus(); } });
+    }
+
+    /* ===== The one orchestrated moment: highlighter sweeps across today's row ===== */
+    function introAnimation(key) {
+        if (!window.Motion || reduceMotion || !tt) return;
+        const { animate, stagger } = Motion;
+        animate('.hero-week', { opacity: [0, 1], y: [14, 0] }, { duration: 0.5, ease: [0.2, 0.8, 0.2, 1] });
+        const dayCell = tt.querySelector(`.tt-day[data-day="${key}"]`);
+        if (!dayCell) return;
+        const rowCells = tt.querySelectorAll(`.tt-cell[data-day="${key}"], .tt-empty[data-day="${key}"]`);
+        const clear = els => () => els.forEach(el => el.style.removeProperty('background-color'));
+        animate(dayCell, { backgroundColor: ['#f2f5f3', '#ffe15a'] }, { duration: 0.35, delay: 0.25 }).then(clear([dayCell]));
+        animate(rowCells, { backgroundColor: ['#ffffff', '#fff7cc'] }, { duration: 0.3, delay: stagger(0.05, { startDelay: 0.4 }) })
+            .then(clear(Array.from(rowCells)));
+    }
+
+    /* ===== Export (collapses the open cell and shows full text) ===== */
+    function prepareExport() {
+        if (openCell) closeCell(openCell);
+        document.body.classList.add('is-exporting');
+        return new Promise(r => setTimeout(r, 550));
+    }
+    function capture() {
+        const el = document.getElementById('capture');
+        return html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#f2f5f3', width: el.scrollWidth, windowWidth: el.scrollWidth + 40 });
+    }
+    function withBusy(btn, job) {
+        const label = btn.querySelector('span');
+        const original = label.textContent;
+        label.textContent = lang() === 'en' ? 'Preparing...' : 'جاري التجهيز...';
+        btn.disabled = true;
+        return prepareExport().then(job).catch(() => {
+            alert(lang() === 'en' ? 'Could not create the file. Please try again.' : 'تعذر إنشاء الملف، حاول مرة أخرى');
+        }).finally(() => {
+            document.body.classList.remove('is-exporting');
+            label.textContent = original;
+            btn.disabled = false;
+        });
+    }
+    function exportPDF() {
+        withBusy(document.querySelector('.btn-pdf'), () => capture().then(canvas => {
+            const { jsPDF } = window.jspdf;
+            const pageWidth = 297, pageHeight = 210, margin = 8;
+            const ratio = canvas.width / canvas.height;
+            let w = pageWidth - margin * 2, h = w / ratio;
+            if (h > pageHeight - margin * 2) { h = pageHeight - margin * 2; w = h * ratio; }
+            const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+            pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', (pageWidth - w) / 2, (pageHeight - h) / 2, w, h);
+            pdf.save('Weekly_Schedule_{{ class_name }}.pdf');
+        }));
+    }
+    function exportImage() {
+        withBusy(document.querySelector('.btn-img'), () => capture().then(canvas => {
+            const link = document.createElement('a');
+            link.download = 'Weekly_Schedule_{{ class_name }}.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }));
+    }
+
+    function refreshDynamic() { markToday(); updateCountdowns(); formatSizes(); }
+    document.addEventListener('student-language-change', refreshDynamic);
+    window.addEventListener('load', () => introAnimation(todayKey()));
+    // Re-check the date every minute (page left open past midnight)
+    setInterval(markToday, 60000);
     </script>
+
     <script>
         (function () {
             const originalText = new WeakMap();
             const translations = {
                 'أعزاءنا أولياء الأمور والطلاب الكرام.. نرحب بكم في منصة (الجدول الذكي)؛ وجهتكم المعتمدة للاطلاع على الخطة الأسبوعية، والتي نوافيكم بها بدقة وموعد ثابت كل يوم خميس بنهاية دوامنا الدراسي، لنعينكم على التخطيط المبكر لأسبوعكم القادم.': 'Dear parents and students, welcome to the Smart Schedule platform—your trusted place to view the weekly plan, published every Thursday at the end of the school day to help you plan the coming week.',
                 'لم يتم اعتماد الجدول بعد': 'The schedule has not been published yet',
-                'عرض أسبوع سابق:': 'View a previous week:',
-                'اختبارات الفترة الأولى:': 'First assessment:',
-                'اختبارات الفترة الثانية:': 'Second assessment:',
-                'الاختبار النهائي:': 'Final exam:',
+                'الأسبوع': 'Week',
                 'اختبارات الفترة الأولى': 'First assessment',
                 'اختبارات الفترة الثانية': 'Second assessment',
                 'الاختبار النهائي': 'Final exam',
-                'اليوم': 'Day',
+                'يوم متبقٍ': 'days left',
+                'اليوم / الحصة': 'Day / Period',
+                'اليوم': 'Today',
                 'الأحد': 'Sunday',
                 'الاثنين': 'Monday',
                 'الثلاثاء': 'Tuesday',
                 'الأربعاء': 'Wednesday',
                 'الخميس': 'Thursday',
-                '📥 تحميل بصيغة PDF': '📥 Download PDF',
-                '🖼️ حفظ كصورة': '🖼️ Save as image',
+                'الواجب:': 'Homework:',
+                'اضغط على أي مادة لعرض التفاصيل والملفات': 'Tap any subject to see details and files',
+                'لا يوجد ملف مرفق لهذه الحصة': 'No file attached to this lesson',
+                'إغلاق': 'Close',
+                'تحميل بصيغة PDF': 'Download PDF',
+                'حفظ كصورة': 'Save as image',
                 'أنشئ هذا الموقع بواسطة أحمد الفيفي': 'Built by Ahmed Al-Faifi'
             };
 
@@ -293,14 +434,10 @@
                 const value = source.trim();
                 if (language === 'ar') return value;
                 if (translations[value]) return translations[value];
-                let match = value.match(/^الأسبوع الدراسي:\s*(\d+)$/);
-                if (match) return `School week: ${match[1]}`;
-                match = value.match(/^الأسبوع\s+(\d+)(\s+\(الأحدث\))?$/);
+                let match = value.match(/^الأسبوع\s+(\d+)(\s+\(الأحدث\))?$/);
                 if (match) return `Week ${match[1]}${match[2] ? ' (latest)' : ''}`;
                 match = value.match(/^ح\s*(\d+)$/);
                 if (match) return `P${match[1]}`;
-                match = value.match(/^(\d+)\s+يوم متبقي$/);
-                if (match) return `${match[1]} days remaining`;
                 match = value.match(/^جاري تحضير خطة\s+(.+)، وسيتم نشرها هنا فور اعتمادها من إدارة المدرسة\.$/);
                 if (match) return `The ${match[1]} plan is being prepared and will appear here once approved by the school administration.`;
                 return null;
@@ -314,7 +451,7 @@
                 const selected = language === 'en' ? 'en' : 'ar';
                 document.documentElement.lang = selected;
                 document.documentElement.dir = selected === 'en' ? 'ltr' : 'rtl';
-                localStorage.setItem('student-language', selected);
+                try { localStorage.setItem('student-language', selected); } catch (e) {}
                 const currentUrl = new URL(window.location.href);
                 currentUrl.searchParams.set('lang', selected);
                 window.history.replaceState({}, '', currentUrl);
@@ -322,15 +459,12 @@
                 const nodes = [];
                 let node;
                 while ((node = walker.nextNode())) {
-                    if (node.parentElement && !node.parentElement.closest('script,style')) nodes.push(node);
+                    if (node.parentElement && !node.parentElement.closest('script,style,#todayText,.file-size,.count-num')) nodes.push(node);
                 }
                 nodes.forEach(textNode => {
                     if (!originalText.has(textNode)) originalText.set(textNode, textNode.nodeValue);
                     const source = originalText.get(textNode);
-                    if (selected === 'ar') {
-                        textNode.nodeValue = source;
-                        return;
-                    }
+                    if (selected === 'ar') { textNode.nodeValue = source; return; }
                     const translated = translateText(source, selected);
                     if (translated !== null) textNode.nodeValue = preserveWhitespace(source, translated);
                 });
@@ -342,17 +476,17 @@
                     button.classList.toggle('active', active);
                     button.setAttribute('aria-pressed', String(active));
                 });
+                document.dispatchEvent(new CustomEvent('student-language-change'));
             }
 
             document.querySelectorAll('[data-student-language]').forEach(button => {
                 button.addEventListener('click', () => setStudentLanguage(button.dataset.studentLanguage));
             });
             const requestedLanguage = new URLSearchParams(window.location.search).get('lang');
-            setStudentLanguage(requestedLanguage || localStorage.getItem('student-language') || 'ar');
+            let stored = null;
+            try { stored = localStorage.getItem('student-language'); } catch (e) {}
+            setStudentLanguage(requestedLanguage || stored || 'ar');
         })();
     </script>
-    <footer style="text-align: center; padding: 20px; color: #64748b; font-size: 0.85em; margin-top: 40px; border-top: 1px solid #e2e8f0;">
-        أنشئ هذا الموقع بواسطة أحمد الفيفي
-    </footer>
 </body>
 </html>

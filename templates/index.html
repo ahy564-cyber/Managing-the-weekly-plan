@@ -4,34 +4,47 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>نظام الخطة الدراسية الأسبوعية</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/plan.css') }}">
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #ecf0f1; }
-        .container { background: #fff; padding: 50px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; max-width: 450px; width: 100%; }
-        h1 { color: #2c3e50; margin-bottom: 10px; font-size: 2em; }
-        p { color: #7f8c8d; margin-bottom: 35px; font-size: 1.1em; }
-        .links { display: flex; flex-direction: column; gap: 20px; }
-        .btn { padding: 18px; border-radius: 10px; text-decoration: none; font-weight: bold; transition: all 0.3s; font-size: 1.2em; text-align: center; }
-        .btn-student { background: #3498db; color: white; }
-        .btn-student:hover { background: #2980b9; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(52, 152, 219, 0.3); }
-        .btn-login { background: #fff; color: #3498db; border: 2px solid #3498db; }
-        .btn-login:hover { background: #ebf5fb; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(52, 152, 219, 0.1); }
-        .status { margin-top: 30px; font-size: 1em; color: #95a5a6; border-top: 1px solid #eee; padding-top: 20px; }
-        strong { color: #2c3e50; }
+        body { min-height: 100vh; display: flex; flex-direction: column; }
+        main { flex: 1; display: grid; place-items: center; padding: 2rem 1.25rem; }
+        .home { width: min(100%, 560px); }
+        .home h1 { margin: 0; font-weight: 900; font-size: clamp(2.6rem, 8vw, 4rem); line-height: 1; }
+        .home p { margin: .9rem 0 2rem; color: var(--muted); font-size: 1.1rem; }
+        .choices { display: grid; gap: .75rem; }
+        .choice { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.2rem 1.4rem; border-radius: var(--r-card); text-decoration: none; font-weight: 800; font-size: 1.15rem; transition: transform .15s, background-color .2s; }
+        .choice small { display: block; font-weight: 600; font-size: .88rem; opacity: .75; }
+        .choice:active { transform: scale(.99); }
+        .choice-main { background: var(--ink); color: #fff; }
+        .choice-main:hover { background: var(--ink-2); }
+        .choice-alt { background: var(--paper); color: var(--ink); border: 1.5px solid var(--line); }
+        .choice-alt:hover { border-color: var(--ink); }
+        .choice svg { width: 22px; height: 22px; flex: none; }
+        [dir="rtl"] .choice svg { transform: scaleX(-1); }
+        .week { margin-top: 1.75rem; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>نظام الخطة الدراسية</h1>
-        <p>إدارة وعرض الجداول المدرسية الأسبوعية</p>
-        
-        <div class="links">
-            <a href="/student" class="btn btn-student">عرض الطالب</a>
-            <a href="/login" class="btn btn-login">دخول (مدير / معلم)</a>
+    <main>
+        <div class="home">
+            <h1>{{ settings.school_name or 'الخطة الأسبوعية' }}</h1>
+            <p>دروس الأسبوع وواجباته وملفاته، في جدول واحد.</p>
+            <div class="choices">
+                <a href="/student" class="choice choice-main">
+                    <span>جدول الطالب<small>لأولياء الأمور والطلاب — بدون تسجيل دخول</small></span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                </a>
+                <a href="/login" class="choice choice-alt">
+                    <span>تسجيل الدخول<small>للمعلمين والمشرفين والإدارة</small></span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                </a>
+            </div>
+            <div class="week"><span class="chip"><span class="chip-dot"></span>الأسبوع الحالي: {{ current_week }}</span></div>
         </div>
-        
-        <div class="status">
-            الأسبوع الحالي: <strong>{{ current_week }}</strong>
-        </div>
-    </div>
+    </main>
+    <footer class="site-footer">أنشئ هذا الموقع بواسطة أحمد الفيفي</footer>
 </body>
 </html>

@@ -2,265 +2,364 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>لوحة المعلم</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/plan.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/motion@12.23.12/dist/motion.js" defer></script>
     <style>
-        body { font-family: 'Cairo', sans-serif; margin: 20px; background: #f1f5f9; color: #334155; }
-        .card { background: white; padding: 25px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
-        .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; align-items: flex-end; }
-        label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 0.9em; }
-        select { padding: 10px; border-radius: 8px; border: 1.5px solid #cbd5e1; width: 100%; font-family: inherit; }
-        
-        .table-container { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
-        table { width: 100% !important; border-collapse: separate; border-spacing: 0; background: white; min-width: 1000px; border: 1px solid #0d9488; }
-        th, td { border: 1px solid #f0fdfa; padding: 20px; text-align: center; word-wrap: break-word; }
-        th { background: #0d9488; color: white; font-weight: 700; }
-        input { width: 100%; border: 1px solid #0d9488; padding: 10px; border-radius: 6px; box-sizing: border-box; font-family: inherit; margin-bottom: 5px; font-size: 0.9em; }
-        input:focus { border-color: #0f766e; outline: none; }
-        .fixed-sub { font-weight: 700; color: #0d9488; background: #f0fdfa; padding: 5px; border-radius: 4px; display: block; margin-bottom: 8px; font-size: 0.95em; }
-        .locked-cell { background: #f8fafc; border: 1.5px dashed #cbd5e1; border-radius: 6px; padding: 10px 6px; color: #94a3b8; font-size: 0.8em; text-align: center; }
-        td.not-assigned { background: #f8fafc; }
-        .readonly-field { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; padding: 7px 9px; font-size: 0.85em; color: #475569; text-align: right; margin-bottom: 5px; min-height: 36px; cursor: not-allowed; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-        .readonly-label { font-size: 0.72em; color: #94a3b8; font-weight: 600; margin-bottom: 2px; display: block; }
-        .readonly-empty { color: #cbd5e1; font-style: italic; font-size: 0.82em; }
-        .lock-badge { display: inline-block; font-size: 0.7em; background: #f1f5f9; color: #94a3b8; border: 1px solid #e2e8f0; border-radius: 4px; padding: 1px 6px; margin-bottom: 6px; }
-        .save-btn { background: #0d9488; color: white; border: none; padding: 12px 30px; border-radius: 8px; cursor: pointer; font-weight: 700; transition: all 0.2s; }
-        .save-btn:hover { background: #0f766e; transform: translateY(-1px); }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .admin-link { color: #0d9488; text-decoration: none; font-weight: 600; }
-        .gov-info { display: none !important; }
-        
-        /* Toast Notification Styles */
-        #toast {
-            visibility: hidden;
-            min-width: 250px;
-            background-color: #059669;
-            color: #fff;
-            text-align: center;
-            border-radius: 8px;
-            padding: 16px;
-            position: fixed;
-            z-index: 1000;
-            left: 50%;
-            bottom: 30px;
-            transform: translateX(-50%);
-            font-weight: 700;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        .page { width: min(100%, 1600px); margin: 0 auto; padding: 1.5rem clamp(.75rem, 2.5vw, 2rem) 6rem; }
+        .who { font-weight: 700; color: var(--muted); font-size: .92rem; }
+
+        .picker { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-panel); padding: 1.1rem 1.25rem; }
+        .picker label { display: block; font-weight: 700; font-size: .85rem; margin-bottom: .3rem; color: var(--muted); }
+        .picker .select-pill { width: 100%; }
+
+        .title-row { display: flex; align-items: end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin: 1.75rem .25rem 1rem; }
+        .title-row h1 { margin: 0; font-weight: 900; font-size: clamp(1.8rem, 4vw, 2.6rem); line-height: 1.05; }
+        .title-row p { margin: .3rem 0 0; color: var(--muted); }
+
+        .grid-wrap { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-panel); padding: .6rem; }
+        .grid-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 18px; }
+        table { width: 100%; border-collapse: separate; border-spacing: 4px; min-width: calc(6.5rem + {{ periods_per_day }} * 12.5rem); }
+        th { padding: .5rem; font-weight: 800; font-size: .88rem; color: var(--muted); }
+        td { vertical-align: top; padding: .65rem; border-radius: var(--r-cell); background: var(--paper); border: 1.5px solid var(--line); }
+        td.day { position: sticky; inset-inline-start: 0; z-index: 2; width: 6.5rem; background: var(--canvas); border-color: transparent; font-weight: 800; text-align: center; vertical-align: middle; }
+        td.day .locked-tag { display: block; font-size: .72rem; color: var(--hw); font-weight: 700; }
+        td.day .today-tag { display: none; font-size: .7rem; font-weight: 800; padding: 0 .55rem; border-radius: var(--r-pill); background: var(--ink); color: var(--mark); margin-top: .2rem; }
+        tr.is-today td.day { background: var(--mark); }
+        tr.is-today td.day .today-tag { display: inline-block; }
+        tr.is-today td:not(.day) { background: var(--mark-soft); border-color: #f1d85a; }
+        tr.locked td:not(.day) { background: repeating-linear-gradient(-45deg, var(--paper) 0 8px, var(--canvas) 8px 9px); }
+        td.not-assigned { background: var(--canvas); border-style: dashed; }
+        td.empty { background: transparent; border-style: dashed; color: var(--faint); font-size: .82rem; text-align: center; vertical-align: middle; }
+
+        .subj { display: block; font-weight: 800; font-size: .95rem; margin-bottom: .45rem; }
+        .ro-tag { display: inline-block; font-size: .72rem; font-weight: 700; color: var(--muted); margin-bottom: .3rem; }
+        textarea { width: 100%; min-height: 64px; resize: vertical; padding: .5rem .65rem; margin-bottom: .45rem; border: 1.5px solid var(--line); border-radius: 8px; background: var(--paper); font-size: .88rem; line-height: 1.6; transition: border-color .2s, box-shadow .2s; }
+        textarea:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px var(--teal-wash); }
+        textarea.hw { border-color: #efc4c4; }
+        textarea.hw:focus { border-color: var(--hw); box-shadow: 0 0 0 3px var(--hw-wash); }
+        textarea.is-dirty { border-inline-start: 4px solid var(--teal); }
+        textarea[readonly] { background: var(--canvas); color: var(--muted); cursor: not-allowed; resize: none; }
+
+        /* ---- Attachment control ---- */
+        .att { display: flex; align-items: center; gap: .4rem; min-height: 36px; }
+        .att-add { display: inline-flex; align-items: center; gap: .4rem; padding: .35rem .85rem; border: 1.5px dashed var(--faint); border-radius: var(--r-pill); background: none; color: var(--ink); font-size: .8rem; font-weight: 700; cursor: pointer; transition: border-color .2s, background-color .2s; }
+        .att-add:hover, .att.is-dragover .att-add { border-color: var(--ink); border-style: solid; background: var(--teal-wash); }
+        .att-add svg, .att-remove svg { width: 15px; height: 15px; }
+        .att .file-pill { padding: .3rem .75rem; font-size: .78rem; min-width: 0; flex: 1 1 auto; }
+        .att-remove { flex: none; width: 30px; height: 30px; border-radius: 50%; border: 0; background: var(--canvas); color: var(--hw); display: grid; place-items: center; cursor: pointer; }
+        .att-remove:hover { background: var(--hw-wash); }
+        .att.is-busy { opacity: .6; pointer-events: none; }
+        .att-progress { font-size: .78rem; font-weight: 700; color: var(--muted); }
+
+        /* Sticky save bar */
+        .savebar { position: fixed; bottom: 1rem; inset-inline: 0; margin-inline: auto; width: max-content; max-width: calc(100% - 2rem); display: flex; align-items: center; gap: 1rem; padding: .5rem .5rem .5rem 1.2rem; border-radius: var(--r-pill); background: var(--paper); border: 1px solid var(--line); box-shadow: var(--shadow-float); z-index: 50; }
+        [dir="rtl"] .savebar { padding: .5rem 1.2rem .5rem .5rem; }
+        .savebar .status { font-size: .88rem; font-weight: 700; color: var(--muted); }
+        .savebar .status.has-changes { color: var(--ink); }
+
+        .empty-pick { text-align: center; padding: 4rem 1.5rem; background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-panel); margin-top: 1.5rem; }
+        .empty-pick h2 { margin: 0 0 .4rem; font-weight: 900; }
+        .empty-pick p { margin: 0; color: var(--muted); }
+
+        @media (max-width: 720px) {
+            .picker { grid-template-columns: 1fr; }
+            table { min-width: calc(5rem + {{ periods_per_day }} * 11rem); }
+            td.day { width: 5rem; }
         }
-        #toast.show {
-            visibility: visible;
-            -webkit-animation: fadein 0.5s, fadeout 0.5s 2.5s;
-            animation: fadein 0.5s, fadeout 0.5s 2.5s;
-        }
-        @-webkit-keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
-        @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
-        @-webkit-keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
-        @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
     </style>
 </head>
 <body>
-    <div id="toast">تم حفظ البيانات بنجاح ✓</div>
-    <div class="header">
-        <h1>{{ settings.school_name or 'لوحة تحكم المعلم' }}</h1>
-        <div style="display: flex; gap: 15px; align-items: center;">
-            {% if session.get('teacher_name') %}
-            <span style="color: #0d9488; font-weight: 600;">{{ session.get('teacher_name') }}</span>
-            {% endif %}
-            {% if session.get('user_role') == 'admin' %}
-            <a href="/admin" class="admin-link">لوحة المدير</a>
-            {% endif %}
-            <a href="/logout" style="color: #64748b; text-decoration: none; font-size: 0.9em;">تسجيل الخروج</a>
-        </div>
-    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <div class="card">
-        <div class="controls">
+    <header class="topbar">
+        <a class="brand" href="/teacher">
+            <span class="brand-mark" aria-hidden="true"><span></span></span>
+            <span class="brand-name">{{ settings.school_name or 'لوحة تحكم المعلم' }}</span>
+        </a>
+        <div class="topbar-actions">
+            {% if session.get('teacher_name') %}<span class="who">{{ session.get('teacher_name') }}</span>{% endif %}
+            {% if session.get('user_role') == 'admin' %}<a href="/admin" class="btn btn-outline">لوحة المدير</a>{% endif %}
+            <a href="/logout" class="btn btn-text">تسجيل الخروج</a>
+        </div>
+    </header>
+
+    <main class="page">
+        <div class="picker">
             <div>
-                <label>الصف:</label>
-                <select onchange="location.href='/teacher?grade_id='+this.value">
+                <label for="gradeSel">الصف</label>
+                <select id="gradeSel" class="select-pill" onchange="location.href='/teacher?grade_id='+this.value+'&week={{ selected_week }}'">
                     <option value="">اختر الصف...</option>
                     {% for g in grades %}<option value="{{ g.id }}" {% if selected_grade == g.id|string %}selected{% endif %}>{{ g.name }}</option>{% endfor %}
                 </select>
             </div>
             <div>
-                <label>الفصل:</label>
-                <select onchange="location.href='/teacher?grade_id={{ selected_grade }}&class_id='+this.value+'&week={{ selected_week }}'">
+                <label for="classSel">الفصل</label>
+                <select id="classSel" class="select-pill" onchange="location.href='/teacher?grade_id={{ selected_grade }}&class_id='+this.value+'&week={{ selected_week }}'">
                     <option value="">اختر الفصل...</option>
                     {% for c in classes %}<option value="{{ c.id }}" {% if selected_class == c.id|string %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
                 </select>
             </div>
             <div>
-                <label>الأسبوع الدراسي:</label>
-                <select onchange="var url='/teacher?week='+this.value; {% if selected_grade %}url+='&grade_id={{ selected_grade }}';{% endif %} {% if selected_class %}url+='&class_id={{ selected_class }}';{% endif %} location.href=url;">
+                <label for="weekSel">الأسبوع الدراسي</label>
+                <select id="weekSel" class="select-pill" onchange="var url='/teacher?week='+this.value; {% if selected_grade %}url+='&grade_id={{ selected_grade }}';{% endif %} {% if selected_class %}url+='&class_id={{ selected_class }}';{% endif %} location.href=url;">
                     {% for w in range(1, 20) %}<option value="{{ w }}" {% if selected_week == w|string %}selected{% endif %}>أسبوع {{ w }}</option>{% endfor %}
                 </select>
             </div>
-            <button class="save-btn" onclick="saveData()">حفظ الدرس والواجب ✓</button>
         </div>
-    </div>
 
-    {% if selected_class %}
-    <div class="table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th style="width: 100px;">اليوم</th>
-                    {% for p in range(1, periods_per_day + 1) %}<th>ح {{ p }}</th>{% endfor %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for d in days_order %}
-                {% set is_locked = d in locked_days %}
-                <tr {% if is_locked %}style="background: #fff1f2;"{% endif %}>
-                    <td style="background: #f8fafc; font-weight: 700; width: 100px; min-width: 100px;">
-                        {{ days_ar[d] }}
-                        {% if is_locked %}
-                        <br><span style="color: #e11d48; font-size: 0.7em;">(مغلق)</span>
-                        {% endif %}
-                    </td>
-                    {% for p in range(1, periods_per_day + 1) %}
-                    {% set cell_key = d ~ '_' ~ p %}
-                    {% set is_assigned = is_admin_user or (cell_key in assigned_keys) %}
-                    <td data-day="{{ d }}" data-period="{{ p }}" {% if not is_assigned %}class="not-assigned"{% endif %}>
-                        {% if is_locked %}
-                            <span style="color: #94a3b8; font-size: 0.8em;">هذا اليوم مغلق</span>
-                        {% elif not schedule[d][p].subject_name %}
-                            <span style="color: #cbd5e1; font-size: 0.8em;">لا توجد مادة</span>
-                        {% elif is_assigned %}
-                            <span class="fixed-sub">{{ schedule[d][p].subject_name }}</span>
-                            <textarea class="topic" 
-                                   placeholder="موضوع الدرس..." 
-                                   data-day="{{ d }}" data-period="{{ p }}"
-                                   style="min-width: 150px; width: 100%; border: 1px solid #0d9488; border-radius: 6px; padding: 8px; font-family: inherit; margin-bottom: 5px;">{{ schedule[d][p].topic }}</textarea>
-                            <textarea class="hw" 
-                                   placeholder="الواجب المنزلي..." 
-                                   data-day="{{ d }}" data-period="{{ p }}"
-                                   style="min-width: 150px; width: 100%; border: 1px solid #0d9488; border-radius: 6px; padding: 8px; font-family: inherit;">{{ schedule[d][p].homework }}</textarea>
-                        {% else %}
-                            <span class="lock-badge">🔒 للعرض فقط</span>
-                            <span class="fixed-sub" style="opacity: 0.6;">{{ schedule[d][p].subject_name }}</span>
-                            <textarea readonly
-                                   placeholder="لم يُدخل بعد..."
-                                   style="min-width:150px;width:100%;border:1px solid #e2e8f0;border-radius:6px;padding:8px;font-family:inherit;margin-bottom:5px;background:#f1f5f9;color:#475569;cursor:not-allowed;resize:none;">{{ schedule[d][p].topic }}</textarea>
-                            <textarea readonly
-                                   placeholder="لم يُدخل بعد..."
-                                   style="min-width:150px;width:100%;border:1px solid #e2e8f0;border-radius:6px;padding:8px;font-family:inherit;background:#f1f5f9;color:#475569;cursor:not-allowed;resize:none;">{{ schedule[d][p].homework }}</textarea>
-                        {% endif %}
-                    </td>
-                    {% endfor %}
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <div style="text-align: center; padding: 50px; background: white; border-radius: 12px; color: #94a3b8;">
-        <h3>يرجى اختيار الصف والفصل للبدء في تعبئة البيانات</h3>
-    </div>
-    {% endif %}
+        {% if selected_class %}
+        {% set cls_name = (classes|selectattr('id', 'equalto', selected_class|int)|map(attribute='name')|first) or '' %}
+        <div class="title-row">
+            <div>
+                <h1>الأسبوع {{ selected_week }}{% if cls_name %} — فصل {{ cls_name }}{% endif %}</h1>
+                <p>اكتب موضوع الدرس والواجب، وأرفق ملفاً للحصة إن وُجد. الملفات تُحفظ فور رفعها.</p>
+            </div>
+        </div>
+
+        <div class="grid-wrap">
+            <div class="grid-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>اليوم</th>
+                            {% for p in range(1, periods_per_day + 1) %}<th>ح {{ p }}</th>{% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in days_order %}
+                        {% set is_locked = d in locked_days %}
+                        <tr data-row-day="{{ d }}" {% if is_locked %}class="locked"{% endif %}>
+                            <td class="day">
+                                {{ days_ar[d] }}
+                                {% if is_locked %}<span class="locked-tag">مغلق</span>{% endif %}
+                                <br><span class="today-tag">اليوم</span>
+                            </td>
+                            {% for p in range(1, periods_per_day + 1) %}
+                            {% set cell_key = d ~ '_' ~ p %}
+                            {% set is_assigned = is_admin_user or (cell_key in assigned_keys) %}
+                            {% set c = schedule[d][p] %}
+                            {% if is_locked %}
+                            <td class="empty" data-day="{{ d }}" data-period="{{ p }}">
+                                {% if c.subject_name %}<span class="subj" style="color: var(--muted)">{{ c.subject_name }}</span>{% endif %}
+                                هذا اليوم مغلق
+                            </td>
+                            {% elif not c.subject_name %}
+                            <td class="empty" data-day="{{ d }}" data-period="{{ p }}">لا توجد مادة</td>
+                            {% elif is_assigned %}
+                            <td data-day="{{ d }}" data-period="{{ p }}">
+                                <span class="subj">{{ c.subject_name }}</span>
+                                <textarea class="topic" placeholder="موضوع الدرس..." aria-label="موضوع الدرس - {{ c.subject_name }}" data-day="{{ d }}" data-period="{{ p }}">{{ c.topic }}</textarea>
+                                <textarea class="hw" placeholder="الواجب المنزلي..." aria-label="الواجب - {{ c.subject_name }}" data-day="{{ d }}" data-period="{{ p }}">{{ c.homework }}</textarea>
+                                <div class="att" data-day="{{ d }}" data-period="{{ p }}"
+                                     {% if c.attachment %}data-att-id="{{ c.attachment.id }}" data-att-name="{{ c.attachment.name }}" data-att-url="{{ c.attachment.url }}" data-att-size="{{ c.attachment.size }}"{% endif %}></div>
+                            </td>
+                            {% else %}
+                            <td class="not-assigned" data-day="{{ d }}" data-period="{{ p }}">
+                                <span class="ro-tag">للعرض فقط</span>
+                                <span class="subj" style="opacity: .7">{{ c.subject_name }}</span>
+                                <textarea readonly placeholder="لم يُدخل بعد...">{{ c.topic }}</textarea>
+                                <textarea readonly placeholder="لم يُدخل بعد...">{{ c.homework }}</textarea>
+                                {% if c.attachment %}
+                                <a class="file-pill" href="{{ c.attachment.url }}" style="font-size: .78rem; padding: .3rem .75rem;">{% set nm = c.attachment.name.rsplit(' ', 1) %}<span class="file-name">{% if nm|length > 1 %}<bdi>{{ nm[0] }}</bdi> {% endif %}<bdi dir="ltr">{{ nm[-1] }}</bdi></span></a>
+                                {% endif %}
+                            </td>
+                            {% endif %}
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="savebar">
+            <span class="status" id="saveStatus">لا توجد تغييرات</span>
+            <button class="btn btn-primary save-btn" onclick="saveData()">حفظ الدرس والواجب</button>
+        </div>
+        {% else %}
+        <section class="empty-pick">
+            <h2>اختر الصف والفصل</h2>
+            <p>يظهر جدول الأسبوع هنا لتعبئة الدروس والواجبات ورفع الملفات.</p>
+        </section>
+        {% endif %}
+    </main>
+
+    <footer class="site-footer">أنشئ هذا الموقع بواسطة أحمد الفيفي</footer>
 
     <script>
+        const CLASS_ID = '{{ selected_class or "" }}';
+        const WEEK = '{{ selected_week }}';
+        const MAX_BYTES = 10 * 1024 * 1024;
+        const ALLOWED = ['pdf','doc','docx','ppt','pptx','xls','xlsx','png','jpg','jpeg','webp','txt','zip'];
+
+        /* ---------- Today's row (school timezone) ---------- */
+        (function markToday() {
+            const key = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: 'Asia/Riyadh' }).format(new Date());
+            const row = document.querySelector(`tr[data-row-day="${key}"]`);
+            if (row) row.classList.add('is-today');
+        })();
+
+        /* ---------- Toast ---------- */
+        let toastTimer;
+        function toast(msg, kind) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = 'toast show' + (kind === 'error' ? ' is-error' : kind === 'muted' ? ' is-muted' : '');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => t.classList.remove('show'), kind === 'error' ? 5000 : 3000);
+        }
         function showToast(changedCount) {
-            const toast = document.getElementById("toast");
-            if (changedCount === 0) {
-                toast.textContent = 'لا توجد تغييرات للحفظ';
-                toast.style.background = '#64748b';
-            } else {
-                toast.textContent = `✓ تم الحفظ — ${changedCount} تعديل`;
-                toast.style.background = '#059669';
-            }
-            toast.className = "show";
-            setTimeout(function(){ toast.className = toast.className.replace("show", ""); toast.style.background = ''; }, 3000);
+            changedCount === 0 ? toast('لا توجد تغييرات للحفظ', 'muted') : toast(`تم الحفظ — ${changedCount} تعديل`);
         }
+        function showErrorToast(msg) { toast(msg, 'error'); }
 
-        function showErrorToast(msg) {
-            const toast = document.getElementById("toast");
-            toast.textContent = '✗ ' + msg;
-            toast.style.background = '#dc2626';
-            toast.className = "show";
-            setTimeout(function(){ toast.className = toast.className.replace("show", ""); toast.style.background = ''; }, 5000);
-        }
+        /* ---------- Unsaved-changes tracking ---------- */
+        const statusEl = document.getElementById('saveStatus');
+        let dirty = 0;
+        document.querySelectorAll('textarea.topic, textarea.hw').forEach(t => {
+            t.dataset.orig = t.value;
+            t.addEventListener('input', () => {
+                t.classList.toggle('is-dirty', t.value !== t.dataset.orig);
+                dirty = document.querySelectorAll('textarea.is-dirty').length;
+                if (statusEl) {
+                    statusEl.textContent = dirty ? `${dirty} حقل لم يُحفظ` : 'لا توجد تغييرات';
+                    statusEl.classList.toggle('has-changes', dirty > 0);
+                }
+            });
+        });
+        window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 
+        /* ---------- Save lessons (unchanged API) ---------- */
         function saveData() {
             const entries = [];
             document.querySelectorAll('td[data-day]').forEach(td => {
                 const topic = td.querySelector('.topic');
                 const hw = td.querySelector('.hw');
                 if (topic) {
-                    entries.push({
-                        day: td.dataset.day,
-                        period: td.dataset.period,
-                        topic: topic.value || '',
-                        homework: hw ? hw.value || '' : ''
-                    });
+                    entries.push({ day: td.dataset.day, period: td.dataset.period, topic: topic.value || '', homework: hw ? hw.value || '' : '' });
                 }
             });
             if (entries.length === 0) return;
-            
+
             const btn = document.querySelector('.save-btn');
             const originalText = btn.textContent;
             btn.textContent = 'جاري الحفظ...';
             btn.disabled = true;
-            btn.style.opacity = '0.7';
 
-            // FIX 3: Add _t timestamp to bust any proxy/browser cache on the POST target URL
             const saveUrl = location.href.split('?')[0] + location.search + (location.search ? '&' : '?') + '_t=' + Date.now();
             fetch(saveUrl, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache'
-                },
-                body: JSON.stringify({entries})
+                headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+                body: JSON.stringify({ entries })
             })
-            .then(response => {
-                if (!response.ok) throw new Error('HTTP ' + response.status);
-                return response.json();
-            })
+            .then(r => { if (!r.ok && r.status !== 403) throw new Error('HTTP ' + r.status); return r.json(); })
             .then(data => {
-                if(data.status === 'success') {
+                if (data.status === 'success') {
                     showToast(data.saved);
-                    btn.textContent = data.saved > 0 ? `تم الحفظ (${data.saved} تعديل) ✓` : 'لا توجد تغييرات';
-                    btn.style.background = data.saved > 0 ? '#059669' : '#64748b';
-                    setTimeout(() => {
-                        btn.textContent = originalText;
-                        btn.style.background = '';
-                        btn.style.opacity = '1';
-                        btn.disabled = false;
-                    }, 2500);
+                    document.querySelectorAll('textarea.is-dirty').forEach(t => { t.dataset.orig = t.value; t.classList.remove('is-dirty'); });
+                    dirty = 0;
+                    if (statusEl) { statusEl.textContent = 'تم الحفظ'; statusEl.classList.remove('has-changes'); }
                 } else {
                     const msg = data.message || 'فشل الاتصال بالخادم';
                     showErrorToast(msg);
-                    btn.textContent = '✗ فشل الحفظ';
-                    btn.style.background = '#dc2626';
-                    setTimeout(() => {
-                        btn.textContent = originalText;
-                        btn.style.background = '';
-                        btn.style.opacity = '1';
-                        btn.disabled = false;
-                    }, 4000);
-                    // If session expired, redirect to login
-                    if (msg.includes('جلسة')) {
-                        setTimeout(() => window.location.href = '/login', 2000);
-                    }
+                    if (msg.includes('جلسة')) setTimeout(() => window.location.href = '/login', 2000);
                 }
             })
-            .catch(error => {
-                showErrorToast('فشل الاتصال بالخادم — يرجى المحاولة مرة أخرى');
-                btn.textContent = '✗ فشل الحفظ';
-                btn.style.background = '#dc2626';
-                setTimeout(() => {
-                    btn.textContent = originalText;
-                    btn.style.background = '';
-                    btn.style.opacity = '1';
-                    btn.disabled = false;
-                }, 4000);
-            });
+            .catch(() => showErrorToast('فشل الاتصال بالخادم — يرجى المحاولة مرة أخرى'))
+            .finally(() => { btn.textContent = originalText; btn.disabled = false; });
         }
+
+        /* ---------- Attachments ---------- */
+        const ICON_ADD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 01-7.8-7.8l8.6-8.6a3.7 3.7 0 015.2 5.2l-8.6 8.6a1.8 1.8 0 01-2.6-2.6l7.9-7.9"/></svg>';
+        const ICON_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+        const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        const fileNameHtml = n => { const i = n.lastIndexOf(' '); return `<span class="file-name">${i > 0 ? `<bdi>${esc(n.slice(0, i))}</bdi> ` : ''}<bdi dir="ltr">${esc(i > 0 ? n.slice(i + 1) : n)}</bdi></span>`; };
+        const fmtSize = b => b >= 1048576 ? (b / 1048576).toFixed(1) + ' م.ب' : Math.max(1, Math.round(b / 1024)) + ' ك.ب';
+
+        function renderAtt(box) {
+            box.classList.remove('is-busy');
+            if (box.dataset.attId) {
+                box.innerHTML = `<a class="file-pill" href="${esc(box.dataset.attUrl)}" title="${esc(box.dataset.attName)}">${fileNameHtml(box.dataset.attName)}<span class="file-size">${fmtSize(+box.dataset.attSize)}</span></a>
+                    <button type="button" class="att-remove" aria-label="حذف الملف">${ICON_X}</button>`;
+                box.querySelector('.att-remove').addEventListener('click', () => removeAtt(box));
+            } else {
+                box.innerHTML = `<button type="button" class="att-add">${ICON_ADD}<span>إرفاق ملف</span></button>
+                    <input type="file" hidden accept="${ALLOWED.map(e => '.' + e).join(',')}">`;
+                const input = box.querySelector('input');
+                box.querySelector('.att-add').addEventListener('click', () => input.click());
+                input.addEventListener('change', () => input.files[0] && uploadAtt(box, input.files[0]));
+            }
+        }
+
+        function uploadAtt(box, file) {
+            const ext = (file.name.split('.').pop() || '').toLowerCase();
+            if (!ALLOWED.includes(ext)) return showErrorToast('نوع الملف غير مدعوم. المسموح: PDF و Word و PowerPoint و Excel والصور و TXT و ZIP');
+            if (file.size > MAX_BYTES) return showErrorToast('حجم الملف أكبر من 10 ميجابايت');
+
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('class_id', CLASS_ID);
+            fd.append('week', WEEK);
+            fd.append('day', box.dataset.day);
+            fd.append('period', box.dataset.period);
+
+            box.classList.add('is-busy');
+            box.innerHTML = '<span class="att-progress">جاري الرفع... 0%</span>';
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/teacher/attachment');
+            xhr.upload.onprogress = e => {
+                if (e.lengthComputable) box.querySelector('.att-progress').textContent = `جاري الرفع... ${Math.round(e.loaded / e.total * 100)}%`;
+            };
+            xhr.onload = () => {
+                let data = {};
+                try { data = JSON.parse(xhr.responseText); } catch (e) {}
+                if (xhr.status === 200 && data.status === 'success') {
+                    Object.assign(box.dataset, { attId: data.attachment.id, attName: data.attachment.name, attUrl: data.attachment.url, attSize: data.attachment.size });
+                    renderAtt(box);
+                    toast('تم رفع الملف — يظهر للطالب عند اعتماد الأسبوع');
+                    if (window.Motion) Motion.animate(box.querySelector('.file-pill'), { scale: [0.9, 1], opacity: [0, 1] }, { duration: 0.3 });
+                } else {
+                    renderAtt(box);
+                    showErrorToast(data.message || (xhr.status === 413 ? 'حجم الملف أكبر من 10 ميجابايت' : 'فشل رفع الملف'));
+                    if (xhr.status === 302 || xhr.responseURL.includes('/login')) setTimeout(() => location.href = '/login', 1500);
+                }
+            };
+            xhr.onerror = () => { renderAtt(box); showErrorToast('فشل الاتصال بالخادم — يرجى المحاولة مرة أخرى'); };
+            xhr.send(fd);
+        }
+
+        function removeAtt(box) {
+            if (!confirm(`حذف الملف "${box.dataset.attName}"؟ لن يظهر للطلاب بعد الحذف.`)) return;
+            box.classList.add('is-busy');
+            fetch(`/teacher/attachment/${box.dataset.attId}/delete`, { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        ['attId', 'attName', 'attUrl', 'attSize'].forEach(k => delete box.dataset[k]);
+                        toast('تم حذف الملف');
+                    } else showErrorToast(data.message || 'تعذر حذف الملف');
+                    renderAtt(box);
+                })
+                .catch(() => { renderAtt(box); showErrorToast('فشل الاتصال بالخادم'); });
+        }
+
+        document.querySelectorAll('.att').forEach(box => {
+            renderAtt(box);
+            // Drag a file onto a lesson cell to attach it
+            const td = box.closest('td');
+            td.addEventListener('dragover', e => { e.preventDefault(); box.classList.add('is-dragover'); });
+            td.addEventListener('dragleave', () => box.classList.remove('is-dragover'));
+            td.addEventListener('drop', e => {
+                e.preventDefault(); box.classList.remove('is-dragover');
+                const f = e.dataTransfer.files[0];
+                if (f && !box.classList.contains('is-busy')) uploadAtt(box, f);
+            });
+        });
     </script>
-    <footer style="text-align: center; padding: 20px; color: #64748b; font-size: 0.85em; margin-top: 40px; border-top: 1px solid #e2e8f0;">
-        أنشئ هذا الموقع بواسطة أحمد الفيفي
-    </footer>
 </body>
 </html>
