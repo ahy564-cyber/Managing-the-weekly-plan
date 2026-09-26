@@ -359,10 +359,56 @@ def review_access_required(f):
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if session.get('user_role') not in ('admin', 'teacher'):
+        if session.get('user_role') not in ('admin', 'teacher', 'supervisor'):
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
+
+EDIT_ALL_ROLES = ('admin', 'supervisor')   # can edit every lesson of every class
+
+def can_edit_all():
+    return session.get('user_role') in EDIT_ALL_ROLES
+
+def actor_name():
+    """Name shown in the activity log for whoever is signed in."""
+    return session.get('teacher_name') or session.get('supervisor_name') or 'المدير'
+
+def compute_week_completion(week_int, periods_per_day=None, class_ids=None):
+    """Per-class completion for one week.
+    A lesson is complete only when it has BOTH a topic and homework; a class is complete only
+    when every lesson of that week is complete. Locked days are not counted.
+    Returns {class_id: {'total', 'done', 'missing': [...], 'by_day': {day: n_missing}}}."""
+    ppd = periods_per_day or get_periods_per_day()
+    locked = {ld.day_name for ld in LockedDay.query.filter_by(week_number=week_int).all()}
+    sq = db.session.query(Subject.class_id, Subject.day, Subject.period, Subject.name) \
+        .filter(Subject.school_id == 1, Subject.period <= ppd)
+    wq = db.session.query(WeeklyData.class_id, WeeklyData.day, WeeklyData.period,
+                          WeeklyData.subject_name, WeeklyData.topic, WeeklyData.homework) \
+        .filter(WeeklyData.week_number == week_int, WeeklyData.school_id == 1, WeeklyData.period <= ppd)
+    if class_ids is not None:
+        sq = sq.filter(Subject.class_id.in_(class_ids))
+        wq = wq.filter(WeeklyData.class_id.in_(class_ids))
+    cells = {(cid, day, p): name for cid, day, p, name in sq.all()}
+    weekly = {}
+    for cid, day, p, subj, topic, hw in wq.all():
+        weekly[(cid, day, p)] = ((topic or '').strip(), (hw or '').strip())
+        if subj:
+            cells[(cid, day, p)] = subj          # weekly swap overrides the master schedule
+    result = {}
+    for (cid, day, p) in sorted(cells, key=lambda k: (k[0], DAYS_ORDER.index(k[1]) if k[1] in DAYS_ORDER else 9, k[2])):
+        name = cells[(cid, day, p)]
+        if not name or day not in DAYS_ORDER or day in locked:
+            continue
+        r = result.setdefault(cid, {'total': 0, 'done': 0, 'missing': [], 'by_day': {d: 0 for d in DAYS_ORDER}})
+        r['total'] += 1
+        topic, hw = weekly.get((cid, day, p), ('', ''))
+        if topic and hw:
+            r['done'] += 1
+        else:
+            r['by_day'][day] += 1
+            r['missing'].append({'day': day, 'day_ar': DAYS_AR[day], 'period': p, 'subject': name,
+                                 'no_topic': not topic, 'no_hw': not hw})
+    return result
 
 def get_or_create_class(grade_name, class_name):
     grade = Grade.query.filter_by(name=grade_name).first()
@@ -384,9 +430,9 @@ def clean_display_filename(name):
     return name[-180:] if name else 'ملف'
 
 def teacher_can_edit_cell(class_id, day, period):
-    """Same rule as the lesson save: admin always; a teacher with assignments only on assigned cells."""
+    """Same rule as the lesson save: admin/supervisor always; a teacher only on assigned cells."""
     role = session.get('user_role')
-    if role == 'admin':
+    if role in EDIT_ALL_ROLES:
         return True
     if role != 'teacher':
         return False
@@ -868,13 +914,20 @@ def admin():
     locked_days = [ld.day_name for ld in LockedDay.query.filter_by(week_number=safe_week(l_week)).all()]
 
     c_week = safe_week(settings.get('current_week', '1'))
-    classes_with_topics = {cid for (cid,) in db.session.query(WeeklyData.class_id).filter(
-        WeeklyData.week_number==c_week, WeeklyData.school_id==1, WeeklyData.topic!='', WeeklyData.topic!=None).distinct().all()}
-    completed = [c for c in classes if c.id in classes_with_topics]
-    pending = [c for c in classes if c not in completed]
-    percent = (len(completed)/len(classes)*100) if classes else 0
-    total_periods = Subject.query.filter(Subject.school_id==1, Subject.period <= periods_per_day).count()
-    filled_periods = WeeklyData.query.filter(WeeklyData.week_number==c_week, WeeklyData.school_id==1, WeeklyData.period <= periods_per_day, WeeklyData.topic!='', WeeklyData.topic!=None).count()
+    # A class is "complete" only when EVERY lesson of the week has a topic and homework
+    completion = compute_week_completion(c_week, periods_per_day)
+    completed, pending = [], []
+    for c in classes:
+        info = completion.get(c.id)
+        if not info or not info['total']:
+            continue
+        c.week_total, c.week_done, c.week_missing = info['total'], info['done'], len(info['missing'])
+        c.edit_url = url_for('teacher', grade_id=c.grade_id, class_id=c.id, week=c_week)
+        (completed if info['done'] == info['total'] else pending).append(c)
+    pending.sort(key=lambda c: -c.week_missing)
+    total_periods = sum(i['total'] for i in completion.values())
+    filled_periods = sum(i['done'] for i in completion.values())
+    percent = (filled_periods / total_periods * 100) if total_periods else 0
     logs = ActivityLog.query.order_by(ActivityLog.timestamp.desc()).limit(20).all()
     teachers = TeacherAccount.query.filter_by(school_id=1).order_by(TeacherAccount.name).all()
     supervisors = SupervisorAccount.query.filter_by(school_id=1).order_by(SupervisorAccount.name).all()
@@ -1203,13 +1256,13 @@ def teacher():
         if c_id and week:
             # INTEGRITY CHECK 1: must be an authenticated session
             current_teacher_id = session.get('teacher_id')
-            teacher_name = session.get('teacher_name', session.get('user_role', ''))
+            teacher_name = actor_name()
             user_role = session.get('user_role', '')
             if not user_role:
                 return jsonify({'status': 'error', 'message': 'انتهت جلسة العمل — يرجى تسجيل الدخول مجدداً'})
 
             # ASSIGNMENT CHECK: enforce per-cell permissions for teachers
-            if user_role != 'admin' and current_teacher_id:
+            if user_role not in EDIT_ALL_ROLES and current_teacher_id:
                 authorized_pairs = {
                     (a.day, a.period)
                     for a in TeacherAssignment.query.filter_by(
@@ -1316,7 +1369,7 @@ def teacher():
                 if not commit_ok:
                     # Log the failure then return error to teacher
                     try:
-                        log_activity('teacher',
+                        log_activity(user_role,
                             f'{teacher_name} — فشل الحفظ — أسبوع {week} — {class_label}',
                             teacher_name=teacher_name, action_type='خطأ',
                             target_subject=class_label,
@@ -1331,7 +1384,7 @@ def teacher():
                     if len(change_details) > 15:
                         details_str += f' و{len(change_details) - 15} أخرى'
                     try:
-                        log_activity('teacher',
+                        log_activity(user_role,
                             f'{teacher_name} عدّل {changed_count} حصة — أسبوع {week} — {class_label}',
                             teacher_name=teacher_name, action_type='تعديل',
                             target_subject=class_label,
@@ -1371,7 +1424,7 @@ def teacher():
     locked = [ld.day_name for ld in LockedDay.query.filter_by(week_number=safe_week(week)).all()]
 
     # Compute assigned cells for the current teacher (admin bypasses all checks)
-    is_admin_user = session.get('user_role') == 'admin'
+    is_admin_user = can_edit_all()      # admin or supervisor: every lesson is editable
     assigned_keys = set()
     if not is_admin_user and c_id:
         t_id = session.get('teacher_id')
@@ -1379,8 +1432,21 @@ def teacher():
             for a in TeacherAssignment.query.filter_by(teacher_id=int(t_id), class_id=int(c_id), school_id=1).all():
                 assigned_keys.add(f"{a.day}_{a.period}")
 
+    nav_prev = nav_next = None
+    if is_admin_user and c_id:
+        ordered = sorted(Class.query.options(joinedload(Class.grade)).all(),
+                         key=lambda c: natural_key(f"{c.grade.name if c.grade else ''} {c.name}"))
+        ids = [c.id for c in ordered]
+        if int(c_id) in ids:
+            i = ids.index(int(c_id))
+            link = lambda c: {'url': url_for('teacher', grade_id=c.grade_id, class_id=c.id, week=week),
+                              'label': f"{c.grade.name} - {c.name}"}
+            nav_prev = link(ordered[i - 1]) if i > 0 else None
+            nav_next = link(ordered[i + 1]) if i < len(ordered) - 1 else None
+
     # FIX 3: No-cache headers so browser always fetches fresh data from DB
-    resp = make_response(render_template('teacher.html', grades=grades, classes=classes, schedule=schedule,
+    resp = make_response(render_template('teacher.html', nav_prev=nav_prev, nav_next=nav_next,
+                                         user_role=session.get('user_role'), grades=grades, classes=classes, schedule=schedule,
                                          selected_grade=g_id, selected_class=c_id, selected_week=week,
                                          days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings, locked_days=locked,
                                          assigned_keys=assigned_keys, is_admin_user=is_admin_user,
@@ -1637,7 +1703,7 @@ def upload_attachment():
         return jsonify({'status': 'error', 'message': 'الفصل غير موجود'}), 404
     if not teacher_can_edit_cell(class_id, day, period):
         return jsonify({'status': 'error', 'message': 'غير مصرح — هذه المادة ليست مخصصة لك'}), 403
-    if session.get('user_role') != 'admin' and LockedDay.query.filter_by(week_number=week_int, day_name=day).first():
+    if not can_edit_all() and LockedDay.query.filter_by(week_number=week_int, day_name=day).first():
         return jsonify({'status': 'error', 'message': 'هذا اليوم مغلق من الإدارة'}), 403
 
     f = request.files.get('file')
@@ -1703,7 +1769,7 @@ def upload_attachment():
     if old_key and old_key != new_key:
         delete_stored_objects([old_key])
 
-    actor = session.get('teacher_name') or 'المدير'
+    actor = actor_name()
     log_activity(session.get('user_role'), f'{actor} {"استبدل" if replaced else "أرفق"} ملف "{display_name}" — {DAYS_AR.get(day, day)} ح{period} — أسبوع {week_int}',
                  teacher_name=actor, action_type='مرفق', target_subject=f'فصل {class_id}',
                  description=f'مرفق: {display_name} ({size // 1024} KB) | {DAYS_AR.get(day, day)} ح{period} | أسبوع {week_int}')
@@ -1717,14 +1783,14 @@ def delete_attachment(att_id):
         return jsonify({'status': 'error', 'message': 'الملف غير موجود'}), 404
     if not teacher_can_edit_cell(att.class_id, att.day, att.period):
         return jsonify({'status': 'error', 'message': 'غير مصرح بحذف هذا الملف'}), 403
-    if session.get('user_role') != 'admin' and LockedDay.query.filter_by(week_number=att.week_number, day_name=att.day).first():
+    if not can_edit_all() and LockedDay.query.filter_by(week_number=att.week_number, day_name=att.day).first():
         return jsonify({'status': 'error', 'message': 'هذا اليوم مغلق من الإدارة'}), 403
     name, day, period, week_int, class_id = att.original_name, att.day, att.period, att.week_number, att.class_id
     key = att.storage_key
     db.session.delete(att)
     db.session.commit()
     delete_stored_objects([key])
-    actor = session.get('teacher_name') or 'المدير'
+    actor = actor_name()
     log_activity(session.get('user_role'), f'{actor} حذف ملف "{name}" — {DAYS_AR.get(day, day)} ح{period} — أسبوع {week_int}',
                  teacher_name=actor, action_type='مرفق', target_subject=f'فصل {class_id}')
     return jsonify({'status': 'success'})
@@ -1769,45 +1835,39 @@ def too_large(_e):
 @app.route('/admin/audit_report')
 @review_access_required
 def audit_report():
-    current = db.session.get(Setting, 'current_week')
-    week_int = safe_week(request.args.get('week', current.value if current else '1'))
-    week = str(week_int)
-    periods_per_day = get_periods_per_day()
-    classes = Class.query.options(joinedload(Class.grade)).all()
-    report = []
-    class_status = []
+    settings = {x.key: x.value for x in Setting.query.all()}
+    week_int = safe_week(request.args.get('week', settings.get('current_week', '1')))
+    periods_per_day = get_periods_per_day(settings)
+    classes = sorted(Class.query.options(joinedload(Class.grade)).all(),
+                     key=lambda c: natural_key(f"{c.grade.name if c.grade else ''} {c.name}"))
     published_ids = {wp.class_id for wp in WeekPublication.query.filter_by(week_number=week_int).all()}
-    subjects_by_class = {}
-    for subj in Subject.query.filter(Subject.school_id == 1, Subject.period <= periods_per_day) \
-            .order_by(Subject.day, Subject.period).all():
-        subjects_by_class.setdefault(subj.class_id, []).append(subj)
-    filled = {
-        (w.class_id, w.day, w.period)
-        for w in WeeklyData.query.filter_by(week_number=week_int, school_id=1).all()
-        if w.topic and w.homework
-    }
-    classes = sorted(classes, key=lambda c: natural_key(f"{c.grade.name if c.grade else ''} {c.name}"))
+    completion = compute_week_completion(week_int, periods_per_day)
+    locked = [ld.day_name for ld in LockedDay.query.filter_by(week_number=week_int).all()]
+    class_status = []
     for c in classes:
-        subjects = subjects_by_class.get(c.id, [])
-        missing = 0
-        for subj in subjects:
-            if (c.id, subj.day, subj.period) not in filled:
-                missing += 1
-                report.append({
-                    'subject': subj.name,
-                    'grade': f"{c.grade.name} - {c.name}",
-                    'day': DAYS_AR.get(subj.day, subj.day),
-                    'period': subj.period
-                })
+        info = completion.get(c.id, {'total': 0, 'done': 0, 'missing': [], 'by_day': {d: 0 for d in DAYS_ORDER}})
         class_status.append({
-            'id': c.id,
+            'id': c.id, 'grade_id': c.grade_id,
             'name': f"{c.grade.name} - {c.name}" if c.grade else c.name,
-            'total': len(subjects),
-            'missing': missing,
-            'published': c.id in published_ids
+            'total': info['total'], 'done': info['done'], 'missing': len(info['missing']),
+            'missing_cells': info['missing'], 'by_day': info['by_day'],
+            'complete': info['total'] > 0 and info['done'] == info['total'],
+            'percent': round(info['done'] * 100 / info['total']) if info['total'] else 0,
+            'published': c.id in published_ids,
+            'edit_url': url_for('teacher', grade_id=c.grade_id, class_id=c.id, week=week_int),
         })
-    return render_template('audit_report.html', report=report, week=week, class_status=class_status,
-                            user_role=session.get('user_role'), display_name=session.get('supervisor_name'))
+    total = sum(x['total'] for x in class_status)
+    done = sum(x['done'] for x in class_status)
+    summary = {
+        'classes': len([x for x in class_status if x['total']]),
+        'complete_classes': len([x for x in class_status if x['complete']]),
+        'lessons_total': total, 'lessons_done': done, 'lessons_missing': total - done,
+        'percent': round(done * 100 / total) if total else 0,
+        'missing_by_day': {d: sum(x['by_day'][d] for x in class_status) for d in DAYS_ORDER},
+    }
+    return render_template('audit_report.html', week=str(week_int), class_status=class_status, summary=summary,
+                           settings=settings, days_order=DAYS_ORDER, days_ar=DAYS_AR, locked_days=locked,
+                           user_role=session.get('user_role'), display_name=session.get('supervisor_name'))
 
 @app.route('/admin/publish_week', methods=['POST'])
 @review_access_required

@@ -68,6 +68,33 @@
 
         .mobile-bar { display: none; }
 
+        /* ---- Completion (saved state) ---- */
+        .title-row { align-items: flex-end; }
+        .class-nav { display: flex; gap: .5rem; flex-wrap: wrap; }
+        .progress-card { display: flex; align-items: center; justify-content: space-between; gap: 1rem 1.5rem; flex-wrap: wrap;
+            background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-panel); padding: 1rem 1.25rem; margin-bottom: 1rem; }
+        .pc-main { flex: 1 1 320px; display: grid; gap: .45rem; }
+        .pc-status { font-weight: 900; font-size: 1.15rem; }
+        .pc-status.is-done { color: var(--ok); }
+        .pc-bar { height: 10px; border-radius: var(--r-pill); background: var(--hw-wash); overflow: hidden; }
+        .pc-bar span { display: block; height: 100%; width: 0; background: var(--ink); border-radius: inherit; transition: width .4s var(--ease-out); }
+        .progress-card.is-done .pc-bar span { background: var(--ok); }
+        .pc-detail { font-size: .85rem; color: var(--muted); font-weight: 600; }
+        .pc-actions { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+        .pc-toggle { display: flex; align-items: center; gap: .45rem; font-weight: 700; font-size: .9rem; cursor: pointer; }
+        .pc-toggle input { width: 18px; height: 18px; accent-color: var(--ink); }
+        .progress-card.is-done #nextMissing { display: none; }
+
+        td.is-missing { border: 1.5px dashed var(--hw); }
+        td.is-missing .miss-tag { display: inline-flex; }
+        .miss-tag { display: none; align-items: center; gap: .3rem; margin-bottom: .35rem; padding: .05rem .55rem; border-radius: var(--r-pill);
+            background: var(--hw-wash); color: var(--hw); font-size: .72rem; font-weight: 800; }
+        td.is-complete .done-tag { display: inline-flex; }
+        .done-tag { display: none; margin-bottom: .35rem; padding: .05rem .55rem; border-radius: var(--r-pill); background: #e3f4ea; color: var(--ok); font-size: .72rem; font-weight: 800; }
+        body.missing-only td.mine.is-complete { opacity: .35; }
+        td.flash { animation: flash 1.2s var(--ease-out); }
+        @keyframes flash { 0%, 40% { box-shadow: 0 0 0 4px var(--mark); } 100% { box-shadow: 0 0 0 0 transparent; } }
+
         /* ---- Phones: one day at a time, each lesson is a card ---- */
         @media (max-width: 760px) {
             .page { padding: 1rem .75rem 7rem; }
@@ -109,6 +136,12 @@
                 content: "لا توجد حصص مخصصة لك في هذا اليوم"; display: block; padding: 2rem 1rem; text-align: center;
                 color: var(--muted); font-weight: 700; background: var(--paper); border: 1.5px dashed var(--line); border-radius: var(--r-card); }
             .savebar { width: calc(100% - 1.5rem); justify-content: space-between; bottom: .75rem; }
+            .title-row { flex-direction: column; align-items: stretch; }
+            .class-nav .btn { flex: 1; font-size: .85rem; padding-inline: .6rem; }
+            .progress-card { padding: .9rem; border-radius: 18px; }
+            .pc-actions { width: 100%; }
+            .pc-actions .btn { flex: 1; }
+            body.missing-only td.mine.is-complete { display: none; }
         }
     </style>
 </head>
@@ -121,8 +154,10 @@
             <span class="brand-name">{{ settings.school_name or 'لوحة تحكم المعلم' }}</span>
         </a>
         <div class="topbar-actions">
-            {% if session.get('teacher_name') %}<span class="who">{{ session.get('teacher_name') }}</span>{% endif %}
-            {% if session.get('user_role') == 'admin' %}<a href="/admin" class="btn btn-outline">لوحة المدير</a>{% endif %}
+            {% set who = session.get('teacher_name') or session.get('supervisor_name') %}
+            {% if who %}<span class="who">{{ who }}{% if user_role == 'supervisor' %} · مشرف{% endif %}</span>{% endif %}
+            {% if user_role in ('admin', 'supervisor') %}<a href="/admin/audit_report?week={{ selected_week }}" class="btn btn-outline">متابعة الأسبوع</a>{% endif %}
+            {% if user_role == 'admin' %}<a href="/admin" class="btn btn-text">لوحة المدير</a>{% endif %}
             <a href="/logout" class="btn btn-text">تسجيل الخروج</a>
         </div>
     </header>
@@ -153,12 +188,31 @@
 
         {% if selected_class %}
         {% set cls_name = (classes|selectattr('id', 'equalto', selected_class|int)|map(attribute='name')|first) or '' %}
+        {% set grade_label = (grades|selectattr('id', 'equalto', selected_grade|int)|map(attribute='name')|first) if selected_grade else '' %}
         <div class="title-row">
             <div>
-                <h1>الأسبوع {{ selected_week }}{% if cls_name %} — فصل {{ cls_name }}{% endif %}</h1>
-                <p>اكتب موضوع الدرس والواجب، وأرفق ملفاً للحصة إن وُجد. الملفات تُحفظ فور رفعها.</p>
+                <h1>{% if grade_label %}{{ grade_label }} - {% endif %}{{ cls_name }} · الأسبوع {{ selected_week }}</h1>
+                <p>{% if is_admin_user %}يمكنك مراجعة جميع الحصص وتعديلها. الحصة الناقصة تحتاج موضوع الدرس والواجب معاً.{% else %}اكتب موضوع الدرس والواجب، وأرفق ملفاً للحصة إن وُجد. الملفات تُحفظ فور رفعها.{% endif %}</p>
             </div>
+            {% if nav_prev or nav_next %}
+            <nav class="class-nav" aria-label="التنقل بين الفصول">
+                {% if nav_prev %}<a class="btn btn-outline" href="{{ nav_prev.url }}" title="{{ nav_prev.label }}">→ الفصل السابق</a>{% endif %}
+                {% if nav_next %}<a class="btn btn-outline" href="{{ nav_next.url }}" title="{{ nav_next.label }}">الفصل التالي ←</a>{% endif %}
+            </nav>
+            {% endif %}
         </div>
+
+        <section class="progress-card" id="progressCard" aria-live="polite">
+            <div class="pc-main">
+                <div class="pc-status" id="pcStatus"></div>
+                <div class="pc-bar"><span id="pcBar"></span></div>
+                <div class="pc-detail" id="pcDetail"></div>
+            </div>
+            <div class="pc-actions">
+                <button type="button" class="btn btn-primary" id="nextMissing">الحصة الناقصة التالية</button>
+                <label class="pc-toggle"><input type="checkbox" id="missingOnly"> إبراز الناقص فقط</label>
+            </div>
+        </section>
 
         <div class="mobile-bar">
             <div class="day-tabs" role="tablist" aria-label="أيام الأسبوع">
@@ -192,14 +246,15 @@
                             {% set is_assigned = is_admin_user or (cell_key in assigned_keys) %}
                             {% set c = schedule[d][p] %}
                             {% if is_locked %}
-                            <td class="empty" data-day="{{ d }}" data-period="{{ p }}" data-label="ح {{ p }}">
+                            <td id="cell-{{ d }}-{{ p }}" class="empty" data-day="{{ d }}" data-period="{{ p }}" data-label="ح {{ p }}">
                                 {% if c.subject_name %}<span class="subj" style="color: var(--muted)">{{ c.subject_name }}</span>{% endif %}
                                 هذا اليوم مغلق
                             </td>
                             {% elif not c.subject_name %}
-                            <td class="empty" data-day="{{ d }}" data-period="{{ p }}" data-label="ح {{ p }}">لا توجد مادة</td>
+                            <td id="cell-{{ d }}-{{ p }}" class="empty" data-day="{{ d }}" data-period="{{ p }}" data-label="ح {{ p }}">لا توجد مادة</td>
                             {% elif is_assigned %}
-                            <td data-day="{{ d }}" data-period="{{ p }}" data-label="ح {{ p }}" class="mine">
+                            <td id="cell-{{ d }}-{{ p }}" data-day="{{ d }}" data-period="{{ p }}" data-label="ح {{ p }}" class="mine">
+                                <span class="miss-tag"></span><span class="done-tag">مكتملة ✓</span>
                                 <span class="subj">{{ c.subject_name }}</span>
                                 <textarea class="topic" placeholder="موضوع الدرس..." aria-label="موضوع الدرس - {{ c.subject_name }}" data-day="{{ d }}" data-period="{{ p }}">{{ c.topic }}</textarea>
                                 <textarea class="hw" placeholder="الواجب المنزلي..." aria-label="الواجب - {{ c.subject_name }}" data-day="{{ d }}" data-period="{{ p }}">{{ c.homework }}</textarea>
@@ -207,7 +262,7 @@
                                      {% if c.attachment %}data-att-id="{{ c.attachment.id }}" data-att-name="{{ c.attachment.name }}" data-att-url="{{ c.attachment.url }}" data-att-size="{{ c.attachment.size }}"{% endif %}></div>
                             </td>
                             {% else %}
-                            <td class="not-assigned" data-day="{{ d }}" data-period="{{ p }}" data-label="ح {{ p }}">
+                            <td id="cell-{{ d }}-{{ p }}" class="not-assigned" data-day="{{ d }}" data-period="{{ p }}" data-label="ح {{ p }}">
                                 <span class="ro-tag">للعرض فقط</span>
                                 <span class="subj" style="opacity: .7">{{ c.subject_name }}</span>
                                 <textarea readonly placeholder="لم يُدخل بعد...">{{ c.topic }}</textarea>
@@ -307,6 +362,72 @@
         });
         window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 
+        /* ---------- Completion: a lesson is complete when its SAVED topic and homework are both filled ---------- */
+        const DAY_AR = {{ days_ar|tojson }};
+        function refreshCompletion() {
+            const cells = [...document.querySelectorAll('td.mine')];
+            let done = 0;
+            const missingByDay = {};
+            cells.forEach(td => {
+                const t = td.querySelector('textarea.topic'), h = td.querySelector('textarea.hw');
+                const noTopic = !(t && t.dataset.orig.trim()), noHw = !(h && h.dataset.orig.trim());
+                const complete = !noTopic && !noHw;
+                td.classList.toggle('is-complete', complete);
+                td.classList.toggle('is-missing', !complete);
+                const tag = td.querySelector('.miss-tag');
+                if (tag) tag.textContent = noTopic && noHw ? 'ناقص: الموضوع والواجب' : noTopic ? 'ناقص: الموضوع' : 'ناقص: الواجب';
+                if (complete) done++; else missingByDay[td.dataset.day] = (missingByDay[td.dataset.day] || 0) + 1;
+            });
+            const total = cells.length, missing = total - done;
+            const card = document.getElementById('progressCard');
+            if (!card) return;
+            card.hidden = total === 0;
+            const isDone = total > 0 && missing === 0;
+            card.classList.toggle('is-done', isDone);
+            const st = document.getElementById('pcStatus');
+            st.classList.toggle('is-done', isDone);
+            st.textContent = isDone ? 'مكتمل ✓ جميع الحصص محضّرة' : `ناقص ${missing} من ${total} حصة`;
+            document.getElementById('pcBar').style.width = (total ? done * 100 / total : 0) + '%';
+            const parts = Object.keys(missingByDay).map(d => `${DAY_AR[d]} ${missingByDay[d]}`);
+            document.getElementById('pcDetail').textContent = isDone
+                ? `${done} حصة مكتملة (موضوع + واجب)`
+                : `مكتمل ${done} من ${total} · النقص في: ${parts.join('، ')}`;
+        }
+        refreshCompletion();
+
+        /* ---------- Links from the follow-up report: #cell-Sunday-2 or #day-Sunday ---------- */
+        function openFromHash() {
+            const h = decodeURIComponent(location.hash.slice(1));
+            let m = h.match(/^cell-(\w+)-(\d+)$/), day, target;
+            if (m) { day = m[1]; target = document.getElementById(h); }
+            else if ((m = h.match(/^day-(\w+)$/))) { day = m[1]; target = document.querySelector(`tr[data-row-day="${day}"] td.mine.is-missing`) || document.querySelector(`tr[data-row-day="${day}"]`); }
+            if (!day) return;
+            if (typeof selectDay === 'function') selectDay(day);
+            if (target) {
+                setTimeout(() => {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+                    if (target.tagName === 'TD') { target.classList.remove('flash'); void target.offsetWidth; target.classList.add('flash'); }
+                }, 150);
+            }
+        }
+        openFromHash();
+        window.addEventListener('hashchange', openFromHash);
+
+        document.getElementById('missingOnly')?.addEventListener('change', e => document.body.classList.toggle('missing-only', e.target.checked));
+        let missCursor = -1;
+        document.getElementById('nextMissing')?.addEventListener('click', () => {
+            const list = [...document.querySelectorAll('td.mine.is-missing')];
+            if (!list.length) return;
+            missCursor = (missCursor + 1) % list.length;
+            const td = list[missCursor];
+            if (typeof selectDay === 'function' && window.matchMedia('(max-width: 760px)').matches) selectDay(td.dataset.day);
+            td.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+            td.classList.remove('flash'); void td.offsetWidth; td.classList.add('flash');
+            const first = td.querySelector('textarea.topic');
+            const target = first && !first.value.trim() ? first : td.querySelector('textarea.hw');
+            setTimeout(() => target && target.focus({ preventScroll: true }), 450);
+        });
+
         /* ---------- Save lessons (unchanged API) ---------- */
         function saveData() {
             // SPEED: only the lessons that were actually edited are sent
@@ -336,6 +457,7 @@
                 if (data.status === 'success') {
                     showToast(data.saved);
                     document.querySelectorAll('textarea.is-dirty').forEach(t => { t.dataset.orig = t.value; t.classList.remove('is-dirty'); });
+                    refreshCompletion();
                     dirty = 0;
                     if (statusEl) { statusEl.textContent = 'تم الحفظ'; statusEl.classList.remove('has-changes'); }
                 } else {

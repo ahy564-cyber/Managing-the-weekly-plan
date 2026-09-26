@@ -590,15 +590,15 @@
             <div class="stats-row">
                 <div class="stat-box">
                     <div class="stat-num" style="color:var(--teal);" data-testid="text-completion-percent">{{ completion_percent }}%</div>
-                    <div class="stat-lbl">نسبة اكتمال الخطط</div>
+                    <div class="stat-lbl">نسبة إنجاز الحصص</div>
                 </div>
                 <div class="stat-box">
-                    <div class="stat-num" style="color:var(--emerald);" data-testid="text-filled-periods">{{ filled_periods }}</div>
-                    <div class="stat-lbl">حصص مكتملة</div>
+                    <div class="stat-num" style="color:var(--emerald);" data-testid="text-filled-periods">{{ filled_periods }} / {{ total_periods }}</div>
+                    <div class="stat-lbl">حصص مكتملة (موضوع + واجب)</div>
                 </div>
                 <div class="stat-box">
-                    <div class="stat-num" style="color:var(--gold);">{{ total_periods }}</div>
-                    <div class="stat-lbl">إجمالي الحصص</div>
+                    <div class="stat-num" style="color:var(--gold);">{{ completed_classes|length }} / {{ completed_classes|length + pending_classes|length }}</div>
+                    <div class="stat-lbl">فصول مكتملة بالكامل</div>
                 </div>
             </div>
             <a href="/admin/audit_report?week={{ settings.current_week }}">
@@ -613,17 +613,17 @@
                         {% if completed_classes|length == 0 %}
                         <div style="color:#94a3b8;text-align:center;">لا توجد فصول مكتملة بعد</div>
                         {% else %}
-                        {% for c in completed_classes %}<div style="padding:2px 0;border-bottom:1px solid #dcfce7;">{{ c.grade.name }} – {{ c.name }}</div>{% endfor %}
+                        {% for c in completed_classes %}<div style="padding:2px 0;border-bottom:1px solid #dcfce7;">{{ c.grade.name }} – {{ c.name }} <span style="color:#15803d;">({{ c.week_total }} حصة ✓)</span></div>{% endfor %}
                         {% endif %}
                     </div>
                 </div>
                 <div>
-                    <h3 style="color:#991b1b;"><i class="fas fa-clock" style="margin-left:4px;"></i>قيد الانتظار ({{ pending_classes|length }})</h3>
-                    <div style="max-height:120px;overflow-y:auto;background:#fef2f2;padding:10px;border-radius:8px;font-size:0.82em;border:1px solid #fecaca;">
+                    <h3 style="color:#991b1b;"><i class="fas fa-clock" style="margin-left:4px;"></i>ناقص ({{ pending_classes|length }}) — اضغط لفتح الجدول</h3>
+                    <div style="max-height:180px;overflow-y:auto;background:#fef2f2;padding:10px;border-radius:8px;font-size:0.82em;border:1px solid #fecaca;">
                         {% if pending_classes|length == 0 %}
                         <div style="color:#94a3b8;text-align:center;">جميع الفصول مكتملة 🎉</div>
                         {% else %}
-                        {% for c in pending_classes %}<div style="padding:2px 0;border-bottom:1px solid #fee2e2;">{{ c.grade.name }} – {{ c.name }}</div>{% endfor %}
+                        {% for c in pending_classes %}<a href="{{ c.edit_url }}" style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid #fee2e2;color:inherit;text-decoration:none;"><span>{{ c.grade.name }} – {{ c.name }}</span><span style="color:#b91c1c;font-weight:700;white-space:nowrap;">ناقص {{ c.week_missing }} من {{ c.week_total }}</span></a>{% endfor %}
                         {% endif %}
                     </div>
                 </div>
