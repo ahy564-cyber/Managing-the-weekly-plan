@@ -2,7 +2,9 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import joinedload, deferred
 import mimetypes
-from sqlalchemy import func
+import tempfile
+import uuid
+from sqlalchemy import func, insert, update
 import os
 import json
 import io
@@ -40,12 +42,36 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-# Lesson attachments are stored in PostgreSQL (not on disk) because the deployment
-# filesystem is not persistent and several gunicorn workers may serve requests.
-MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024  # 10 MB per file
-ALLOWED_ATTACHMENT_EXT = {'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx',
-                          'png', 'jpg', 'jpeg', 'webp', 'txt', 'zip'}
-app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024
+# Lesson attachments: stored in Replit Object Storage when a bucket is configured
+# (large files, does not grow the database). Without a bucket they fall back to
+# PostgreSQL with a smaller limit. The deployment disk itself is never used because
+# it is not persistent.
+MB = 1024 * 1024
+OBJECT_STORAGE_MAX_MB = max(1, int(os.getenv('ATTACHMENT_MAX_MB', '50')))
+DB_STORAGE_MAX_MB = 10
+ALLOWED_ATTACHMENT_EXT = {'pdf', 'doc', 'docx', 'ppt', 'pptx', 'pps', 'ppsx', 'xls', 'xlsx', 'csv',
+                          'png', 'jpg', 'jpeg', 'webp', 'gif', 'txt', 'zip', 'rar',
+                          'mp3', 'm4a', 'wav', 'mp4', 'mov', 'webm'}
+app.config['MAX_CONTENT_LENGTH'] = (max(OBJECT_STORAGE_MAX_MB, DB_STORAGE_MAX_MB) + 5) * MB
+
+# Static files (CSS) are cached by the browser; the ?v= version changes whenever the file changes.
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 60 * 60 * 24 * 30
+try:
+    ASSET_VERSION = str(int(os.path.getmtime(os.path.join(app.root_path, 'static', 'css', 'plan.css'))))
+except OSError:
+    ASSET_VERSION = '1'
+
+@app.context_processor
+def inject_asset_version():
+    return {'asset_version': ASSET_VERSION}
+
+def natural_key(text):
+    """Sort 'Grade 4' before 'Grade 10'."""
+    return [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', str(text or ''))]
+
+@app.template_filter('natsort')
+def natsort_filter(items, attribute='name'):
+    return sorted(items, key=lambda x: natural_key(getattr(x, attribute, x)))
 
 DAYS_AR = {'Sunday': 'الأحد', 'Monday': 'الاثنين', 'Tuesday': 'الثلاثاء', 'Wednesday': 'الأربعاء', 'Thursday': 'الخميس'}
 DAYS_ORDER = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday']
@@ -154,7 +180,8 @@ class PeriodAttachment(db.Model):
     original_name = db.Column(db.String(255), nullable=False)
     mimetype = db.Column(db.String(120), nullable=True)
     size_bytes = db.Column(db.Integer, nullable=False, default=0)
-    data = deferred(db.Column(db.LargeBinary, nullable=False))
+    data = deferred(db.Column(db.LargeBinary, nullable=True))      # used when Object Storage is not configured
+    storage_key = db.Column(db.String(400), nullable=True)          # object name in Replit Object Storage
     teacher_id = db.Column(db.Integer, nullable=True)
     uploaded_at = db.Column(db.DateTime, default=utc_now)
     school_id = db.Column(db.Integer, nullable=True, server_default='1')
@@ -211,6 +238,11 @@ _tables_ensured = False
 
 @app.before_request
 def ensure_tables():
+    """Fallback only: migrations normally run once at startup (see bottom of file)."""
+    if not _tables_ensured:
+        run_startup_migrations()
+
+def run_startup_migrations():
     global _tables_ensured
     if _tables_ensured:
         return
@@ -282,6 +314,30 @@ def ensure_tables():
         db.session.commit()
     except Exception:
         db.session.rollback()
+    # Attachments: allow Object Storage rows (no bytes in the database)
+    try:
+        db.session.execute(db.text("ALTER TABLE period_attachment ADD COLUMN IF NOT EXISTS storage_key VARCHAR(400)"))
+        db.session.execute(db.text("ALTER TABLE period_attachment ALTER COLUMN data DROP NOT NULL"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+    # Indexes for the pages that load on every login / save
+    for stmt in (
+        "CREATE INDEX IF NOT EXISTS ix_weekly_data_class_week ON weekly_data (class_id, week_number)",
+        "CREATE INDEX IF NOT EXISTS ix_weekly_data_week ON weekly_data (week_number)",
+        "CREATE INDEX IF NOT EXISTS ix_subject_class ON subject (class_id)",
+        "CREATE INDEX IF NOT EXISTS ix_teacher_assignment_teacher ON teacher_assignment (teacher_id)",
+        "CREATE INDEX IF NOT EXISTS ix_teacher_assignment_class ON teacher_assignment (class_id)",
+        "CREATE INDEX IF NOT EXISTS ix_week_publication_class ON week_publication (class_id)",
+        "CREATE INDEX IF NOT EXISTS ix_activity_log_timestamp ON activity_log (timestamp DESC)",
+        "CREATE INDEX IF NOT EXISTS ix_period_attachment_class_week ON period_attachment (class_id, week_number)",
+        "CREATE INDEX IF NOT EXISTS ix_locked_day_week ON locked_day (week_number)",
+    ):
+        try:
+            db.session.execute(db.text(stmt))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
 def admin_required(f):
     @wraps(f)
@@ -345,6 +401,53 @@ def teacher_can_edit_cell(class_id, day, period):
 def attachment_payload(att):
     return {'id': att.id, 'name': att.original_name, 'size': att.size_bytes,
             'url': url_for('download_attachment', att_id=att.id)}
+
+_object_client = None
+_object_checked = False
+
+def object_storage():
+    """Returns a Replit Object Storage client when a bucket is configured, else None (cached)."""
+    global _object_client, _object_checked
+    if _object_checked:
+        return _object_client
+    _object_checked = True
+    if os.getenv('ATTACHMENT_STORAGE', 'auto').lower() == 'db':
+        return None
+    try:
+        import requests
+        r = requests.get('http://127.0.0.1:1106/object-storage/default-bucket', timeout=2)
+        if r.status_code != 200 or not (r.json() or {}).get('bucketId'):
+            return None
+        from replit.object_storage import Client
+        _object_client = Client()
+    except Exception:
+        _object_client = None
+    return _object_client
+
+def attachment_limit_mb():
+    return OBJECT_STORAGE_MAX_MB if object_storage() else DB_STORAGE_MAX_MB
+
+def delete_stored_objects(keys):
+    """Best-effort removal of files from Object Storage (never blocks the request)."""
+    client = object_storage()
+    if not client:
+        return
+    for key in keys:
+        if not key:
+            continue
+        try:
+            client.delete(key, ignore_not_found=True)
+        except Exception:
+            traceback.print_exc()
+
+def purge_class_attachments(class_ids):
+    """Deletes attachment rows (and their stored files) for classes that are being removed."""
+    if not class_ids:
+        return
+    keys = [k for (k,) in db.session.query(PeriodAttachment.storage_key)
+            .filter(PeriodAttachment.class_id.in_(class_ids), PeriodAttachment.storage_key.isnot(None)).all()]
+    PeriodAttachment.query.filter(PeriodAttachment.class_id.in_(class_ids)).delete(synchronize_session=False)
+    delete_stored_objects(keys)
 
 def add_attachments_to_schedule(schedule, class_id, week_int):
     """Adds an 'attachment' dict to each schedule cell that has a file (file bytes are not loaded)."""
@@ -456,7 +559,7 @@ def admin():
                         if class_ids:
                             TeacherAssignment.query.filter(TeacherAssignment.class_id.in_(class_ids)).delete(synchronize_session=False)
                             WeekPublication.query.filter(WeekPublication.class_id.in_(class_ids)).delete(synchronize_session=False)
-                            PeriodAttachment.query.filter(PeriodAttachment.class_id.in_(class_ids)).delete(synchronize_session=False)
+                            purge_class_attachments(class_ids)
                         for cls_obj in grade.classes:
                             db.session.execute(db.delete(Subject).where(Subject.class_id == cls_obj.id))
                             db.session.execute(db.delete(WeeklyData).where(WeeklyData.class_id == cls_obj.id))
@@ -474,7 +577,7 @@ def admin():
                     if class_ids:
                         TeacherAssignment.query.filter(TeacherAssignment.class_id.in_(class_ids)).delete(synchronize_session=False)
                         WeekPublication.query.filter(WeekPublication.class_id.in_(class_ids)).delete(synchronize_session=False)
-                        PeriodAttachment.query.filter(PeriodAttachment.class_id.in_(class_ids)).delete(synchronize_session=False)
+                        purge_class_attachments(class_ids)
                         Subject.query.filter(Subject.class_id.in_(class_ids)).delete(synchronize_session=False)
                         WeeklyData.query.filter(WeeklyData.class_id.in_(class_ids)).delete(synchronize_session=False)
                         Class.query.filter(Class.id.in_(class_ids)).delete(synchronize_session=False)
@@ -517,7 +620,7 @@ def admin():
                     class_id = int(cid)
                     TeacherAssignment.query.filter_by(class_id=class_id).delete(synchronize_session=False)
                     WeekPublication.query.filter_by(class_id=class_id).delete(synchronize_session=False)
-                    PeriodAttachment.query.filter_by(class_id=class_id).delete(synchronize_session=False)
+                    purge_class_attachments([class_id])
                     db.session.execute(db.delete(Subject).where(Subject.class_id == class_id))
                     db.session.execute(db.delete(WeeklyData).where(WeeklyData.class_id == class_id))
                     cls = db.session.get(Class, class_id)
@@ -736,8 +839,9 @@ def admin():
             flash(f"خطأ: {e}")
         return redirect(url_for('admin', **request.args))
 
-    grades = Grade.query.order_by(Grade.name).all()
-    classes = Class.query.options(joinedload(Class.grade)).order_by(Class.name).all()
+    grades = sorted(Grade.query.all(), key=lambda g: natural_key(g.name))
+    classes = sorted(Class.query.options(joinedload(Class.grade)).all(),
+                     key=lambda c: natural_key(f"{c.grade.name if c.grade else ''} {c.name}"))
     settings = {s.key: s.value for s in Setting.query.all()}
     periods_per_day = get_periods_per_day(settings)
 
@@ -764,7 +868,9 @@ def admin():
     locked_days = [ld.day_name for ld in LockedDay.query.filter_by(week_number=safe_week(l_week)).all()]
 
     c_week = safe_week(settings.get('current_week', '1'))
-    completed = [c for c in classes if WeeklyData.query.filter(WeeklyData.class_id==c.id, WeeklyData.week_number==c_week, WeeklyData.school_id==1, WeeklyData.topic!='', WeeklyData.topic!=None).first()]
+    classes_with_topics = {cid for (cid,) in db.session.query(WeeklyData.class_id).filter(
+        WeeklyData.week_number==c_week, WeeklyData.school_id==1, WeeklyData.topic!='', WeeklyData.topic!=None).distinct().all()}
+    completed = [c for c in classes if c.id in classes_with_topics]
     pending = [c for c in classes if c not in completed]
     percent = (len(completed)/len(classes)*100) if classes else 0
     total_periods = Subject.query.filter(Subject.school_id==1, Subject.period <= periods_per_day).count()
@@ -773,10 +879,12 @@ def admin():
     teachers = TeacherAccount.query.filter_by(school_id=1).order_by(TeacherAccount.name).all()
     supervisors = SupervisorAccount.query.filter_by(school_id=1).order_by(SupervisorAccount.name).all()
     subjects_by_class = {}
+    all_subs = {}
+    for sub in Subject.query.filter(Subject.school_id==1, Subject.period <= periods_per_day) \
+            .order_by(Subject.day, Subject.period).all():
+        all_subs.setdefault(sub.class_id, []).append(sub)
     for cls in classes:
-        subs = Subject.query.filter(
-            Subject.class_id==cls.id, Subject.school_id==1, Subject.period <= periods_per_day
-        ).order_by(Subject.day, Subject.period).all()
+        subs = all_subs.get(cls.id, [])
         if subs:
             subjects_by_class[str(cls.id)] = {
                 'grade_name': cls.grade.name,
@@ -807,85 +915,232 @@ def admin():
                          subjects_json=subjects_json, assignments_json=assignments_json, teachers_json=teachers_json,
                          periods_per_day=periods_per_day)
 
+# ---------------------------------------------------------------------------
+# Excel / CSV timetable import
+# ---------------------------------------------------------------------------
+_DAY_WORDS = {
+    'Sunday':    ['الأحد', 'الاحد', 'أحد', 'احد', 'sunday', 'sun'],
+    'Monday':    ['الاثنين', 'الإثنين', 'اثنين', 'إثنين', 'monday', 'mon'],
+    'Tuesday':   ['الثلاثاء', 'ثلاثاء', 'الثلاثا', 'tuesday', 'tue', 'tues'],
+    'Wednesday': ['الأربعاء', 'الاربعاء', 'أربعاء', 'اربعاء', 'wednesday', 'wed'],
+    'Thursday':  ['الخميس', 'خميس', 'thursday', 'thu', 'thur', 'thurs'],
+}
+_DAY_LOOKUP = {w.lower(): d for d, words in _DAY_WORDS.items() for w in words}
+_ARABIC_DIGITS = str.maketrans('٠١٢٣٤٥٦٧٨٩', '0123456789')
+
+def _cell_text(v):
+    if v is None:
+        return ''
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    t = str(v).strip()
+    return '' if t.lower() in ('nan', 'none') else t
+
+def _match_day(text):
+    return _DAY_LOOKUP.get(' '.join(str(text).split()).lower())
+
+def _as_period(text):
+    t = str(text).translate(_ARABIC_DIGITS).strip()
+    t = re.sub(r'^(ح|الحصة|حصة|p|period)\s*', '', t, flags=re.I)
+    return int(t) if t.isdigit() and 0 < int(t) <= 12 else None
+
+def parse_class_label(label):
+    """'Grade 4 A' -> ('Grade 4', 'A');  'Grade 3 A IB' -> ('Grade 3 IB', 'A');
+    'الرابع - ب' -> ('الرابع', 'ب');  'الصف الرابع أ' -> ('الصف الرابع', 'أ');  '10B' -> ('10', 'B')."""
+    s = ' '.join(str(label).replace('\n', ' ').split())
+    if not s:
+        return None, None
+    for sep in (' - ', ' – ', '-', '/'):
+        if sep in s:
+            g, c = s.rsplit(sep, 1)
+            if g.strip() and c.strip():
+                return g.strip(), c.strip().upper()
+    letter = r'([A-Za-zء-ي])'
+    m = re.match(r'^(.*?\d+)\s+' + letter + r'(?=\s|$)\s*(.*)$', s)          # Grade 4 A [IB]
+    if m:
+        grade = m.group(1).strip() + (' ' + m.group(3).strip() if m.group(3).strip() else '')
+        return grade, m.group(2).upper()
+    m = re.match(r'^(.*?\d+)' + letter + r'$', s)                           # 10B / Grade 4A
+    if m:
+        return m.group(1).strip(), m.group(2).upper()
+    m = re.match(r'^(.+?)\s+' + letter + r'$', s)                           # الصف الرابع أ
+    if m:
+        return m.group(1).strip(), m.group(2).upper()
+    return s, 'أ'
+
+def _read_sheet_rows(file_storage):
+    name = (file_storage.filename or '').lower()
+    if name.endswith('.csv'):
+        import csv
+        raw = file_storage.read()
+        for enc in ('utf-8-sig', 'cp1256', 'latin-1'):
+            try:
+                text = raw.decode(enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        return [[_cell_text(c) for c in row] for row in csv.reader(io.StringIO(text))]
+    import openpyxl
+    wb = openpyxl.load_workbook(file_storage, read_only=True, data_only=True)
+    ws = wb.worksheets[0]            # the timetable is always the first sheet
+    rows = [[_cell_text(c) for c in row] for row in ws.iter_rows(values_only=True)]
+    wb.close()
+    return rows
+
+def parse_timetable(rows, fallback_periods):
+    """Returns (classes, periods_per_day) where classes = [(label, {(day, period): subject})]."""
+    header_idx, col_map = None, {}
+    for i, row in enumerate(rows[:15]):
+        if sum(1 for c in row if _match_day(c)) >= 2:
+            header_idx = i
+            break
+
+    if header_idx is not None:
+        header = rows[header_idx]
+        period_row = rows[header_idx + 1] if header_idx + 1 < len(rows) else []
+        has_period_row = sum(1 for c in period_row[1:] if _as_period(c)) >= 3
+        current_day, counter = None, 0
+        for col in range(1, len(header)):
+            day = _match_day(header[col])
+            if day:
+                current_day, counter = day, 0
+            if not current_day:
+                continue
+            counter += 1
+            period = _as_period(period_row[col]) if has_period_row and col < len(period_row) else None
+            col_map[col] = (current_day, period or counter)
+        data_rows = rows[header_idx + (2 if has_period_row else 1):]
+    else:
+        # Legacy layout: 2 title rows, then class + fixed blocks of N columns per day
+        for day_index, day in enumerate(DAYS_ORDER):
+            for p in range(1, fallback_periods + 1):
+                col_map[1 + day_index * fallback_periods + (p - 1)] = (day, p)
+        data_rows = rows[2:]
+
+    classes = []
+    for row in data_rows:
+        label = row[0] if row else ''
+        if not label or _match_day(label):
+            continue
+        slots = {}
+        for col, (day, period) in col_map.items():
+            if col < len(row) and row[col]:
+                lines = [ln.strip() for ln in str(row[col]).splitlines() if ln.strip()]
+                if lines:
+                    slots[(day, period)] = lines[0][:200]   # 1st line = subject, 2nd = teacher
+        if slots:
+            classes.append((label, slots))
+    periods = max((p for _, p in col_map.values()), default=fallback_periods)
+    return classes, periods
+
 @app.route('/admin/upload_master', methods=['POST'])
 @admin_required
 def upload_master():
     file = request.files.get('file')
-    if not file: return redirect(url_for('admin'))
+    if not file or not file.filename:
+        return redirect(url_for('admin'))
     try:
-        # Hard-Coded Mapping: Start from Row 3 (skiprows=2)
-        import pandas as pd
-        if file.filename.endswith('.csv'):
-            df = pd.read_csv(file, skiprows=2, header=None)
-        else:
-            df = pd.read_excel(file, skiprows=2, header=None)
+        rows = _read_sheet_rows(file)
+        classes_in_file, detected_periods = parse_timetable(rows, get_periods_per_day())
+        if not classes_in_file:
+            flash('لم يتم العثور على فصول في الملف. تأكد أن العمود الأول يحتوي أسماء الفصول (مثل Grade 4 A) وأن صف العناوين يحتوي أسماء الأيام.')
+            return redirect(url_for('admin'))
 
-        # Clean data: remove newlines and strip whitespace
-        df = df.map(lambda x: str(x).replace('\n', ' ').strip() if pd.notnull(x) else '')
-
-        periods_per_day = get_periods_per_day()
-        # Column 0 is the class; each day then occupies the configured number of columns.
-        day_mappings = {
-            day: range(1 + day_index * periods_per_day, 1 + (day_index + 1) * periods_per_day)
-            for day_index, day in enumerate(DAYS_ORDER)
-        }
-
-        ALL_WEEKS = list(range(1, 20))  # Weeks 1-19
-
-        import_count = 0
-        for _, row in df.iterrows():
-            grade_name = str(row[0])
-            if not grade_name or grade_name.lower() in ['nan', 'none', '']: continue
-
-            grade_name = grade_name.replace('\n', ' ').strip()
-
-            if ' - ' in grade_name:
-                parts = grade_name.split(' - ')
-                g_n, c_n = parts[0].strip(), parts[1].strip()
+        # Keep the configured period count in sync with the file (e.g. 6 periods per day)
+        detected_periods = max(1, min(12, detected_periods))
+        periods_changed = detected_periods != get_periods_per_day()
+        if periods_changed:
+            setting = db.session.get(Setting, 'periods_per_day')
+            if setting:
+                setting.value = str(detected_periods)
             else:
-                g_n, c_n = grade_name, "أ"
+                db.session.add(Setting(key='periods_per_day', value=str(detected_periods)))
 
-            cls = get_or_create_class(g_n, c_n)
+        # Grades / classes: load once, create what is missing
+        grades_by_name = {g.name: g for g in Grade.query.all()}
+        classes_by_key = {(c.grade_id, c.name): c for c in Class.query.all()}
+        parsed = []   # (class_obj, slots)
+        seen_pairs = []
+        for label, slots in classes_in_file:
+            g_name, c_name = parse_class_label(label)
+            if not g_name:
+                continue
+            grade = grades_by_name.get(g_name)
+            if not grade:
+                grade = Grade(name=g_name)
+                db.session.add(grade)
+                db.session.flush()
+                grades_by_name[g_name] = grade
+            cls = classes_by_key.get((grade.id, c_name))
+            if not cls:
+                cls = Class(name=c_name, grade_id=grade.id)
+                db.session.add(cls)
+                db.session.flush()
+                classes_by_key[(grade.id, c_name)] = cls
+            parsed.append((cls, slots))
+            seen_pairs.append((g_name, c_name))
 
-            # Pre-load all existing WeeklyData for this class (all weeks) for fast lookup
-            existing_wd = {}
-            for w in WeeklyData.query.filter_by(class_id=cls.id, school_id=1).all():
-                existing_wd[(w.week_number, w.day, w.period)] = w
+        class_ids = [c.id for c, _ in parsed]
+        slots_by_class = {c.id: slots for c, slots in parsed}
 
-            for day_en, col_range in day_mappings.items():
-                for idx, col_idx in enumerate(col_range):
-                    period_num = idx + 1
-                    if col_idx < len(row):
-                        subject_name = str(row[col_idx]).replace('\n', ' ').strip()
-                        if subject_name and subject_name.lower() not in ['nan', 'none', '']:
-                            # Update Subject master table (UPSERT)
-                            db.session.query(Subject).filter_by(class_id=cls.id, day=day_en, period=period_num).delete()
-                            db.session.add(Subject(class_id=cls.id, day=day_en, period=period_num, name=subject_name, school_id=1))
+        # Master schedule: replace in bulk
+        Subject.query.filter(Subject.class_id.in_(class_ids)).delete(synchronize_session=False)
+        subject_rows = [
+            {'class_id': cid, 'day': day, 'period': period, 'name': name, 'school_id': 1}
+            for cid, slots in slots_by_class.items() for (day, period), name in slots.items()
+        ]
+        if subject_rows:
+            db.session.execute(insert(Subject), subject_rows)
 
-                            # FIX: Seed WeeklyData for ALL 19 weeks — not just current_week
-                            # Teacher-entered data (topic + homework) is always protected
-                            for wk in ALL_WEEKS:
-                                key = (wk, day_en, period_num)
-                                w_entry = existing_wd.get(key)
-                                if w_entry:
-                                    # Only update subject_name if teacher hasn't filled topic/homework
-                                    if not (w_entry.topic and w_entry.topic.strip()) and \
-                                       not (w_entry.homework and w_entry.homework.strip()):
-                                        w_entry.subject_name = subject_name
-                                else:
-                                    new_w = WeeklyData(class_id=cls.id, week_number=wk, day=day_en,
-                                                       period=period_num, subject_name=subject_name, school_id=1)
-                                    db.session.add(new_w)
-                                    existing_wd[key] = new_w  # track for current loop
+        # Weekly rows (weeks 1-19): teacher-entered topic/homework is never overwritten
+        ALL_WEEKS = range(1, 20)
+        existing = {}
+        for wid, cid, wk, day, period, subj, topic, hw in db.session.query(
+                WeeklyData.id, WeeklyData.class_id, WeeklyData.week_number, WeeklyData.day,
+                WeeklyData.period, WeeklyData.subject_name, WeeklyData.topic, WeeklyData.homework
+        ).filter(WeeklyData.class_id.in_(class_ids), WeeklyData.school_id == 1).all():
+            existing[(cid, wk, day, period)] = (wid, subj or '', bool((topic or '').strip() or (hw or '').strip()))
 
-                            import_count += 1
+        updates, inserts = [], []
+        for cid, slots in slots_by_class.items():
+            for wk in ALL_WEEKS:
+                for day in DAYS_ORDER:
+                    for period in range(1, detected_periods + 1):
+                        name = slots.get((day, period), '')
+                        row = existing.get((cid, wk, day, period))
+                        if row:
+                            wid, old_name, protected = row
+                            if not protected and old_name != name:
+                                updates.append({'id': wid, 'subject_name': name})
+                        elif name:
+                            inserts.append({'class_id': cid, 'week_number': wk, 'day': day, 'period': period,
+                                            'subject_name': name, 'topic': '', 'homework': '', 'school_id': 1})
+        if updates:
+            db.session.execute(update(WeeklyData), updates)
+        if inserts:
+            db.session.execute(insert(WeeklyData), inserts)
 
         db.session.commit()
-        flash(f'تم استيراد {import_count} حصة بنجاح (تم نشر المادة في الأسابيع 1-19)')
+
+        grade_count = len({g for g, _ in seen_pairs})
+        msg = (f'تم استيراد {len(parsed)} فصل في {grade_count} صف — {len(subject_rows)} حصة '
+               f'({detected_periods} حصص يومياً)، ونُشر الجدول في الأسابيع 1-19.')
+        if periods_changed:
+            msg += f' تم تحديث عدد الحصص اليومية في الإعدادات إلى {detected_periods}.'
+        flash(msg)
+
+        # Old imports stored "Grade 4 A" as a grade name; point them out so they can be deleted
+        legacy = sorted({f'{g} {c}' for g, c in seen_pairs if f'{g} {c}' in grades_by_name}, key=natural_key)
+        if legacy:
+            flash('تنبيه: توجد صفوف قديمة من استيراد سابق بأسماء مكررة ('
+                  + '، '.join(legacy[:8]) + ('…' if len(legacy) > 8 else '')
+                  + '). احذفها من "إدارة الصفوف" إن لم تعد تحتاجها.')
+        log_activity('admin', f'استيراد الجدول المدرسي: {len(parsed)} فصل', teacher_name='المدير',
+                     action_type='استيراد', description=msg)
     except Exception as e:
         db.session.rollback()
         traceback.print_exc()
-        flash(f"خطأ: {e}")
+        flash(f"خطأ في قراءة الملف: {e}")
     return redirect(url_for('admin'))
 
 @app.route('/admin/upload_teachers', methods=['POST'])
@@ -975,6 +1230,14 @@ def teacher():
                 change_details = []
                 week_int = safe_week(week)
 
+                # SPEED: lock and load every row of this class/week in ONE query (was one query per cell)
+                existing_rows = {
+                    (w.day, w.period): w
+                    for w in WeeklyData.query.filter_by(class_id=int(c_id), week_number=week_int, school_id=1)
+                    .with_for_update().all()
+                }
+                master_names = None
+
                 for e in data.get('entries', []):
                     day = e.get('day')
                     period = int(e.get('period'))
@@ -983,13 +1246,8 @@ def teacher():
                     new_topic = (e.get('topic') or '').strip()
                     new_homework = (e.get('homework') or '').strip()
 
-                    # RACE CONDITION GUARD: SELECT FOR UPDATE locks the row for this transaction.
-                    # A concurrent save will block here until this transaction commits/rolls back,
-                    # then read the already-committed values — value diffing will then detect no change.
-                    w = WeeklyData.query.filter_by(
-                        class_id=int(c_id), week_number=week_int,
-                        day=day, period=period, school_id=1
-                    ).with_for_update().first()
+                    # RACE CONDITION GUARD: the rows were locked above with SELECT ... FOR UPDATE
+                    w = existing_rows.get((day, period))
 
                     old_topic = (w.topic or '').strip() if w else ''
                     old_homework = (w.homework or '').strip() if w else ''
@@ -1002,13 +1260,14 @@ def teacher():
 
                     # Ensure WeeklyData record exists (create if missing)
                     if not w:
-                        master_sub = Subject.query.filter_by(
-                            class_id=int(c_id), day=day, period=period, school_id=1).first()
-                        sub_name = master_sub.name if master_sub else ''
+                        if master_names is None:
+                            master_names = {(m.day, m.period): m.name for m in
+                                            Subject.query.filter_by(class_id=int(c_id), school_id=1).all()}
+                        sub_name = master_names.get((day, period)) or ''
                         w = WeeklyData(class_id=int(c_id), week_number=week_int,
                                        day=day, period=period, subject_name=sub_name, school_id=1)
                         db.session.add(w)
-                        db.session.flush()
+                        existing_rows[(day, period)] = w
 
                     # INTEGRITY CHECK 2: school_id must be 1 on every record we write
                     if w.school_id != 1:
@@ -1088,8 +1347,8 @@ def teacher():
                 return jsonify({'status': 'error', 'message': f'خطأ غير متوقع: {str(e)}'})
         return jsonify({'status': 'error', 'message': 'بيانات ناقصة'})
 
-    grades = Grade.query.all()
-    classes = Class.query.filter_by(grade_id=int(g_id)).all() if g_id else []
+    grades = sorted(Grade.query.all(), key=lambda g: natural_key(g.name))
+    classes = sorted(Class.query.filter_by(grade_id=int(g_id)).all(), key=lambda c: natural_key(c.name)) if g_id else []
     schedule = {
         day: {
             p: {'subject_name': '', 'topic': '', 'homework': ''}
@@ -1125,7 +1384,7 @@ def teacher():
                                          selected_grade=g_id, selected_class=c_id, selected_week=week,
                                          days_ar=DAYS_AR, days_order=DAYS_ORDER, settings=settings, locked_days=locked,
                                          assigned_keys=assigned_keys, is_admin_user=is_admin_user,
-                                         periods_per_day=periods_per_day))
+                                         periods_per_day=periods_per_day, attachment_max_mb=attachment_limit_mb()))
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     resp.headers['Pragma'] = 'no-cache'
     resp.headers['Expires'] = '0'
@@ -1319,7 +1578,7 @@ def activity_log():
 @app.route('/student')
 def student_landing():
     settings = {s.key: s.value for s in Setting.query.all()}
-    grades = Grade.query.all()
+    grades = sorted(Grade.query.options(joinedload(Grade.classes)).all(), key=lambda g: natural_key(g.name))
     return render_template('student_landing.html', grades=grades, settings=settings)
 
 @app.route('/student/<int:g_id>/<int:c_id>')
@@ -1387,21 +1646,50 @@ def upload_attachment():
     display_name = clean_display_filename(f.filename)
     ext = display_name.rsplit('.', 1)[-1].lower() if '.' in display_name else ''
     if ext not in ALLOWED_ATTACHMENT_EXT:
-        return jsonify({'status': 'error', 'message': 'نوع الملف غير مدعوم. المسموح: PDF و Word و PowerPoint و Excel والصور و TXT و ZIP'}), 400
-    data = f.read(MAX_ATTACHMENT_BYTES + 1)
-    if len(data) > MAX_ATTACHMENT_BYTES:
-        return jsonify({'status': 'error', 'message': 'حجم الملف أكبر من 10 ميجابايت'}), 400
-    if not data:
-        return jsonify({'status': 'error', 'message': 'الملف فارغ'}), 400
+        return jsonify({'status': 'error', 'message': 'نوع الملف غير مدعوم. المسموح: PDF و Word و PowerPoint و Excel والصور والصوت والفيديو و TXT و ZIP'}), 400
+
+    client = object_storage()
+    limit_mb = attachment_limit_mb()
+    # Stream the upload to a temp file so large files never sit fully in memory
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.' + ext)
+    try:
+        f.save(tmp)
+        tmp.close()
+        size = os.path.getsize(tmp.name)
+        if size == 0:
+            return jsonify({'status': 'error', 'message': 'الملف فارغ'}), 400
+        if size > limit_mb * MB:
+            return jsonify({'status': 'error', 'message': f'حجم الملف أكبر من {limit_mb} ميجابايت'}), 400
+
+        new_key, data = None, None
+        if client:
+            new_key = f'attachments/class-{class_id}/week-{week_int}/{day}-{period}/{uuid.uuid4().hex}.{ext}'
+            try:
+                client.upload_from_filename(new_key, tmp.name)
+            except Exception:
+                traceback.print_exc()
+                new_key = None
+        if not new_key:
+            if size > DB_STORAGE_MAX_MB * MB:
+                return jsonify({'status': 'error', 'message': 'تعذر الوصول لمساحة التخزين — حاول مرة أخرى'}), 503
+            with open(tmp.name, 'rb') as fh:
+                data = fh.read()
+    finally:
+        try:
+            os.remove(tmp.name)
+        except OSError:
+            pass
 
     att = PeriodAttachment.query.filter_by(class_id=class_id, week_number=week_int, day=day, period=period).first()
     replaced = att is not None
+    old_key = att.storage_key if att else None
     if not att:
         att = PeriodAttachment(class_id=class_id, week_number=week_int, day=day, period=period, school_id=1)
         db.session.add(att)
     att.original_name = display_name
     att.mimetype = mimetypes.guess_type('x.' + ext)[0] or 'application/octet-stream'
-    att.size_bytes = len(data)
+    att.size_bytes = size
+    att.storage_key = new_key
     att.data = data
     att.teacher_id = session.get('teacher_id')
     att.uploaded_at = utc_now()
@@ -1410,12 +1698,15 @@ def upload_attachment():
     except Exception:
         db.session.rollback()
         traceback.print_exc()
+        delete_stored_objects([new_key])
         return jsonify({'status': 'error', 'message': 'فشل حفظ الملف — حاول مرة أخرى'}), 500
+    if old_key and old_key != new_key:
+        delete_stored_objects([old_key])
 
     actor = session.get('teacher_name') or 'المدير'
     log_activity(session.get('user_role'), f'{actor} {"استبدل" if replaced else "أرفق"} ملف "{display_name}" — {DAYS_AR.get(day, day)} ح{period} — أسبوع {week_int}',
                  teacher_name=actor, action_type='مرفق', target_subject=f'فصل {class_id}',
-                 description=f'مرفق: {display_name} ({len(data) // 1024} KB) | {DAYS_AR.get(day, day)} ح{period} | أسبوع {week_int}')
+                 description=f'مرفق: {display_name} ({size // 1024} KB) | {DAYS_AR.get(day, day)} ح{period} | أسبوع {week_int}')
     return jsonify({'status': 'success', 'attachment': attachment_payload(att)})
 
 @app.route('/teacher/attachment/<int:att_id>/delete', methods=['POST'])
@@ -1429,8 +1720,10 @@ def delete_attachment(att_id):
     if session.get('user_role') != 'admin' and LockedDay.query.filter_by(week_number=att.week_number, day_name=att.day).first():
         return jsonify({'status': 'error', 'message': 'هذا اليوم مغلق من الإدارة'}), 403
     name, day, period, week_int, class_id = att.original_name, att.day, att.period, att.week_number, att.class_id
+    key = att.storage_key
     db.session.delete(att)
     db.session.commit()
+    delete_stored_objects([key])
     actor = session.get('teacher_name') or 'المدير'
     log_activity(session.get('user_role'), f'{actor} حذف ملف "{name}" — {DAYS_AR.get(day, day)} ح{period} — أسبوع {week_int}',
                  teacher_name=actor, action_type='مرفق', target_subject=f'فصل {class_id}')
@@ -1445,8 +1738,24 @@ def download_attachment(att_id):
     if session.get('user_role') not in ('admin', 'teacher', 'supervisor'):
         if not WeekPublication.query.filter_by(class_id=att.class_id, week_number=att.week_number).first():
             abort(404)
-    resp = send_file(io.BytesIO(att.data), mimetype=att.mimetype or 'application/octet-stream',
-                     as_attachment=True, download_name=att.original_name)
+    mimetype = att.mimetype or 'application/octet-stream'
+    if att.storage_key:
+        client = object_storage()
+        if not client:
+            abort(503)
+        tmp = tempfile.NamedTemporaryFile(delete=False)
+        tmp.close()
+        try:
+            client.download_to_filename(att.storage_key, tmp.name)
+        except Exception:
+            traceback.print_exc()
+            os.remove(tmp.name)
+            abort(404)
+        resp = send_file(tmp.name, mimetype=mimetype, as_attachment=True, download_name=att.original_name)
+        resp.call_on_close(lambda: os.path.exists(tmp.name) and os.remove(tmp.name))
+    else:
+        resp = send_file(io.BytesIO(att.data or b''), mimetype=mimetype,
+                         as_attachment=True, download_name=att.original_name)
     resp.headers['X-Content-Type-Options'] = 'nosniff'
     resp.headers['Cache-Control'] = 'private, no-store'
     return resp
@@ -1454,29 +1763,35 @@ def download_attachment(att_id):
 @app.errorhandler(413)
 def too_large(_e):
     if request.path.startswith('/teacher/attachment'):
-        return jsonify({'status': 'error', 'message': 'حجم الملف أكبر من 10 ميجابايت'}), 413
+        return jsonify({'status': 'error', 'message': f'حجم الملف أكبر من {attachment_limit_mb()} ميجابايت'}), 413
     return 'الملف أكبر من الحد المسموح', 413
 
 @app.route('/admin/audit_report')
 @review_access_required
 def audit_report():
-    week_int = safe_week(request.args.get('week', '1'))
+    current = db.session.get(Setting, 'current_week')
+    week_int = safe_week(request.args.get('week', current.value if current else '1'))
     week = str(week_int)
     periods_per_day = get_periods_per_day()
     classes = Class.query.options(joinedload(Class.grade)).all()
     report = []
     class_status = []
     published_ids = {wp.class_id for wp in WeekPublication.query.filter_by(week_number=week_int).all()}
+    subjects_by_class = {}
+    for subj in Subject.query.filter(Subject.school_id == 1, Subject.period <= periods_per_day) \
+            .order_by(Subject.day, Subject.period).all():
+        subjects_by_class.setdefault(subj.class_id, []).append(subj)
+    filled = {
+        (w.class_id, w.day, w.period)
+        for w in WeeklyData.query.filter_by(week_number=week_int, school_id=1).all()
+        if w.topic and w.homework
+    }
+    classes = sorted(classes, key=lambda c: natural_key(f"{c.grade.name if c.grade else ''} {c.name}"))
     for c in classes:
-        subjects = Subject.query.filter(
-            Subject.class_id==c.id,
-            Subject.school_id==1,
-            Subject.period <= periods_per_day
-        ).all()
+        subjects = subjects_by_class.get(c.id, [])
         missing = 0
         for subj in subjects:
-            wd = WeeklyData.query.filter_by(class_id=c.id, week_number=week_int, day=subj.day, period=subj.period, school_id=1).first()
-            if not wd or not wd.topic or not wd.homework:
+            if (c.id, subj.day, subj.period) not in filled:
                 missing += 1
                 report.append({
                     'subject': subj.name,
@@ -1541,6 +1856,14 @@ def seed_db():
             db.session.commit()
     except Exception:
         db.session.rollback()
+
+# Run schema checks once when the worker starts, so the first login is not delayed by them.
+try:
+    with app.app_context():
+        run_startup_migrations()
+except Exception:
+    traceback.print_exc()
+    _tables_ensured = False
 
 if __name__ == '__main__':
     with app.app_context():

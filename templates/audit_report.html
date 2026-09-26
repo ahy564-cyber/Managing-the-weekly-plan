@@ -2,6 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>تقرير التدقيق - الأسبوع {{ week }}</title>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
     <style>
@@ -23,6 +24,14 @@
         .week-form input[type=number] { padding: 8px 12px; border-radius: 8px; border: 1px solid #cbd5e1; width: 90px; }
         .btn-publish { background: #0f766e; color: white; border: none; padding: 12px 28px; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 1em; }
         .btn-publish:hover { background: #134e4a; }
+        @media (max-width: 760px) {
+            body { margin: 10px; }
+            .card { padding: 14px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            table { min-width: 520px; }
+            th, td { padding: 9px 8px; font-size: .9em; }
+            h1 { font-size: 1.3em; }
+            input, select { font-size: 16px; }
+        }
     </style>
 </head>
 <body>

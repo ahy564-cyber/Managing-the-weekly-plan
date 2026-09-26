@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/plan.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/plan.css', v=asset_version) }}">
     <script src="https://cdn.jsdelivr.net/npm/motion@12.23.12/dist/motion.js" defer></script>
     <style>
         body { min-height: 100vh; display: grid; }
@@ -48,11 +48,18 @@
         .alt a:hover { color: var(--teal); }
 
         @media (max-width: 860px) {
-            .shell { grid-template-columns: 1fr; }
-            .side { padding-bottom: 2rem; gap: 1.5rem; }
+            .shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; min-height: 100svh; }
+            .side { padding: 1.1rem 1.25rem 1.3rem; gap: .9rem; }
+            .side h1 { font-size: 2rem; }
+            .side h1 br { display: none; }
             .side p { display: none; }
-            .mini { max-width: 100%; }
-            .mini-cell { height: 20px; }
+            .mini { gap: 4px; }
+            .mini-day { font-size: .7rem; }
+            .mini-cell { height: 12px; border-radius: 4px; }
+            .form-side { place-items: start center; padding: 1.5rem 1.25rem 2rem; }
+            .form-card h2 { font-size: 1.6rem; }
+            .form-card .lead { margin-bottom: 1.3rem; }
+            .input { font-size: 16px; }   /* prevents iOS zoom on focus */
         }
     </style>
 </head>
@@ -61,7 +68,7 @@
         <aside class="side" aria-hidden="true">
             <div class="side-brand"><span class="brand-mark"><span></span></span><span>نظام الخطة الدراسية</span></div>
             <div>
-                <h1 class="side-title">الخطة<br>الأسبوعية</h1>
+                <h1 class="side-title">الخطة<br> الأسبوعية</h1>
                 <p>دروس الأسبوع وواجباته وملفاته، في جدول واحد يصل للطالب وولي الأمر.</p>
             </div>
             <div class="mini" id="mini"></div>
@@ -145,10 +152,10 @@
         window.addEventListener('load', () => {
             if (!window.Motion || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
             const { animate, stagger } = Motion;
-            animate('.side-title', { opacity: [0, 1], y: [16, 0] }, { duration: 0.6, ease: [0.2, 0.8, 0.2, 1] });
-            animate('.mini-cell', { opacity: [0, 1], scale: [0.6, 1] }, { duration: 0.3, delay: stagger(0.015, { startDelay: 0.2 }) });
+            // Decoration only — the title and the form are never hidden behind an animation
+            animate('.mini-cell', { opacity: [0.3, 1], scale: [0.8, 1] }, { duration: 0.25, delay: stagger(0.01) });
             const todayCells = document.querySelectorAll('.mini-row-today .mini-cell');
-            if (todayCells.length) animate(todayCells, { scaleY: [1, 1.35, 1] }, { duration: 0.45, delay: stagger(0.05, { startDelay: 0.85 }) });
+            if (todayCells.length) animate(todayCells, { scaleY: [1, 1.35, 1] }, { duration: 0.4, delay: stagger(0.04, { startDelay: 0.4 }) });
         });
     })();
     </script>

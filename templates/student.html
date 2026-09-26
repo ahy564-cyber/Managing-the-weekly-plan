@@ -7,9 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/plan.css') }}">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/plan.css', v=asset_version) }}">
     <script src="https://cdn.jsdelivr.net/npm/motion@12.23.12/dist/motion.js" defer></script>
     <style>
         .page { width: min(100%, 1480px); margin: 0 auto; padding: 0 clamp(.75rem, 2.5vw, 2rem) 2rem; }
@@ -100,20 +98,102 @@
         .empty-state h2 { margin: 0 0 .5rem; font-weight: 900; font-size: 1.6rem; }
         .empty-state p { margin: 0 auto; color: var(--muted); max-width: 46ch; }
 
-        /* Export: show everything, no clamps, no scroll */
-        body.is-exporting .tt-scroll { overflow: visible; }
-        body.is-exporting #capture { width: max-content; background: var(--canvas); padding: 1rem; }
-        body.is-exporting .tt-topic, body.is-exporting .tt-hw { -webkit-line-clamp: unset; display: block; }
-        body.is-exporting .tt-help { display: none; }
+        .view-switch { display: none; }
+        .print-school { display: none; }
+        body.is-exporting .print-school { display: flex; align-items: center; gap: .6rem; margin: 0 0 .3rem; font-weight: 800; font-size: 1.05rem; color: var(--ink); }
+        body.is-exporting .print-school img { height: 38px; width: auto; }
+
+        /* ---- Phone: one day at a time ---- */
+        .agenda { display: none; }
+        .day-tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 4px; background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-pill); position: sticky; top: .5rem; z-index: 5; }
+        .day-tab { position: relative; border: 0; background: none; border-radius: var(--r-pill); padding: .5rem .1rem; font-weight: 800; font-size: .8rem; color: var(--muted); cursor: pointer; min-height: 44px; }
+        .day-tab[aria-selected="true"] { background: var(--ink); color: #fff; }
+        .day-tab.is-today:not([aria-selected="true"]) { background: var(--mark); color: var(--ink); }
+        .day-tab.is-today[aria-selected="true"]::after { content: ""; position: absolute; top: 6px; inset-inline-end: 8px; width: 7px; height: 7px; border-radius: 50%; background: var(--mark); }
+        .ag-head { display: flex; align-items: baseline; justify-content: space-between; margin: 1.1rem .2rem .6rem; }
+        .ag-head h2 { margin: 0; font-size: 1.35rem; font-weight: 900; }
+        .ag-head span { font-size: .82rem; font-weight: 700; color: var(--muted); }
+        .agenda-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .55rem; touch-action: pan-y; }
+        .agenda-list[hidden] { display: none; }
+        .ag-item { display: grid; grid-template-columns: 2.4rem 1fr; gap: .75rem; padding: .85rem .9rem; background: var(--paper); border: 1.5px solid var(--line); border-radius: var(--r-card); }
+        .agenda.is-today-list .ag-item:not(.is-empty) { border-color: #f1d85a; background: var(--mark-soft); }
+        .ag-num { width: 2.4rem; height: 2.4rem; border-radius: 12px; display: grid; place-items: center; background: var(--canvas); font-weight: 900; font-size: 1.05rem; }
+        .ag-item:not(.is-empty) .ag-num { background: var(--ink); color: #fff; }
+        .ag-body { min-width: 0; display: grid; gap: .3rem; align-content: center; }
+        .ag-subj { font-weight: 800; font-size: 1.02rem; line-height: 1.35; }
+        .ag-topic { margin: 0; font-size: .92rem; line-height: 1.65; color: #2c4a46; overflow-wrap: anywhere; }
+        .ag-hw { margin: 0; font-size: .88rem; line-height: 1.6; font-weight: 700; color: var(--hw); background: var(--hw-wash); padding: .35rem .6rem; border-radius: 8px; overflow-wrap: anywhere; }
+        .ag-item .file-pill { justify-self: start; margin-top: .2rem; min-height: 40px; }
+        .ag-item.is-empty { background: transparent; border-style: dashed; padding: .5rem .9rem; }
+        .ag-free { color: var(--faint); font-size: .88rem; font-weight: 600; }
 
         @media (max-width: 720px) {
-            .hero { grid-template-columns: 1fr; padding-top: 1.4rem; }
-            .tt { --daycol: 4.75rem; min-width: calc(var(--daycol) + var(--periods) * 7.25rem); }
+            .hero { grid-template-columns: 1fr; gap: 1rem; padding: 1.3rem .1rem 1rem; }
+            .hero-week { font-size: 2.6rem; }
+            .countdowns { gap: 1.1rem; }
+            .count-num { font-size: 1.6rem; }
+            .notice { font-size: .85rem; padding: .7rem .9rem; line-height: 1.7; cursor: pointer; }
+            .notice-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+            .notice.is-open .notice-text { -webkit-line-clamp: unset; display: block; }
+            .brand-mark { width: 32px; height: 32px; border-radius: 9px; }
+            .brand-name { font-size: .92rem; max-width: 38vw; }
+            .seg button { padding: .25rem .6rem; font-size: .75rem; }
+            .topbar { flex-wrap: nowrap; }
+            .page { padding-inline: .75rem; }
+            .topbar { padding: .7rem .75rem; }
+            .topbar-actions { gap: .4rem; }
+            .select-pill { min-height: 38px; font-size: .82rem; }
+
+            .agenda { display: block; }
+            .tt-wrap { display: none; }
+            body.show-week .agenda { display: none; }
+            body.show-week .tt-wrap { display: block; }
+            .tt { --daycol: 4.5rem; min-width: calc(var(--daycol) + var(--periods) * 7.25rem); }
             .tt.has-open { min-width: calc(var(--daycol) + var(--periods) * 7.25rem + 11rem); }
-            .tt-day { font-size: .88rem; }
-            .brand-name { max-width: 52vw; }
+            .tt-day { font-size: .85rem; }
+            .view-switch { display: flex; justify-content: center; margin-top: 1rem; }
+            .actions { gap: .5rem; }
+            .actions .btn { flex: 1 1 auto; }
         }
-        @media print { .actions, .topbar, .tt-help, .notice { display: none; } }
+
+        /* =====================================================================
+           A4 print + PDF export (same layout for both, on every device):
+           landscape A4, full lesson text, fits on one page, no "today" colour.
+           ===================================================================== */
+        @page { size: A4 landscape; margin: 8mm; }
+        body.is-exporting { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        body.is-exporting * { letter-spacing: normal !important; }   /* html2canvas breaks Arabic joining otherwise */
+        body.is-exporting #capture { width: 1060px !important; background: #fff; padding: 0; margin: 0 auto; }
+        body.is-exporting .agenda, body.is-exporting .tt-help, body.is-exporting .view-switch,
+        body.is-exporting #todayChip, body.is-exporting .tt-clip, body.is-exporting .tt-more { display: none !important; }
+        body.is-exporting .tt-wrap { display: block !important; border: 0; padding: 0; border-radius: 0; }
+        body.is-exporting .tt-scroll { overflow: visible; border-radius: 0; }
+        body.is-exporting .tt { min-width: 0 !important; gap: 3px; --daycol: 4.6rem;
+            grid-template-columns: var(--daycol) repeat(var(--periods), minmax(0, 1fr)) !important; }
+        body.is-exporting .hero { grid-template-columns: 1fr auto; padding: 0 0 .6rem; gap: 1rem; align-items: end; }
+        body.is-exporting .hero-class { font-size: 1rem; margin: 0; }
+        body.is-exporting .hero-week { font-size: 2.1rem; }
+        body.is-exporting .hero-meta { display: none; }
+        body.is-exporting .count-num { font-size: 1.3rem; }
+        body.is-exporting .count-unit, body.is-exporting .count-label { font-size: .72rem; }
+        body.is-exporting .tt-corner, body.is-exporting .tt-ph { padding: .3rem; font-size: .78rem; background: var(--ink); color: #fff; }
+        body.is-exporting .tt-corner { font-size: .66rem; }
+        body.is-exporting .tt-day { position: static; font-size: .85rem; padding: .3rem; background: var(--teal-wash); }
+        body.is-exporting .tt-cell, body.is-exporting .tt-empty { min-height: 0; border-radius: 6px; }
+        body.is-exporting .tt-cell { padding: .35rem .45rem; gap: .15rem; border-width: 1px; opacity: 1 !important; box-shadow: none !important; }
+        body.is-exporting .tt-subj { font-size: .8rem; padding: 0 !important; }
+        body.is-exporting .tt-topic { font-size: .72rem; line-height: 1.45; -webkit-line-clamp: unset; display: block; }
+        body.is-exporting .tt-hw { font-size: .7rem; line-height: 1.4; -webkit-line-clamp: unset; display: block; padding-top: .15rem; }
+        body.is-exporting .tt-day.is-today, body.is-exporting .tt-cell.is-today { background: var(--paper); border-color: var(--line); }
+        body.is-exporting .tt-day.is-today { background: var(--teal-wash); }
+        body.is-exporting .tt-day .today-tag { display: none !important; }
+        body.is-exporting .tt-ph.is-active { background: var(--ink); }
+
+        @media print {
+            .topbar, .notice, .actions, .site-footer, .view-switch { display: none !important; }
+            body { background: #fff; }
+            .page { padding: 0; width: auto; }
+        }
     </style>
 </head>
 <body>
@@ -145,7 +225,7 @@
     </header>
 
     <main class="page">
-        <p class="notice">أعزاءنا أولياء الأمور والطلاب الكرام.. نرحب بكم في منصة (الجدول الذكي)؛ وجهتكم المعتمدة للاطلاع على الخطة الأسبوعية، والتي نوافيكم بها بدقة وموعد ثابت كل يوم خميس بنهاية دوامنا الدراسي، لنعينكم على التخطيط المبكر لأسبوعكم القادم.</p>
+        <p class="notice" id="notice" title="اضغط لقراءة الرسالة كاملة"><span class="notice-text">أعزاءنا أولياء الأمور والطلاب الكرام.. نرحب بكم في منصة (الجدول الذكي)؛ وجهتكم المعتمدة للاطلاع على الخطة الأسبوعية، والتي نوافيكم بها بدقة وموعد ثابت كل يوم خميس بنهاية دوامنا الدراسي، لنعينكم على التخطيط المبكر لأسبوعكم القادم.</span></p>
 
         {% if not_published %}
         <section class="empty-state">
@@ -156,6 +236,7 @@
         <div id="capture">
             <section class="hero">
                 <div>
+                    <p class="print-school">{% if settings.school_logo %}<img src="/static/uploads/{{ settings.school_logo }}" alt="">{% endif %}<span>{{ settings.school_name or 'مدارس ثقافة الجيل' }}</span></p>
                     <p class="hero-class">{{ grade_name }} - {{ class_name }}</p>
                     <h1 class="hero-week"><span class="hero-week-label">الأسبوع</span> <span class="num" id="weekNum">{{ week }}</span></h1>
                     <div class="hero-meta">
@@ -173,6 +254,43 @@
                         <span class="count-num">-</span><span class="count-unit">يوم متبقٍ</span><span class="count-label">الاختبار النهائي</span>
                     </div>
                 </div>
+            </section>
+
+            <section class="agenda" id="agenda" aria-label="جدول اليوم">
+                <div class="day-tabs" role="tablist" aria-label="أيام الأسبوع">
+                    {% for d in days_order %}
+                    <button type="button" class="day-tab" role="tab" data-day="{{ d }}" aria-selected="false" aria-controls="ag-{{ d }}">{{ days_ar[d] }}</button>
+                    {% endfor %}
+                </div>
+                {% for d in days_order %}
+                <div id="ag-{{ d }}" class="ag-panel" data-day="{{ d }}" role="tabpanel" hidden>
+                    <div class="ag-head"><h2>{{ days_ar[d] }}</h2><span class="ag-today-label" hidden>اليوم</span></div>
+                    <ol class="agenda-list">
+                        {% for p in range(1, periods_per_day + 1) %}
+                        {% set c = schedule[d][p] %}
+                        <li class="ag-item{% if not c.subject_name %} is-empty{% endif %}">
+                            <span class="ag-num" aria-label="الحصة {{ p }}">{{ p }}</span>
+                            <div class="ag-body">
+                                {% if c.subject_name %}
+                                <span class="ag-subj">{{ c.subject_name }}</span>
+                                {% if c.topic %}<p class="ag-topic">{{ c.topic }}</p>{% endif %}
+                                {% if c.homework %}<p class="ag-hw"><b>الواجب:</b> {{ c.homework }}</p>{% endif %}
+                                {% if c.attachment %}
+                                <a class="file-pill" href="{{ c.attachment.url }}" download>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>
+                                    {% set nm = c.attachment.name.rsplit(' ', 1) %}<span class="file-name">{% if nm|length > 1 %}<bdi>{{ nm[0] }}</bdi> {% endif %}<bdi dir="ltr">{{ nm[-1] }}</bdi></span>
+                                    <span class="file-size" data-bytes="{{ c.attachment.size }}"></span>
+                                </a>
+                                {% endif %}
+                                {% else %}
+                                <span class="ag-free">لا توجد حصة</span>
+                                {% endif %}
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ol>
+                </div>
+                {% endfor %}
             </section>
 
             <section class="tt-wrap" aria-label="الجدول الأسبوعي">
@@ -218,10 +336,18 @@
             </section>
         </div>
 
+        <div class="view-switch">
+            <button type="button" class="btn btn-outline" id="viewToggle" aria-pressed="false"><span>عرض الأسبوع كاملاً</span></button>
+        </div>
+
         <div class="actions">
             <button type="button" class="btn btn-primary btn-pdf" onclick="exportPDF()">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>
-                <span>تحميل بصيغة PDF</span>
+                <span>تحميل PDF (A4)</span>
+            </button>
+            <button type="button" class="btn btn-outline btn-print" onclick="printA4()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 9V3h10v6M7 17H4v-7h16v7h-3M7 14h10v7H7z"/></svg>
+                <span>طباعة</span>
             </button>
             <button type="button" class="btn btn-text btn-img" onclick="exportImage()"><span>حفظ كصورة</span></button>
         </div>
@@ -244,7 +370,7 @@
         const key = todayKey();
         document.querySelectorAll('.is-today').forEach(el => el.classList.remove('is-today'));
         const isSchoolDay = !!document.querySelector(`.tt-day[data-day="${key}"]`);
-        document.querySelectorAll(`[data-day="${key}"]`).forEach(el => el.classList.add('is-today'));
+        document.querySelectorAll(`.tt [data-day="${key}"]`).forEach(el => el.classList.add('is-today'));
 
         const chip = document.getElementById('todayChip');
         if (chip) {
@@ -342,7 +468,7 @@
     function introAnimation(key) {
         if (!window.Motion || reduceMotion || !tt) return;
         const { animate, stagger } = Motion;
-        animate('.hero-week', { opacity: [0, 1], y: [14, 0] }, { duration: 0.5, ease: [0.2, 0.8, 0.2, 1] });
+        animate('.hero-week', { y: [10, 0] }, { duration: 0.35, ease: [0.2, 0.8, 0.2, 1] });
         const dayCell = tt.querySelector(`.tt-day[data-day="${key}"]`);
         if (!dayCell) return;
         const rowCells = tt.querySelectorAll(`.tt-cell[data-day="${key}"], .tt-empty[data-day="${key}"]`);
@@ -352,28 +478,68 @@
             .then(clear(Array.from(rowCells)));
     }
 
-    /* ===== Export (collapses the open cell and shows full text) ===== */
-    function prepareExport() {
-        if (openCell) closeCell(openCell);
-        document.body.classList.add('is-exporting');
-        return new Promise(r => setTimeout(r, 550));
+    /* ===== A4 print / PDF / image: one fixed-width layout on every device ===== */
+    const A4_WIDTH_PX = 1060;            // 281mm printable width at 96dpi (A4 landscape, 8mm margins)
+    const A4_HEIGHT_PX = 733;            // 194mm printable height
+    let libsPromise = null;
+    function loadScript(src) {
+        return new Promise((resolve, reject) => {
+            const el = document.createElement('script');
+            el.src = src; el.onload = resolve; el.onerror = reject;
+            document.head.appendChild(el);
+        });
     }
+    function loadExportLibs() {   // loaded only when needed (saves ~350 KB on every page view)
+        if (!libsPromise) {
+            libsPromise = Promise.all([
+                window.html2canvas ? null : loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'),
+                window.jspdf ? null : loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
+            ]).catch(e => { libsPromise = null; throw e; });
+        }
+        return libsPromise;
+    }
+    function enterExportMode() {
+        if (openCell) closeCell(openCell);
+        if (tt) tt.style.removeProperty('grid-template-columns');
+        document.body.classList.add('is-exporting');
+    }
+    function leaveExportMode() {
+        document.body.classList.remove('is-exporting');
+        const cap = document.getElementById('capture');
+        if (cap) cap.style.removeProperty('zoom');
+        setColumns(0);
+    }
+    function fitToOnePage() {
+        const cap = document.getElementById('capture');
+        if (!cap) return;
+        cap.style.removeProperty('zoom');
+        const h = cap.scrollHeight;
+        const target = A4_HEIGHT_PX * 0.96;          // safety margin for font differences between devices
+        if (h > target) cap.style.zoom = (target / h).toFixed(3);
+    }
+    function printA4() {
+        enterExportMode();
+        const go = () => { fitToOnePage(); window.print(); };
+        (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(() => requestAnimationFrame(go));
+    }
+    window.addEventListener('beforeprint', () => { if (!document.body.classList.contains('is-exporting')) { enterExportMode(); fitToOnePage(); } });
+    window.addEventListener('afterprint', leaveExportMode);
+
     function capture() {
         const el = document.getElementById('capture');
-        return html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#f2f5f3', width: el.scrollWidth, windowWidth: el.scrollWidth + 40 });
+        return html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff',
+                                 width: A4_WIDTH_PX, windowWidth: A4_WIDTH_PX + 40 });
     }
     function withBusy(btn, job) {
         const label = btn.querySelector('span');
         const original = label.textContent;
         label.textContent = lang() === 'en' ? 'Preparing...' : 'جاري التجهيز...';
         btn.disabled = true;
-        return prepareExport().then(job).catch(() => {
-            alert(lang() === 'en' ? 'Could not create the file. Please try again.' : 'تعذر إنشاء الملف، حاول مرة أخرى');
-        }).finally(() => {
-            document.body.classList.remove('is-exporting');
-            label.textContent = original;
-            btn.disabled = false;
-        });
+        return loadExportLibs()
+            .then(() => { enterExportMode(); return new Promise(r => requestAnimationFrame(() => setTimeout(r, 60))); })
+            .then(job)
+            .catch(() => alert(lang() === 'en' ? 'Could not create the file. Check your connection and try again.' : 'تعذر إنشاء الملف، تأكد من الاتصال وحاول مرة أخرى'))
+            .finally(() => { leaveExportMode(); label.textContent = original; btn.disabled = false; });
     }
     function exportPDF() {
         withBusy(document.querySelector('.btn-pdf'), () => capture().then(canvas => {
@@ -383,18 +549,89 @@
             let w = pageWidth - margin * 2, h = w / ratio;
             if (h > pageHeight - margin * 2) { h = pageHeight - margin * 2; w = h * ratio; }
             const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-            pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', (pageWidth - w) / 2, (pageHeight - h) / 2, w, h);
-            pdf.save('Weekly_Schedule_{{ class_name }}.pdf');
+            pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', (pageWidth - w) / 2, margin, w, h);
+            pdf.save('Weekly_Schedule_{{ class_name }}_W{{ week }}.pdf');
         }));
     }
     function exportImage() {
         withBusy(document.querySelector('.btn-img'), () => capture().then(canvas => {
             const link = document.createElement('a');
-            link.download = 'Weekly_Schedule_{{ class_name }}.png';
+            link.download = 'Weekly_Schedule_{{ class_name }}_W{{ week }}.png';
             link.href = canvas.toDataURL('image/png');
             link.click();
         }));
     }
+
+    /* ===== Phone day view ===== */
+    const agenda = document.getElementById('agenda');
+    function selectDay(day, animate) {
+        if (!agenda) return;
+        const tabs = agenda.querySelectorAll('.day-tab');
+        const panels = agenda.querySelectorAll('.ag-panel');
+        const key = todayKey();
+        tabs.forEach(t => {
+            const on = t.dataset.day === day;
+            t.setAttribute('aria-selected', String(on));
+            t.tabIndex = on ? 0 : -1;
+            t.classList.toggle('is-today', t.dataset.day === key);
+        });
+        let shown = null;
+        panels.forEach(p => { p.hidden = p.dataset.day !== day; if (!p.hidden) shown = p; });
+        agenda.classList.toggle('is-today-list', day === key);
+        agenda.dataset.day = day;
+        if (shown) {
+            shown.querySelector('.ag-today-label').hidden = day !== key;
+            if (animate && window.Motion && !reduceMotion) {
+                Motion.animate(shown.querySelectorAll('.ag-item'), { opacity: [0, 1], y: [10, 0] },
+                               { duration: 0.28, delay: Motion.stagger(0.035), ease: [0.2, 0.8, 0.2, 1] });
+            }
+        }
+    }
+    function defaultDay() {
+        const key = todayKey();
+        return DAY_ORDER.includes(key) ? key : 'Sunday';   // weekend -> the coming Sunday
+    }
+    const DAY_ORDER = {{ days_order|tojson }};
+    if (agenda) {
+        selectDay(defaultDay(), false);
+        agenda.querySelector('.day-tabs').addEventListener('click', e => {
+            const t = e.target.closest('.day-tab');
+            if (t) selectDay(t.dataset.day, true);
+        });
+        agenda.querySelector('.day-tabs').addEventListener('keydown', e => {
+            if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+            const i = DAY_ORDER.indexOf(agenda.dataset.day);
+            const rtl = document.documentElement.dir === 'rtl';
+            const step = (e.key === 'ArrowLeft') === rtl ? 1 : -1;
+            const next = DAY_ORDER[(i + step + DAY_ORDER.length) % DAY_ORDER.length];
+            selectDay(next, true);
+            agenda.querySelector(`.day-tab[data-day="${next}"]`).focus();
+        });
+        // Swipe between days
+        let sx = null, sy = null;
+        agenda.addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+        agenda.addEventListener('touchend', e => {
+            if (sx === null) return;
+            const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+            sx = null;
+            if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+            const rtl = document.documentElement.dir === 'rtl';
+            const step = (dx < 0) === rtl ? -1 : 1;   // RTL: swipe left = previous day
+            const i = DAY_ORDER.indexOf(agenda.dataset.day) + step;
+            if (i >= 0 && i < DAY_ORDER.length) selectDay(DAY_ORDER[i], true);
+        }, { passive: true });
+    }
+    const viewToggle = document.getElementById('viewToggle');
+    if (viewToggle) viewToggle.addEventListener('click', () => {
+        const on = document.body.classList.toggle('show-week');
+        viewToggle.setAttribute('aria-pressed', String(on));
+        viewToggle.querySelector('span').textContent = on
+            ? (lang() === 'en' ? 'Day view' : 'عرض يوم واحد')
+            : (lang() === 'en' ? 'Full week view' : 'عرض الأسبوع كاملاً');
+    });
+
+    const noticeEl = document.getElementById('notice');
+    if (noticeEl) noticeEl.addEventListener('click', () => noticeEl.classList.toggle('is-open'));
 
     function refreshDynamic() { markToday(); updateCountdowns(); formatSizes(); }
     document.addEventListener('student-language-change', refreshDynamic);
@@ -425,7 +662,11 @@
                 'اضغط على أي مادة لعرض التفاصيل والملفات': 'Tap any subject to see details and files',
                 'لا يوجد ملف مرفق لهذه الحصة': 'No file attached to this lesson',
                 'إغلاق': 'Close',
-                'تحميل بصيغة PDF': 'Download PDF',
+                'تحميل PDF (A4)': 'Download PDF (A4)',
+                'طباعة': 'Print',
+                'لا توجد حصة': 'Free period',
+                'عرض الأسبوع كاملاً': 'Full week view',
+                'عرض يوم واحد': 'Day view',
                 'حفظ كصورة': 'Save as image',
                 'أنشئ هذا الموقع بواسطة أحمد الفيفي': 'Built by Ahmed Al-Faifi'
             };

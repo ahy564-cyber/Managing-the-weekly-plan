@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/plan.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/plan.css', v=asset_version) }}">
     <style>
         .page { width: min(100%, 980px); margin: 0 auto; padding: 2rem clamp(1rem, 3vw, 2rem) 3rem; }
         .intro h1 { margin: 0; font-weight: 900; font-size: clamp(2.2rem, 6vw, 3.4rem); line-height: 1.05; }
@@ -40,7 +40,7 @@
             <section class="grade" data-testid="section-grade-{{ grade.id }}">
                 <h2>{{ grade.name }}</h2>
                 <div class="classes">
-                    {% for cls in grade.classes %}
+                    {% for cls in grade.classes|natsort %}
                     <a href="/student/{{ grade.id }}/{{ cls.id }}" class="class-link" data-testid="link-class-{{ cls.id }}">{{ cls.name }}</a>
                     {% endfor %}
                     {% if grade.classes|length == 0 %}<span class="none">لا توجد فصول</span>{% endif %}

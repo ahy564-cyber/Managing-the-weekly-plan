@@ -462,7 +462,20 @@
         html[lang="en"] i[style*="margin-left"] { margin-left: 0 !important; margin-right: 4px !important; }
 
         @media (max-width: 900px) {
-            .sidebar { display: none; }
+            /* Phones: the sidebar becomes a sticky, horizontally scrollable strip */
+            body { flex-direction: column; }
+            .sidebar, html[lang="en"] .sidebar { position: sticky; top: 0; right: auto; left: auto; width: 100%; min-height: 0;
+                flex-direction: row; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,.2); }
+            .sidebar-logo, .nav-section-label { display: none; }
+            .sidebar-nav { display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; padding: 8px 10px;
+                -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+            .sidebar-nav::-webkit-scrollbar { display: none; }
+            .nav-link { flex: none; width: auto; white-space: nowrap; margin: 0; padding: 8px 12px; }
+            .sidebar-footer { padding: 6px 8px; border-top: 0; }
+            .sidebar-footer a { white-space: nowrap; padding: 8px 10px; }
+            .topbar { position: static; }
+            .card, .import-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            input, select, textarea { font-size: 16px; } /* stops iOS zooming into fields */
             .main-content, html[lang="en"] .main-content { margin-right: 0; margin-left: 0; }
             .grid-2 { grid-template-columns: 1fr; }
             .page-body { padding: 16px; }
@@ -664,7 +677,9 @@
             </form>
             <p style="color:var(--muted);font-size:0.8em;margin-top:10px;">
                 <i class="fas fa-info-circle" style="margin-left:4px;"></i>
-                يجب أن يحتوي الملف على عمود للصف، ثم {{ periods_per_day }} أعمدة لكل يوم حسب عدد الحصص المحدد في الإعدادات.
+                يقبل ملف برنامج الجداول كما هو: العمود الأول اسم الفصل (مثال: <b dir="ltr">Grade 4 A</b> ← الصف <b dir="ltr">Grade 4</b> والفصل <b>A</b>)،
+                وصف العناوين يحتوي أسماء الأيام وأرقام الحصص. يُقرأ اسم المادة من السطر الأول في الخانة، ويُضبط عدد الحصص اليومية تلقائياً.
+                بيانات المعلمين (الدروس والواجبات) لا تُمسح عند إعادة الاستيراد.
             </p>
         </div>
 
