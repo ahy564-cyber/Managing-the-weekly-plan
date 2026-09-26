@@ -144,3 +144,29 @@ button, input, select, textarea { font: inherit; color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; }
 }
+
+/* ---------- Lesson links (shared by student + teacher) ---------- */
+.link-pill {
+  display: inline-flex; align-items: center; gap: .45rem; max-width: 100%; min-width: 0;
+  padding: .4rem .85rem; border-radius: var(--r-pill);
+  background: var(--paper); border: 1.5px solid var(--line); color: var(--ink);
+  text-decoration: none; font-weight: 700; font-size: .84rem;
+}
+.link-pill:hover { border-color: var(--ink); }
+.link-pill svg { width: 16px; height: 16px; flex: none; }
+.link-pill .lk-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.link-pill small { color: var(--muted); font-weight: 600; white-space: nowrap; }
+.link-pill.is-yt svg, .yt-play svg { color: #e62117; }
+
+.yt-card {
+  display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: .65rem; align-items: center;
+  padding: .35rem .5rem .35rem .35rem; border-radius: 12px; background: var(--paper);
+  border: 1.5px solid var(--line); color: var(--ink); text-decoration: none;
+}
+.yt-card:hover { border-color: #e62117; }
+.yt-thumb { position: relative; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; background: #111; }
+.yt-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.yt-play { position: absolute; inset: 0; display: grid; place-items: center; }
+.yt-play svg { width: 34px; height: 24px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.35)); }
+.yt-title { font-weight: 800; font-size: .84rem; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.yt-title small { display: block; font-weight: 600; color: var(--muted); font-size: .74rem; }

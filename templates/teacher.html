@@ -57,6 +57,17 @@
         .att-remove:hover { background: var(--hw-wash); }
         .att.is-busy { opacity: .6; pointer-events: none; }
         .att-progress { font-size: .78rem; font-weight: 700; color: var(--muted); }
+        .links { display: grid; gap: .35rem; margin-top: .35rem; }
+        .link-row { display: flex; align-items: center; gap: .4rem; min-width: 0; }
+        .link-row .link-pill { flex: 1 1 auto; padding: .3rem .75rem; font-size: .78rem; }
+        .links .att-add { justify-self: start; }
+        .link-form { display: grid; gap: .4rem; padding: .55rem; border: 1.5px solid var(--ink); border-radius: 10px; background: var(--paper); }
+        .link-form input { width: 100%; min-height: 38px; padding: .35rem .6rem; border: 1.5px solid var(--line); border-radius: 8px; background: var(--paper); font-size: .85rem; }
+        .link-form input:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px var(--teal-wash); }
+        .link-form .row { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; }
+        .link-form .btn { min-height: 36px; padding: .3rem 1rem; font-size: .85rem; }
+        .links.is-busy { opacity: .6; pointer-events: none; }
+        td.is-dragover-link { box-shadow: inset 0 0 0 2px var(--teal); }
 
         /* Sticky save bar */
         .savebar { position: fixed; bottom: 1rem; inset-inline: 0; margin-inline: auto; width: max-content; max-width: calc(100% - 2rem); display: flex; align-items: center; gap: 1rem; padding: .5rem .5rem .5rem 1.2rem; border-radius: var(--r-pill); background: var(--paper); border: 1px solid var(--line); box-shadow: var(--shadow-float); z-index: 50; }
@@ -262,6 +273,7 @@
                                 <textarea class="hw" placeholder="الواجب المنزلي..." aria-label="الواجب - {{ c.subject_name }}" data-day="{{ d }}" data-period="{{ p }}">{{ c.homework }}</textarea>
                                 <div class="att" data-day="{{ d }}" data-period="{{ p }}"
                                      {% if c.attachment %}data-att-id="{{ c.attachment.id }}" data-att-name="{{ c.attachment.name }}" data-att-url="{{ c.attachment.url }}" data-att-size="{{ c.attachment.size }}"{% endif %}></div>
+                                <div class="links" data-day="{{ d }}" data-period="{{ p }}" data-links='{{ (c.links or [])|tojson }}'></div>
                             </td>
                             {% else %}
                             <td id="cell-{{ d }}-{{ p }}" class="not-assigned" data-day="{{ d }}" data-period="{{ p }}" data-label="ح {{ p }}">
@@ -270,6 +282,9 @@
                                 <textarea readonly placeholder="لم يُدخل بعد...">{{ c.topic }}</textarea>
                                 <textarea readonly placeholder="لم يُدخل بعد...">{{ c.homework }}</textarea>
                                 {% if c.attachment %}
+                                {% for l in c.links or [] %}
+                                <a class="link-pill{{ ' is-yt' if l.kind == 'youtube' }}" href="{{ l.url }}" target="_blank" rel="noopener noreferrer" style="font-size:.78rem;margin-top:.3rem;">{% if l.kind == 'youtube' %}<svg viewBox="0 0 34 24" aria-hidden="true"><rect width="34" height="24" rx="6" fill="currentColor"/><path d="M13.5 7v10l9-5z" fill="#fff"/></svg>{% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4.5 4.5 0 006.4 0l3.2-3.2a4.5 4.5 0 00-6.4-6.4L12 5.6"/><path d="M14 10a4.5 4.5 0 00-6.4 0l-3.2 3.2a4.5 4.5 0 006.4 6.4L12 18.4"/></svg>{% endif %}<span class="lk-title"{% if l.custom %} translate="no"{% endif %}>{{ l.title }}</span></a>
+                                {% endfor %}
                                 <a class="file-pill" href="{{ c.attachment.url }}" style="font-size: .78rem; padding: .3rem .75rem;">{% set nm = c.attachment.name.rsplit(' ', 1) %}<span class="file-name" translate="no">{% if nm|length > 1 %}<bdi>{{ nm[0] }}</bdi> {% endif %}<bdi dir="ltr">{{ nm[-1] }}</bdi></span></a>
                                 {% endif %}
                             </td>
@@ -546,16 +561,101 @@
                 .catch(() => { renderAtt(box); showErrorToast('فشل الاتصال بالخادم'); });
         }
 
+        /* ---------- Links (YouTube or any website) ---------- */
+        const MAX_LINKS = 5;
+        const ICON_YT = '<svg viewBox="0 0 34 24" aria-hidden="true"><rect width="34" height="24" rx="6" fill="currentColor"/><path d="M13.5 7v10l9-5z" fill="#fff"/></svg>';
+        const ICON_LINK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4.5 4.5 0 006.4 0l3.2-3.2a4.5 4.5 0 00-6.4-6.4L12 5.6"/><path d="M14 10a4.5 4.5 0 00-6.4 0l-3.2 3.2a4.5 4.5 0 006.4 6.4L12 18.4"/></svg>';
+        const linksOf = box => { try { return JSON.parse(box.dataset.links || '[]'); } catch (e) { return []; } };
+
+        function renderLinks(box) {
+            box.classList.remove('is-busy');
+            const links = linksOf(box);
+            box.innerHTML = links.map(l => `<div class="link-row">
+                    <a class="link-pill${l.kind === 'youtube' ? ' is-yt' : ''}" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer" title="${esc(l.url)}">
+                        ${l.kind === 'youtube' ? ICON_YT : ICON_LINK}<span class="lk-title"${l.custom ? ' translate="no"' : ''}>${esc(l.title)}</span></a>
+                    <button type="button" class="att-remove" data-link-id="${l.id}" aria-label="حذف الرابط">${ICON_X}</button>
+                </div>`).join('') +
+                (links.length < MAX_LINKS ? `<button type="button" class="att-add link-add">${ICON_LINK}<span>إضافة رابط</span></button>` : '');
+            box.querySelectorAll('[data-link-id]').forEach(b => b.addEventListener('click', () => removeLink(box, +b.dataset.linkId)));
+            const add = box.querySelector('.link-add');
+            if (add) add.addEventListener('click', () => openLinkForm(box));
+        }
+
+        function openLinkForm(box, prefill) {
+            const add = box.querySelector('.link-add');
+            if (!add) return;
+            const form = document.createElement('form');
+            form.className = 'link-form';
+            form.innerHTML = `<input name="url" type="text" inputmode="url" dir="ltr" autocomplete="off" spellcheck="false" placeholder="رابط يوتيوب أو أي موقع" required>
+                <input name="title" type="text" maxlength="120" placeholder="عنوان (اختياري)">
+                <div class="row"><button type="submit" class="btn btn-primary">حفظ الرابط</button>
+                <button type="button" class="btn btn-text" data-en="Cancel">إلغاء</button></div>`;
+            add.replaceWith(form);
+            const url = form.querySelector('[name=url]');
+            if (prefill) url.value = prefill;
+            url.focus();
+            form.querySelector('.btn-text').addEventListener('click', () => renderLinks(box));
+            form.addEventListener('keydown', e => { if (e.key === 'Escape') renderLinks(box); });
+            form.addEventListener('submit', e => {
+                e.preventDefault();
+                if (!url.value.trim()) return url.focus();
+                addLink(box, url.value.trim(), form.querySelector('[name=title]').value.trim());
+            });
+        }
+
+        function addLink(box, url, title) {
+            const fd = new FormData();
+            fd.append('class_id', CLASS_ID); fd.append('week', WEEK);
+            fd.append('day', box.dataset.day); fd.append('period', box.dataset.period);
+            fd.append('url', url); fd.append('title', title || '');
+            box.classList.add('is-busy');
+            fetch('/teacher/link', { method: 'POST', body: fd })
+                .then(r => r.json().catch(() => ({})))
+                .then(data => {
+                    if (data.status === 'success') {
+                        const links = linksOf(box); links.push(data.link);
+                        box.dataset.links = JSON.stringify(links);
+                        renderLinks(box);
+                        toast('تمت إضافة الرابط');
+                    } else {
+                        box.classList.remove('is-busy');
+                        showErrorToast(data.message || 'تعذر حفظ الرابط');
+                        if ((data.message || '').includes('جلسة')) setTimeout(() => location.href = '/login', 1500);
+                    }
+                })
+                .catch(() => { box.classList.remove('is-busy'); showErrorToast('فشل الاتصال بالخادم — يرجى المحاولة مرة أخرى'); });
+        }
+
+        function removeLink(box, id) {
+            if (!confirm('حذف هذا الرابط؟')) return;
+            box.classList.add('is-busy');
+            fetch(`/teacher/link/${id}/delete`, { method: 'POST' })
+                .then(r => r.json().catch(() => ({})))
+                .then(data => {
+                    if (data.status === 'success') {
+                        box.dataset.links = JSON.stringify(linksOf(box).filter(l => l.id !== id));
+                        toast('تم حذف الرابط');
+                    } else showErrorToast(data.message || 'تعذر حذف الرابط');
+                    renderLinks(box);
+                })
+                .catch(() => { renderLinks(box); showErrorToast('فشل الاتصال بالخادم'); });
+        }
+
+        document.querySelectorAll('.links').forEach(renderLinks);
+
         document.querySelectorAll('.att').forEach(box => {
             renderAtt(box);
-            // Drag a file onto a lesson cell to attach it
+            // Drag a file onto a lesson cell to attach it, or drag a link from the browser to add it
             const td = box.closest('td');
+            const linksBox = td.querySelector('.links');
             td.addEventListener('dragover', e => { e.preventDefault(); box.classList.add('is-dragover'); });
             td.addEventListener('dragleave', () => box.classList.remove('is-dragover'));
             td.addEventListener('drop', e => {
                 e.preventDefault(); box.classList.remove('is-dragover');
                 const f = e.dataTransfer.files[0];
-                if (f && !box.classList.contains('is-busy')) uploadAtt(box, f);
+                if (f && !box.classList.contains('is-busy')) return uploadAtt(box, f);
+                const dropped = (e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain') || '').split('\n')[0].trim();
+                if (dropped && linksBox && /^(https?:\/\/|www\.)/i.test(dropped)) addLink(linksBox, dropped, '');
             });
         });
     </script>

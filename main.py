@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import joinedload, deferred
 import mimetypes
 import hashlib
+from urllib.parse import urlparse, parse_qs
 import tempfile
 import uuid
 from sqlalchemy import func, insert, update
@@ -208,6 +209,23 @@ class PeriodAttachment(db.Model):
     school_id = db.Column(db.Integer, nullable=True, server_default='1')
     __table_args__ = (db.UniqueConstraint('class_id', 'week_number', 'day', 'period', name='_attachment_cell_uc'),)
 
+class PeriodLink(db.Model):
+    """A web link (YouTube video or any website) attached to one lesson; up to MAX_LINKS_PER_LESSON."""
+    __tablename__ = 'period_link'
+    id = db.Column(db.Integer, primary_key=True)
+    class_id = db.Column(db.Integer, db.ForeignKey('class.id', ondelete='CASCADE'), nullable=False)
+    week_number = db.Column(db.Integer, nullable=False)
+    day = db.Column(db.String(20), nullable=False)
+    period = db.Column(db.Integer, nullable=False)
+    url = db.Column(db.Text, nullable=False)
+    title = db.Column(db.String(200), nullable=True)
+    kind = db.Column(db.String(20), nullable=False, default='link')      # 'youtube' | 'link'
+    video_id = db.Column(db.String(20), nullable=True)
+    teacher_id = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    school_id = db.Column(db.Integer, nullable=True, server_default='1')
+    __table_args__ = (db.Index('ix_period_link_class_week', 'class_id', 'week_number'),)
+
 class ActivityLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_role = db.Column(db.String(50))
@@ -353,6 +371,7 @@ def run_startup_migrations():
         "CREATE INDEX IF NOT EXISTS ix_activity_log_timestamp ON activity_log (timestamp DESC)",
         "CREATE INDEX IF NOT EXISTS ix_period_attachment_class_week ON period_attachment (class_id, week_number)",
         "CREATE INDEX IF NOT EXISTS ix_locked_day_week ON locked_day (week_number)",
+        "CREATE INDEX IF NOT EXISTS ix_period_link_class_week ON period_link (class_id, week_number)",
     ):
         try:
             db.session.execute(db.text(stmt))
@@ -458,6 +477,9 @@ def student_page_stamp(class_id, week_int, visible, default_week):
                                     PeriodAttachment.original_name) \
                 .filter_by(class_id=class_id, week_number=week_int).order_by(PeriodAttachment.id).all():
             h.update(repr(tuple(row)).encode())
+        for row in db.session.query(PeriodLink.id, PeriodLink.day, PeriodLink.period, PeriodLink.url, PeriodLink.title) \
+                .filter_by(class_id=class_id, week_number=week_int).order_by(PeriodLink.id).all():
+            h.update(repr(tuple(row)).encode())
     return h.hexdigest()[:16]
 
 def get_or_create_class(grade_name, class_name):
@@ -493,6 +515,57 @@ def teacher_can_edit_cell(class_id, day, period):
         return True
     return TeacherAssignment.query.filter_by(teacher_id=t_id, class_id=class_id, day=day,
                                              period=period, school_id=1).first() is not None
+
+MAX_LINKS_PER_LESSON = 5
+_YOUTUBE_ID = re.compile(r'^[A-Za-z0-9_-]{11}$')
+
+def normalize_link(raw):
+    """Returns a clean http(s) URL or None. Adds https:// when the teacher pastes 'youtube.com/…'."""
+    url = (raw or '').strip()
+    if not url or len(url) > 1000 or re.search(r'\s', url):
+        return None
+    if not re.match(r'^https?://', url, re.I):
+        if re.match(r'^[a-z][a-z0-9+.-]*:', url, re.I):      # javascript:, data:, mailto: …
+            return None
+        url = 'https://' + url
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return None
+    host = (parsed.hostname or '').lower()
+    if parsed.scheme.lower() not in ('http', 'https') or '.' not in host:
+        return None
+    return url
+
+def youtube_video_id(url):
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return None
+    host = (parsed.hostname or '').lower()
+    for prefix in ('www.', 'm.', 'music.'):
+        if host.startswith(prefix):
+            host = host[len(prefix):]
+    vid = ''
+    if host == 'youtu.be':
+        vid = parsed.path.lstrip('/').split('/')[0]
+    elif host in ('youtube.com', 'youtube-nocookie.com'):
+        if parsed.path == '/watch':
+            vid = parse_qs(parsed.query).get('v', [''])[0]
+        else:
+            m = re.match(r'^/(?:shorts|embed|live|v)/([^/?#]+)', parsed.path)
+            vid = m.group(1) if m else ''
+    return vid if _YOUTUBE_ID.match(vid or '') else None
+
+def link_payload(link):
+    host = (urlparse(link.url).hostname or '').lower()
+    if host.startswith('www.'):
+        host = host[4:]
+    data = {'id': link.id, 'url': link.url, 'kind': link.kind, 'host': host, 'custom': bool(link.title),
+            'title': link.title or ('فيديو يوتيوب' if link.kind == 'youtube' else host)}
+    if link.kind == 'youtube' and link.video_id:
+        data['thumb'] = f'https://i.ytimg.com/vi/{link.video_id}/mqdefault.jpg'
+    return data
 
 def attachment_payload(att):
     return {'id': att.id, 'name': att.original_name, 'size': att.size_bytes,
@@ -543,6 +616,7 @@ def purge_class_attachments(class_ids):
     keys = [k for (k,) in db.session.query(PeriodAttachment.storage_key)
             .filter(PeriodAttachment.class_id.in_(class_ids), PeriodAttachment.storage_key.isnot(None)).all()]
     PeriodAttachment.query.filter(PeriodAttachment.class_id.in_(class_ids)).delete(synchronize_session=False)
+    PeriodLink.query.filter(PeriodLink.class_id.in_(class_ids)).delete(synchronize_session=False)
     delete_stored_objects(keys)
 
 def add_attachments_to_schedule(schedule, class_id, week_int):
@@ -551,6 +625,12 @@ def add_attachments_to_schedule(schedule, class_id, week_int):
     for att in rows:
         if att.day in schedule and att.period in schedule[att.day]:
             schedule[att.day][att.period]['attachment'] = attachment_payload(att)
+    for day in schedule:
+        for p in schedule[day]:
+            schedule[day][p].setdefault('links', [])
+    for link in PeriodLink.query.filter_by(class_id=class_id, week_number=week_int).order_by(PeriodLink.id).all():
+        if link.day in schedule and link.period in schedule[link.day]:
+            schedule[link.day][link.period]['links'].append(link_payload(link))
 
 def swap_attachments(class_id, from_day, from_period, to_day, to_period, week_number=None):
     """Moves files together with their lessons when the admin swaps two cells."""
@@ -571,6 +651,20 @@ def swap_attachments(class_id, from_day, from_period, to_day, to_period, week_nu
     db.session.flush()
     for a in src:
         a.day, a.period = to_day, to_period
+    db.session.flush()
+    # Links move with their lessons too
+    lq = PeriodLink.query.filter_by(class_id=class_id)
+    if week_number is not None:
+        lq = lq.filter_by(week_number=week_number)
+    lsrc = [l for l in lq.filter_by(day=from_day, period=from_period).all()]
+    lq2 = PeriodLink.query.filter_by(class_id=class_id)
+    if week_number is not None:
+        lq2 = lq2.filter_by(week_number=week_number)
+    ldst = [l for l in lq2.filter_by(day=to_day, period=to_period).all()]
+    for l in lsrc:
+        l.day, l.period = to_day, to_period
+    for l in ldst:
+        l.day, l.period = from_day, from_period
     db.session.flush()
 
 @app.route('/')
@@ -1853,6 +1947,67 @@ def upload_attachment():
                  teacher_name=actor, action_type='مرفق', target_subject=f'فصل {class_id}',
                  description=f'مرفق: {display_name} ({size // 1024} KB) | {DAYS_AR.get(day, day)} ح{period} | أسبوع {week_int}')
     return jsonify({'status': 'success', 'attachment': attachment_payload(att)})
+
+@app.route('/teacher/link', methods=['POST'])
+@login_required
+def add_link():
+    try:
+        class_id = int(request.form.get('class_id', ''))
+        period = int(request.form.get('period', ''))
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'بيانات الحصة ناقصة'}), 400
+    week_int = safe_week(request.form.get('week'))
+    day = request.form.get('day', '')
+    if day not in DAYS_ORDER or period < 1 or period > get_periods_per_day():
+        return jsonify({'status': 'error', 'message': 'رقم الحصة خارج النطاق المسموح'}), 400
+    if not db.session.get(Class, class_id):
+        return jsonify({'status': 'error', 'message': 'الفصل غير موجود'}), 404
+    if not teacher_can_edit_cell(class_id, day, period):
+        return jsonify({'status': 'error', 'message': 'غير مصرح — هذه المادة ليست مخصصة لك'}), 403
+    if not can_edit_all() and LockedDay.query.filter_by(week_number=week_int, day_name=day).first():
+        return jsonify({'status': 'error', 'message': 'هذا اليوم مغلق من الإدارة'}), 403
+    url = normalize_link(request.form.get('url'))
+    if not url:
+        return jsonify({'status': 'error', 'message': 'الرابط غير صحيح — تأكد أنه يبدأ بـ https://'}), 400
+    count = PeriodLink.query.filter_by(class_id=class_id, week_number=week_int, day=day, period=period).count()
+    if count >= MAX_LINKS_PER_LESSON:
+        return jsonify({'status': 'error', 'message': f'الحد الأقصى {MAX_LINKS_PER_LESSON} روابط للحصة'}), 400
+    vid = youtube_video_id(url)
+    title = ' '.join((request.form.get('title') or '').split())[:120] or None
+    link = PeriodLink(class_id=class_id, week_number=week_int, day=day, period=period, url=url, title=title,
+                      kind='youtube' if vid else 'link', video_id=vid,
+                      teacher_id=session.get('teacher_id'), school_id=1)
+    db.session.add(link)
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'message': 'فشل الحفظ في قاعدة البيانات — يرجى المحاولة مجدداً'}), 500
+    payload = link_payload(link)
+    actor = actor_name()
+    log_activity(session.get('user_role'), f'{actor} أضاف رابط "{payload["title"]}" — {DAYS_AR.get(day, day)} ح{period} — أسبوع {week_int}',
+                 teacher_name=actor, action_type='مرفق', target_subject=f'فصل {class_id}', description=f'رابط: {url}')
+    return jsonify({'status': 'success', 'link': payload})
+
+@app.route('/teacher/link/<int:link_id>/delete', methods=['POST'])
+@login_required
+def delete_link(link_id):
+    link = db.session.get(PeriodLink, link_id)
+    if not link:
+        return jsonify({'status': 'error', 'message': 'الرابط غير موجود'}), 404
+    if not teacher_can_edit_cell(link.class_id, link.day, link.period):
+        return jsonify({'status': 'error', 'message': 'غير مصرح بحذف هذا الرابط'}), 403
+    if not can_edit_all() and LockedDay.query.filter_by(week_number=link.week_number, day_name=link.day).first():
+        return jsonify({'status': 'error', 'message': 'هذا اليوم مغلق من الإدارة'}), 403
+    title = link.title or link.url
+    day, period, week_int, class_id = link.day, link.period, link.week_number, link.class_id
+    db.session.delete(link)
+    db.session.commit()
+    actor = actor_name()
+    log_activity(session.get('user_role'), f'{actor} حذف رابط "{title}" — {DAYS_AR.get(day, day)} ح{period} — أسبوع {week_int}',
+                 teacher_name=actor, action_type='مرفق', target_subject=f'فصل {class_id}')
+    return jsonify({'status': 'success'})
 
 @app.route('/teacher/attachment/<int:att_id>/delete', methods=['POST'])
 @login_required
