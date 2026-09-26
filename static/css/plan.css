@@ -1,0 +1,146 @@
+/* ==========================================================================
+   الخطة الأسبوعية — Design system
+   Palette: deep teal ink + one highlighter-yellow accent that always means "today".
+   Type: Cairo only — 900 for the voice, 400–700 for everything else.
+   ========================================================================== */
+
+:root {
+  --ink: #0e3b37;          /* text, dark surfaces */
+  --ink-2: #1d5a53;        /* secondary dark surface */
+  --teal: #0d9488;         /* school brand — links, focus, active controls */
+  --teal-wash: #e3f4f0;    /* active column / hover */
+  --canvas: #f2f5f3;       /* page background */
+  --paper: #ffffff;        /* cards, cells */
+  --line: #d9e2de;         /* hairlines */
+  --muted: #5d6e6a;        /* supporting text */
+  --faint: #93a39f;        /* placeholders, empty cells */
+  --mark: #ffe15a;         /* highlighter — reserved for "today" */
+  --mark-soft: #fff7cc;
+  --hw: #b4232c;           /* homework */
+  --hw-wash: #fdeeee;
+  --ok: #117a4f;
+  --danger: #c0352c;
+
+  --r-cell: 10px;
+  --r-card: 14px;
+  --r-panel: 26px;
+  --r-pill: 999px;
+
+  --font: 'Cairo', 'Segoe UI', Tahoma, system-ui, sans-serif;
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --shadow-float: 0 18px 40px -18px rgba(14, 59, 55, .35), 0 2px 6px rgba(14, 59, 55, .06);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--canvas);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--teal); }
+img { max-width: 100%; }
+button, input, select, textarea { font: inherit; color: inherit; }
+
+:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; border-radius: 6px; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  min-height: 44px; padding: .55rem 1.35rem;
+  border: 1.5px solid transparent; border-radius: var(--r-pill);
+  font-weight: 700; font-size: .95rem; text-decoration: none; cursor: pointer;
+  transition: background-color .2s, border-color .2s, color .2s, transform .15s;
+}
+.btn:active { transform: scale(.98); }
+.btn:disabled { opacity: .6; cursor: progress; }
+.btn svg { width: 18px; height: 18px; flex: none; }
+.btn-primary { background: var(--ink); color: #fff; }
+.btn-primary:hover { background: var(--ink-2); }
+.btn-outline { background: var(--paper); color: var(--ink); border-color: var(--ink); }
+.btn-outline:hover { background: var(--teal-wash); }
+.btn-text { background: none; color: var(--ink); padding-inline: .4rem; text-decoration: underline; text-underline-offset: 4px; }
+.btn-text:hover { color: var(--teal); }
+
+/* ---------- Segmented control (language) ---------- */
+.seg { display: inline-flex; direction: ltr; padding: 3px; gap: 2px; background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-pill); }
+.seg button { border: 0; background: none; padding: .3rem .85rem; border-radius: var(--r-pill); font-size: .82rem; font-weight: 700; color: var(--muted); cursor: pointer; }
+.seg button.active { background: var(--ink); color: #fff; }
+
+/* ---------- Select pill ---------- */
+.select-pill {
+  appearance: none; -webkit-appearance: none;
+  min-height: 40px; padding: .3rem 1rem .3rem 2.2rem;
+  border: 1.5px solid var(--line); border-radius: var(--r-pill); background: var(--paper);
+  font-weight: 700; font-size: .9rem; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%230e3b37' stroke-width='2'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: left .85rem center;
+}
+[dir="ltr"] .select-pill { padding: .3rem 2.2rem .3rem 1rem; background-position: right .85rem center; }
+.select-pill:hover { border-color: var(--ink); }
+
+/* ---------- Inputs ---------- */
+.field { display: grid; gap: .35rem; }
+.field label { font-weight: 700; font-size: .9rem; }
+.input {
+  width: 100%; min-height: 50px; padding: .7rem 1rem;
+  border: 1.5px solid var(--line); border-radius: var(--r-cell); background: var(--paper);
+  font-size: 1rem; transition: border-color .2s, box-shadow .2s;
+}
+.input::placeholder { color: var(--faint); }
+.input:hover { border-color: #b9c7c2; }
+.input:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 4px var(--teal-wash); }
+.hint { font-size: .82rem; color: var(--muted); }
+
+/* ---------- Chips ---------- */
+.chip { display: inline-flex; align-items: center; gap: .4rem; padding: .25rem .8rem; border-radius: var(--r-pill); font-size: .85rem; font-weight: 700; background: var(--paper); border: 1px solid var(--line); }
+.chip-today { background: var(--mark); border-color: transparent; color: var(--ink); }
+.chip-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink); }
+
+/* ---------- Top bar ---------- */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  padding: .9rem clamp(1rem, 3vw, 2rem);
+  background: var(--paper); border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: .75rem; text-decoration: none; color: var(--ink); min-width: 0; }
+.brand img { height: 42px; width: auto; }
+.brand-mark { width: 38px; height: 38px; border-radius: 10px; background: var(--ink); display: grid; place-items: center; flex: none; }
+.brand-mark span { width: 14px; height: 14px; border-radius: 3px; background: var(--mark); }
+.brand-name { font-weight: 800; font-size: 1.02rem; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar-actions { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+
+/* ---------- Toast ---------- */
+.toast {
+  position: fixed; inset-inline: 0; bottom: 1.5rem; margin-inline: auto; width: max-content; max-width: calc(100% - 2rem);
+  padding: .8rem 1.4rem; border-radius: var(--r-pill); background: var(--ink); color: #fff; font-weight: 700;
+  box-shadow: var(--shadow-float); z-index: 1000;
+  opacity: 0; transform: translateY(12px); pointer-events: none; transition: opacity .25s, transform .25s var(--ease-out);
+}
+.toast.show { opacity: 1; transform: none; }
+.toast.is-error { background: var(--danger); }
+.toast.is-muted { background: var(--muted); }
+
+/* ---------- Footer ---------- */
+.site-footer { text-align: center; padding: 2rem 1rem; color: var(--muted); font-size: .85rem; }
+
+/* ---------- File pill (shared by student + teacher) ---------- */
+.file-pill {
+  display: inline-flex; align-items: center; gap: .5rem; max-width: 100%;
+  padding: .45rem .95rem; border-radius: var(--r-pill);
+  background: var(--ink); color: #fff; text-decoration: none; font-weight: 700; font-size: .85rem;
+}
+.file-pill:hover { background: var(--ink-2); }
+.file-pill svg { width: 16px; height: 16px; flex: none; }
+.file-pill .file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.file-pill .file-size { opacity: .7; font-weight: 600; white-space: nowrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; }
+}
