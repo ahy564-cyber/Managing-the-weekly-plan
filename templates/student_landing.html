@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>عرض الجداول - {{ settings.school_name or 'نظام الخطة الدراسية' }}</title>
+    <script>window.I18N_NAMES = {{ (i18n_names or {})|tojson }};</script>
+    <script src="{{ url_for('static', filename='js/i18n.js', v=asset_version) }}"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">

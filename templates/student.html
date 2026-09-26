@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>جدول الطالب - {{ grade_name }} - {{ class_name }}</title>
+    <script>window.I18N_NAMES = {{ (i18n_names or {})|tojson }};</script>
+    <script src="{{ url_for('static', filename='js/i18n.js', v=asset_version) }}"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
@@ -224,8 +226,8 @@
             </form>
             {% endif %}
             <div class="seg" role="group" aria-label="اختيار اللغة">
-                <button type="button" data-student-language="ar" aria-pressed="true">العربية</button>
-                <button type="button" data-student-language="en" aria-pressed="false">English</button>
+                <button type="button" data-lang-option="ar" aria-pressed="true">العربية</button>
+                <button type="button" data-lang-option="en" aria-pressed="false">English</button>
             </div>
         </div>
     </header>
@@ -291,13 +293,13 @@
                             <span class="ag-num" aria-label="الحصة {{ p }}">{{ p }}</span>
                             <div class="ag-body">
                                 {% if c.subject_name %}
-                                <span class="ag-subj">{{ c.subject_name }}</span>
-                                {% if c.topic %}<p class="ag-topic">{{ c.topic }}</p>{% endif %}
-                                {% if c.homework %}<p class="ag-hw"><b>الواجب:</b> {{ c.homework }}</p>{% endif %}
+                                <span class="ag-subj" translate="no">{{ c.subject_name }}</span>
+                                {% if c.topic %}<p class="ag-topic" translate="no">{{ c.topic }}</p>{% endif %}
+                                {% if c.homework %}<p class="ag-hw"><b>الواجب:</b> <span translate="no">{{ c.homework }}</span></p>{% endif %}
                                 {% if c.attachment %}
                                 <a class="file-pill" href="{{ c.attachment.url }}" download>
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>
-                                    {% set nm = c.attachment.name.rsplit(' ', 1) %}<span class="file-name">{% if nm|length > 1 %}<bdi>{{ nm[0] }}</bdi> {% endif %}<bdi dir="ltr">{{ nm[-1] }}</bdi></span>
+                                    {% set nm = c.attachment.name.rsplit(' ', 1) %}<span class="file-name" translate="no">{% if nm|length > 1 %}<bdi>{{ nm[0] }}</bdi> {% endif %}<bdi dir="ltr">{{ nm[-1] }}</bdi></span>
                                     <span class="file-size" data-bytes="{{ c.attachment.size }}"></span>
                                 </a>
                                 {% endif %}
@@ -327,15 +329,15 @@
                         <div class="tt-cell{% if c.attachment %} has-file{% endif %}" role="button" tabindex="0" aria-expanded="false"
                              data-day="{{ d }}" data-col="{{ p }}" aria-label="{{ c.subject_name }} - {{ days_ar[d] }} ح {{ p }}">
                             {% if c.attachment %}<span class="tt-clip" title="يوجد ملف مرفق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 01-7.8-7.8l8.6-8.6a3.7 3.7 0 015.2 5.2l-8.6 8.6a1.8 1.8 0 01-2.6-2.6l7.9-7.9"/></svg></span>{% endif %}
-                            <span class="tt-subj">{{ c.subject_name }}</span>
-                            {% if c.topic %}<span class="tt-topic">{{ c.topic }}</span>{% endif %}
-                            {% if c.homework %}<span class="tt-hw"><b>الواجب:</b> {{ c.homework }}</span>{% endif %}
+                            <span class="tt-subj" translate="no">{{ c.subject_name }}</span>
+                            {% if c.topic %}<span class="tt-topic" translate="no">{{ c.topic }}</span>{% endif %}
+                            {% if c.homework %}<span class="tt-hw"><b>الواجب:</b> <span translate="no">{{ c.homework }}</span></span>{% endif %}
                             <span class="tt-more">
                                 <span class="tt-more-inner">
                                     {% if c.attachment %}
                                     <a class="file-pill" href="{{ c.attachment.url }}" download>
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>
-                                        {% set nm = c.attachment.name.rsplit(' ', 1) %}<span class="file-name">{% if nm|length > 1 %}<bdi>{{ nm[0] }}</bdi> {% endif %}<bdi dir="ltr">{{ nm[-1] }}</bdi></span>
+                                        {% set nm = c.attachment.name.rsplit(' ', 1) %}<span class="file-name" translate="no">{% if nm|length > 1 %}<bdi>{{ nm[0] }}</bdi> {% endif %}<bdi dir="ltr">{{ nm[-1] }}</bdi></span>
                                         <span class="file-size" data-bytes="{{ c.attachment.size }}"></span>
                                     </a>
                                     {% else %}
@@ -695,97 +697,5 @@
     setInterval(markToday, 60000);
     </script>
 
-    <script>
-        (function () {
-            const originalText = new WeakMap();
-            const translations = {
-                'أعزاءنا أولياء الأمور والطلاب الكرام.. نرحب بكم في منصة (الجدول الذكي)؛ وجهتكم المعتمدة للاطلاع على الخطة الأسبوعية، والتي نوافيكم بها بدقة وموعد ثابت كل يوم خميس بنهاية دوامنا الدراسي، لنعينكم على التخطيط المبكر لأسبوعكم القادم.': 'Dear parents and students, welcome to the Smart Schedule platform—your trusted place to view the weekly plan, published every Thursday at the end of the school day to help you plan the coming week.',
-                'لم يتم اعتماد الجدول بعد': 'The schedule has not been published yet',
-                'اختر الأسبوع': 'Choose a week',
-                'الأسبوع': 'Week',
-                'اختبارات الفترة الأولى': 'First assessment',
-                'اختبارات الفترة الثانية': 'Second assessment',
-                'الاختبار النهائي': 'Final exam',
-                'يوم متبقٍ': 'days left',
-                'اليوم / الحصة': 'Day / Period',
-                'اليوم': 'Today',
-                'الأحد': 'Sunday',
-                'الاثنين': 'Monday',
-                'الثلاثاء': 'Tuesday',
-                'الأربعاء': 'Wednesday',
-                'الخميس': 'Thursday',
-                'الواجب:': 'Homework:',
-                'اضغط على أي مادة لعرض التفاصيل والملفات': 'Tap any subject to see details and files',
-                'لا يوجد ملف مرفق لهذه الحصة': 'No file attached to this lesson',
-                'إغلاق': 'Close',
-                'تحميل PDF (A4)': 'Download PDF (A4)',
-                'طباعة': 'Print',
-                'لا توجد حصة': 'Free period',
-                'عرض الأسبوع كاملاً': 'Full week view',
-                'عرض يوم واحد': 'Day view',
-                'حفظ كصورة': 'Save as image',
-                'أنشئ هذا الموقع بواسطة أحمد الفيفي': 'Built by Ahmed Al-Faifi'
-            };
-
-            function translateText(source, language) {
-                const value = source.trim();
-                if (language === 'ar') return value;
-                if (translations[value]) return translations[value];
-                let match = value.match(/^الأسبوع\s+(\d+)(\s+\((الأحدث|الحالي|غير معتمد)\))?$/);
-                if (match) return `Week ${match[1]}${match[3] === 'الأحدث' ? ' (latest)' : match[3] === 'الحالي' ? ' (current)' : match[3] ? ' (not approved)' : ''}`;
-                match = value.match(/^خطة الأسبوع\s+(\d+)\s+لم تُعتمد بعد$/);
-                if (match) return `The plan for week ${match[1]} has not been approved yet`;
-                match = value.match(/^ح\s*(\d+)$/);
-                if (match) return `P${match[1]}`;
-                match = value.match(/^جاري تحضير خطة\s+(.+)، وسيتم نشرها هنا فور اعتمادها من إدارة المدرسة\.$/);
-                if (match) return `The ${match[1]} plan is being prepared and will appear here once approved by the school administration.`;
-                return null;
-            }
-
-            function preserveWhitespace(source, replacement) {
-                return source.match(/^\s*/)[0] + replacement + source.match(/\s*$/)[0];
-            }
-
-            function setStudentLanguage(language) {
-                const selected = language === 'en' ? 'en' : 'ar';
-                document.documentElement.lang = selected;
-                document.documentElement.dir = selected === 'en' ? 'ltr' : 'rtl';
-                try { localStorage.setItem('student-language', selected); } catch (e) {}
-                const currentUrl = new URL(window.location.href);
-                currentUrl.searchParams.set('lang', selected);
-                window.history.replaceState({}, '', currentUrl);
-                const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-                const nodes = [];
-                let node;
-                while ((node = walker.nextNode())) {
-                    if (node.parentElement && !node.parentElement.closest('script,style,#todayText,.file-size,.count-num')) nodes.push(node);
-                }
-                nodes.forEach(textNode => {
-                    if (!originalText.has(textNode)) originalText.set(textNode, textNode.nodeValue);
-                    const source = originalText.get(textNode);
-                    if (selected === 'ar') { textNode.nodeValue = source; return; }
-                    const translated = translateText(source, selected);
-                    if (translated !== null) textNode.nodeValue = preserveWhitespace(source, translated);
-                });
-                document.title = selected === 'en'
-                    ? 'Student Schedule - {{ grade_name }} - {{ class_name }}'
-                    : 'جدول الطالب - {{ grade_name }} - {{ class_name }}';
-                document.querySelectorAll('[data-student-language]').forEach(button => {
-                    const active = button.dataset.studentLanguage === selected;
-                    button.classList.toggle('active', active);
-                    button.setAttribute('aria-pressed', String(active));
-                });
-                document.dispatchEvent(new CustomEvent('student-language-change'));
-            }
-
-            document.querySelectorAll('[data-student-language]').forEach(button => {
-                button.addEventListener('click', () => setStudentLanguage(button.dataset.studentLanguage));
-            });
-            const requestedLanguage = new URLSearchParams(window.location.search).get('lang');
-            let stored = null;
-            try { stored = localStorage.getItem('student-language'); } catch (e) {}
-            setStudentLanguage(requestedLanguage || stored || 'ar');
-        })();
-    </script>
 </body>
 </html>

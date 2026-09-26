@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>لوحة تحكم المدير</title>
+    <script>window.I18N_NAMES = {{ (i18n_names or {})|tojson }};</script>
+    <script src="{{ url_for('static', filename='js/i18n.js', v=asset_version) }}"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
@@ -560,8 +562,8 @@
             الأسبوع الحالي: {{ settings.current_week }}
         </div>
         <div class="language-switcher" role="group" aria-label="اختيار اللغة">
-            <button type="button" data-language-option="ar" aria-pressed="true">العربية</button>
-            <button type="button" data-language-option="en" aria-pressed="false">English</button>
+            <button type="button" data-lang-option="ar" aria-pressed="true">العربية</button>
+            <button type="button" data-lang-option="en" aria-pressed="false">English</button>
         </div>
         </div>
     </div>
@@ -651,7 +653,7 @@
                         <td style="white-space:nowrap;color:var(--muted);">{{ log.timestamp.strftime('%H:%M %d/%m') if log.timestamp else '-' }}</td>
                         <td><span class="badge {{ 'badge-blue' if log.user_role == 'admin' else 'badge-green' }}">{{ log.teacher_name or ('مدير' if log.user_role == 'admin' else log.user_role or '-') }}</span></td>
                         <td><span class="badge badge-gray">{{ log.action_type or 'عام' }}</span></td>
-                        <td style="text-align:right;font-size:0.8em;">{{ (log.description or log.action or '')[:55] }}</td>
+                        <td style="text-align:start;font-size:0.8em;" title="{{ log.description or '' }}">{{ (log.action or log.description or '')[:80] }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -713,7 +715,7 @@
                 <div class="table-container">
                 <table class="sched-table">
                     <thead><tr>
-                        <th style="width:80px;">اليوم</th>
+                        <th style="width:80px;" data-en="Day">اليوم</th>
                         {% for p in range(1, periods_per_day + 1) %}<th>حصة {{ p }}</th>{% endfor %}
                     </tr></thead>
                     <tbody>
@@ -764,6 +766,11 @@
                     <div class="form-group">
                         <label><i class="fas fa-school" style="margin-left:4px;"></i>اسم المدرسة:</label>
                         <input type="text" name="school_name" value="{{ settings.get('school_name', '') }}">
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-language" style="margin-left:4px;"></i>اسم المدرسة بالإنجليزية:</label>
+                        <input type="text" name="school_name_en" dir="ltr" value="{{ settings.get('school_name_en', '') }}" placeholder="e.g. Al-Jeel Schools">
+                        <small style="color:var(--muted);">يظهر عند اختيار English. اتركه فارغاً لإظهار الاسم العربي.</small>
                     </div>
                     <div class="form-group">
                         <label><i class="fas fa-calendar-week" style="margin-left:4px;"></i>الأسبوع الدراسي الحالي:</label>
@@ -951,7 +958,7 @@
                 <div class="table-container">
                 <table class="sched-table">
                     <thead><tr>
-                        <th style="width:80px;">اليوم</th>
+                        <th style="width:80px;" data-en="Day">اليوم</th>
                         {% for p in range(1, periods_per_day + 1) %}<th>حصة {{ p }}</th>{% endfor %}
                     </tr></thead>
                     <tbody>
@@ -1570,281 +1577,6 @@
             alert(document.documentElement.lang === 'en' ? 'Link copied successfully!' : 'تم نسخ الرابط بنجاح!');
         });
     }
-</script>
-<script>
-    /*
-     * The dashboard keeps one source of truth for its Arabic copy and
-     * translates it in-place. This means language changes do not reload the
-     * page, lose selected classes, or affect any form submission.
-     */
-    (function () {
-        const originalText = new WeakMap();
-        const textTranslations = {
-            'لوحة تحكم المدير': 'Admin dashboard',
-            'الرئيسية': 'Overview',
-            'الإحصائيات': 'Statistics',
-            'استيراد Excel': 'Import Excel',
-            'إدارة الجدول': 'Schedule management',
-            'الجدول الأساسي': 'Master schedule',
-            'التجاوز الأسبوعي': 'Weekly overrides',
-            'المستخدمون': 'Users',
-            'الصفوف والفصول': 'Grades & classes',
-            'المعلمون': 'Teachers',
-            'المشرفون': 'Supervisors',
-            'توزيع المواد': 'Assignments',
-            'أخرى': 'Other',
-            'روابط الطلاب': 'Student links',
-            'الإعدادات': 'Settings',
-            'تسجيل الخروج': 'Sign out',
-            'الأسبوع الحالي': 'Current week',
-            'إحصائيات الإنجاز': 'Completion statistics',
-            'لا توجد بيانات بعد — قم برفع ملف Excel أولاً': 'No data yet — upload an Excel file first',
-            'نسبة اكتمال الخطط': 'Plan completion',
-            'حصص مكتملة': 'Completed periods',
-            'إجمالي الحصص': 'Total periods',
-            'مراجعة الجدول واعتماده لأولياء الأمور': 'Review schedule & publish for parents',
-            'مكتمل': 'Completed',
-            'قيد الانتظار': 'Pending',
-            'لا توجد فصول مكتملة بعد': 'No completed classes yet',
-            'جميع الفصول مكتملة 🎉': 'All classes are complete 🎉',
-            'سجل العمليات': 'Activity log',
-            'السجل الكامل': 'Full log',
-            'الوقت': 'Time',
-            'المستخدم': 'User',
-            'النوع': 'Type',
-            'التفاصيل': 'Details',
-            'استيراد الجدول المدرسي من Excel': 'Import master schedule from Excel',
-            'اختر ملف Excel (.xlsx) أو CSV': 'Choose an Excel (.xlsx) or CSV file',
-            'رفع واستيراد': 'Upload & import',
-            'جاري الرفع...': 'Uploading...',
-            'يجب أن يحتوي الملف على عمود للصف وأعمدة للحصص مسماة باليوم والرقم.': 'The file must include a class column and period columns named by day and number.',
-            'إدارة التجاوز الأسبوعي': 'Weekly overrides',
-            'اختر الفصل:': 'Choose class:',
-            'اختر الأسبوع:': 'Choose week:',
-            'تغيير المادة...': 'Change subject...',
-            'حفظ التعديلات الأسبوعية بالكامل': 'Save all weekly changes',
-            'يرجى اختيار الفصل لعرض وتعديل التجاوزات الأسبوعية': 'Choose a class to view and edit weekly overrides',
-            'الإعدادات العامة وشعار المدرسة': 'General settings & school branding',
-            'تغيير شعار المدرسة:': 'Change school logo:',
-            'رفع الشعار': 'Upload logo',
-            'اسم المدرسة:': 'School name:',
-            'الأسبوع الدراسي الحالي:': 'Current school week:',
-            'عدد الحصص اليومية:': 'Periods per day:',
-            'تاريخ اختبارات الفترة الأولى:': 'First assessment date:',
-            'تاريخ اختبارات الفترة الثانية:': 'Second assessment date:',
-            'تاريخ الاختبار النهائي:': 'Final exam date:',
-            'حفظ الإعدادات': 'Save settings',
-            'قفل الأيام حسب الأسبوع': 'Lock days by week',
-            'اختر الأسبوع لإدارته:': 'Choose a week to manage:',
-            'تحديث حالة القفل للأسبوع': 'Update lock status for week',
-            'مسح مواعيد الاختبارات:': 'Clear assessment dates:',
-            'مسح تاريخ الفترة 1': 'Clear assessment 1 date',
-            'مسح تاريخ الفترة 2': 'Clear assessment 2 date',
-            'مسح التاريخ النهائي': 'Clear final exam date',
-            'إدارة الصفوف': 'Manage grades',
-            'حذف جميع الصفوف': 'Delete all grades',
-            'يحذف جميع الصفوف والفصول والجداول والخطط الأسبوعية وتوزيعات الحصص المرتبطة بها. لا يمكن التراجع عن هذه العملية.': 'Deletes all grades, classes, schedules, weekly plans, and related period assignments. This action cannot be undone.',
-            'إدارة الفصول': 'Manage classes',
-            'اسم الصف': 'Grade name',
-            'اسم الصف': 'Grade',
-            'حذف': 'Delete',
-            'الصف': 'Grade',
-            'الفصل': 'Class',
-            'إضافة': 'Add',
-            'إدارة الجدول الأساسي': 'Manage master schedule',
-            'اختر الفصل لتعديل جدوله الأساسي:': 'Choose a class to edit its master schedule:',
-            'حفظ الجدول الأساسي بالكامل': 'Save entire master schedule',
-            'إدارة حسابات المعلمين': 'Manage teacher accounts',
-            'إضافة معلم جديد': 'Add a new teacher',
-            'رفع حسابات المعلمين من Excel': 'Import teacher accounts from Excel',
-            'اسم المعلم': 'Teacher name',
-            'اسم المستخدم': 'Username',
-            'كلمة المرور': 'Password',
-            'إضافة المعلم': 'Add teacher',
-            'رفع واستيراد المعلمين': 'Upload & import teachers',
-            '* أعمدة الملف: الاسم، اسم المستخدم، كلمة المرور': '* File columns: name, username, password',
-            'المعلمون المسجلون': 'Registered teachers',
-            'الحالة': 'Status',
-            'إجراءات': 'Actions',
-            'مفعل': 'Active',
-            'معطل': 'Inactive',
-            'تعطيل': 'Disable',
-            'تفعيل': 'Enable',
-            'كلمة المرور': 'Password',
-            'لا يوجد معلمون مسجلون بعد': 'No teachers registered yet',
-            'حذف جميع حسابات المعلمين': 'Delete all teacher accounts',
-            'يحذف الحسابات وتوزيعات الحصص، مع الاحتفاظ بموضوعات الدروس والواجبات المحفوظة في الخطط الأسبوعية.': 'Deletes accounts and period assignments while preserving lesson topics and homework saved in weekly plans.',
-            'حذف جميع الحسابات': 'Delete all accounts',
-            'حسابات المشرفين (مراجعة واعتماد فقط)': 'Supervisor accounts (review & approval only)',
-            'حساب المشرف يدخل مباشرة على شاشة "مراجعة الجدول واعتماده" فقط، ولا يملك صلاحية الوصول للوحة التحكم الكاملة أو تعديل الجداول.': 'Supervisors go directly to schedule review and approval. They cannot access the full dashboard or edit schedules.',
-            'إضافة مشرف جديد': 'Add a new supervisor',
-            'اسم المشرف': 'Supervisor name',
-            'إضافة المشرف': 'Add supervisor',
-            'رفع واستيراد المشرفين': 'Upload & import supervisors',
-            'المشرفون المسجلون': 'Registered supervisors',
-            'لا يوجد مشرفون مسجلون بعد': 'No supervisors registered yet',
-            'توزيع المواد على المعلمين': 'Assign subjects to teachers',
-            'خصص الحصص لكل معلم. الحصص المحجوزة لمعلم آخر تظهر باللون الأصفر ولا يمكن تعيينها.': 'Assign periods to each teacher. Periods reserved for another teacher appear in yellow and cannot be selected.',
-            'المعلم المحدد:': 'Selected teacher:',
-            'تحديد المتاح': 'Select available',
-            'إلغاء الكل': 'Clear all',
-            'حفظ التوزيع': 'Save assignments',
-            'مخصص لك': 'Assigned to this teacher',
-            'متاح': 'Available',
-            'محجوز لمعلم آخر': 'Reserved for another teacher',
-            'اختر معلماً من القائمة أعلاه لعرض وتعديل حصصه': 'Choose a teacher above to view and edit their periods',
-            'أضف معلمين أولاً قبل توزيع المواد': 'Add teachers before assigning periods',
-            'تحديد الفصل': 'Select class',
-            'إلغاء الفصل': 'Clear class',
-            'تحديد المادة': 'Select subject',
-            'إلغاء': 'Clear',
-            'روابط الطلاب للفصول': 'Student links by class',
-            'رابط الطالب': 'Student link',
-            'نسخ': 'Copy',
-            'أنشئ هذا الموقع بواسطة أحمد الفيفي': 'Built by Ahmed Al-Faifi',
-            'مكتمل': 'Completed',
-            'عام': 'General',
-            'المدير': 'Admin',
-            'للمادة...': 'Subject...',
-            'المادة...': 'Subject...',
-            'اختر الصف...': 'Choose a grade...',
-            'مثال: الصف الأول': 'Example: First grade',
-            'مثال: أ': 'Example: A',
-            'مثال: أحمد محمد': 'Example: Ahmed Mohammed',
-            'مثال: سارة العتيبي': 'Example: Sara Alotaibi',
-            'كلمة مرور المعلم': 'Teacher password',
-            'كلمة مرور المشرف': 'Supervisor password',
-            'اختر معلماً': 'Choose a teacher',
-            '-- اختر الفصل --': '-- Choose a class --',
-            '-- اختر معلماً --': '-- Choose a teacher --',
-            'الأحد': 'Sunday',
-            'الاثنين': 'Monday',
-            'الثلاثاء': 'Tuesday',
-            'الأربعاء': 'Wednesday',
-            'الخميس': 'Thursday',
-            'لا توجد مواد في الجدول الأساسي بعد. يرجى رفع الجدول أولاً.': 'No subjects in the master schedule yet. Upload the schedule first.',
-            'تم الحفظ بنجاح ✓': 'Saved successfully ✓'
-        };
-        const attributeTranslations = {
-            'اختر ملف Excel (.xlsx) أو CSV': 'Choose an Excel (.xlsx) or CSV file',
-            'تغيير المادة...': 'Change subject...',
-            'المادة...': 'Subject...',
-            'مثال: الصف الأول': 'Example: First grade',
-            'مثال: أ': 'Example: A',
-            'مثال: أحمد محمد': 'Example: Ahmed Mohammed',
-            'مثال: ahmed': 'Example: ahmed',
-            'كلمة مرور المعلم': 'Teacher password',
-            'مثال: سارة العتيبي': 'Example: Sara Alotaibi',
-            'مثال: sara': 'Example: sara',
-            'كلمة مرور المشرف': 'Supervisor password'
-        };
-
-        function translate(value, language) {
-            const trimmed = value.trim();
-            if (language === 'ar') return trimmed;
-            if (textTranslations[trimmed]) return textTranslations[trimmed];
-
-            let match = trimmed.match(/^الأسبوع الحالي:\s*(.+)$/);
-            if (match) return `Current week: ${match[1]}`;
-            match = trimmed.match(/^إحصائيات الإنجاز\s*—\s*الأسبوع\s*(.+)$/);
-            if (match) return `Completion statistics — Week ${match[1]}`;
-            match = trimmed.match(/^مكتمل\s*\((\d+)\)$/);
-            if (match) return `Completed (${match[1]})`;
-            match = trimmed.match(/^قيد الانتظار\s*\((\d+)\)$/);
-            if (match) return `Pending (${match[1]})`;
-            match = trimmed.match(/^المعلمون المسجلون\s*\((\d+)\)$/);
-            if (match) return `Registered teachers (${match[1]})`;
-            match = trimmed.match(/^المشرفون المسجلون\s*\((\d+)\)$/);
-            if (match) return `Registered supervisors (${match[1]})`;
-            match = trimmed.match(/^أسبوع\s+(\d+)$/);
-            if (match) return `Week ${match[1]}`;
-            match = trimmed.match(/^حصة\s+(\d+)$/);
-            if (match) return `Period ${match[1]}`;
-            match = trimmed.match(/^تحديث حالة القفل للأسبوع\s+(\d+)$/);
-            if (match) return `Update lock status for week ${match[1]}`;
-            match = trimmed.match(/^تم حفظ\s+(\d+)\s+حصة بنجاح$/);
-            if (match) return `${match[1]} periods saved successfully`;
-            match = trimmed.match(/^تم حفظ\s+(\d+)\s+حصة للمعلم$/);
-            if (match) return `${match[1]} periods saved for the teacher`;
-            match = trimmed.match(/^محجوز لـ:\s*(.+)$/);
-            if (match) return `Reserved for: ${match[1]}`;
-            match = trimmed.match(/^يجب أن يحتوي الملف على عمود للصف، ثم\s+(\d+)\s+أعمدة لكل يوم حسب عدد الحصص المحدد في الإعدادات\.$/);
-            if (match) return `The file must include a class column followed by ${match[1]} columns per day, matching the configured period count.`;
-            return null;
-        }
-
-        function preserveWhitespace(original, replacement) {
-            const leading = original.match(/^\s*/)[0];
-            const trailing = original.match(/\s*$/)[0];
-            return leading + replacement + trailing;
-        }
-
-        function translateTextNodes(language) {
-            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-            const nodes = [];
-            let node;
-            while ((node = walker.nextNode())) {
-                if (node.parentElement && !node.parentElement.closest('script,style')) nodes.push(node);
-            }
-            nodes.forEach(textNode => {
-                if (!originalText.has(textNode)) originalText.set(textNode, textNode.nodeValue);
-                const source = originalText.get(textNode);
-                if (language === 'ar') {
-                    textNode.nodeValue = source;
-                    return;
-                }
-                const replacement = translate(source, language);
-                if (replacement !== null) textNode.nodeValue = preserveWhitespace(source, replacement);
-            });
-        }
-
-        function translateAttributes(language) {
-            document.querySelectorAll('input, select, textarea, [title]').forEach(element => {
-                if (!element.dataset.originalPlaceholder && element.getAttribute('placeholder')) {
-                    element.dataset.originalPlaceholder = element.getAttribute('placeholder');
-                }
-                const originalPlaceholder = element.dataset.originalPlaceholder;
-                if (originalPlaceholder) {
-                    element.setAttribute('placeholder',
-                        language === 'en' ? (attributeTranslations[originalPlaceholder] || originalPlaceholder) : originalPlaceholder);
-                }
-                if (element.dataset.originalTitle) {
-                    element.setAttribute('title', language === 'en'
-                        ? (translate(element.dataset.originalTitle, language) || attributeTranslations[element.dataset.originalTitle] || element.dataset.originalTitle)
-                        : element.dataset.originalTitle);
-                } else if (element.getAttribute('title')) {
-                    element.dataset.originalTitle = element.getAttribute('title');
-                    if (language === 'en') {
-                        element.setAttribute('title', translate(element.dataset.originalTitle, language) || element.dataset.originalTitle);
-                    }
-                }
-            });
-        }
-
-        function setLanguage(language) {
-            const selected = language === 'en' ? 'en' : 'ar';
-            document.documentElement.lang = selected;
-            document.documentElement.dir = selected === 'en' ? 'ltr' : 'rtl';
-            document.body.dataset.language = selected;
-            localStorage.setItem('admin-language', selected);
-            translateTextNodes(selected);
-            translateAttributes(selected);
-            document.title = selected === 'en' ? 'Admin Dashboard' : 'لوحة تحكم المدير';
-            document.querySelectorAll('[data-language-option]').forEach(button => {
-                const isActive = button.dataset.languageOption === selected;
-                button.classList.toggle('active', isActive);
-                button.setAttribute('aria-pressed', String(isActive));
-            });
-        }
-
-        window.applyDashboardLanguage = function () {
-            setLanguage(localStorage.getItem('admin-language') || 'ar');
-        };
-        document.querySelectorAll('[data-language-option]').forEach(button => {
-            button.addEventListener('click', () => setLanguage(button.dataset.languageOption));
-        });
-        setLanguage(localStorage.getItem('admin-language') || 'ar');
-    })();
 </script>
 </body>
 </html>

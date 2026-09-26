@@ -57,14 +57,34 @@ app.config['MAX_CONTENT_LENGTH'] = (max(OBJECT_STORAGE_MAX_MB, DB_STORAGE_MAX_MB
 
 # Static files (CSS) are cached by the browser; the ?v= version changes whenever the file changes.
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 60 * 60 * 24 * 30
-try:
-    ASSET_VERSION = str(int(os.path.getmtime(os.path.join(app.root_path, 'static', 'css', 'plan.css'))))
-except OSError:
-    ASSET_VERSION = '1'
+def _asset_version():
+    stamps = []
+    for rel in (('css', 'plan.css'), ('js', 'i18n.js')):
+        try:
+            stamps.append(int(os.path.getmtime(os.path.join(app.root_path, 'static', *rel))))
+        except OSError:
+            pass
+    return str(max(stamps)) if stamps else '1'
+ASSET_VERSION = _asset_version()
 
 @app.context_processor
 def inject_asset_version():
-    return {'asset_version': ASSET_VERSION}
+    return {'asset_version': ASSET_VERSION, 'i18n_names': _i18n_names()}
+
+def _i18n_names():
+    """Arabic → English proper names used by the language switch (school name from Settings)."""
+    try:
+        rows = {x.key: x.value for x in Setting.query.filter(Setting.key.in_(['school_name', 'school_name_en'])).all()}
+    except Exception:
+        db.session.rollback()
+        return {}
+    en = (rows.get('school_name_en') or '').strip()
+    if not en:
+        return {}
+    names = {name: en for name in ('مدارس ثقافة الجيل', 'مدارس الثقافة الرقمية')}
+    if rows.get('school_name'):
+        names[rows['school_name'].strip()] = en
+    return names
 
 def natural_key(text):
     """Sort 'Grade 4' before 'Grade 10'."""
@@ -740,7 +760,7 @@ def admin():
                         log_activity('admin', f'حفظ الجدول الأساسي للفصل: {cls.grade.name} - {cls.name}', teacher_name='المدير', action_type='تعديل', description=f'حفظ الجدول الأساسي للفصل {cls.grade.name} - {cls.name} — تم نشر المادة للأسابيع 1-19')
                         flash('تم الحفظ بنجاح — تم نشر المواد للأسابيع 1-19')
             elif action == 'update_settings':
-                for key in ['period1_date', 'period2_date', 'final_date', 'current_week', 'school_name', 'periods_per_day']:
+                for key in ['period1_date', 'period2_date', 'final_date', 'current_week', 'school_name', 'school_name_en', 'periods_per_day']:
                     val = request.form.get(key)
                     if key == 'periods_per_day':
                         try:
