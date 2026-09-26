@@ -17,6 +17,7 @@
         .summary { display: grid; grid-template-columns: 1.4fr repeat(3, 1fr); gap: 1rem; align-items: stretch; margin-bottom: 1.5rem; }
         .sum-head h1 { margin: 0; font-weight: 900; font-size: clamp(1.9rem, 4vw, 2.8rem); line-height: 1.05; }
         .sum-head p { margin: .5rem 0 0; color: var(--muted); font-size: .92rem; }
+        .auto-note { margin: .6rem 0 0 !important; padding: .5rem .8rem; border-radius: var(--r-cell); background: var(--mark-soft); border: 1px solid #f1d85a; color: var(--ink) !important; font-weight: 700; }
         .sum-bar { height: 10px; border-radius: var(--r-pill); background: var(--hw-wash); overflow: hidden; margin-top: .9rem; }
         .sum-bar span { display: block; height: 100%; background: var(--ink); border-radius: inherit; }
         .stat { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-card); padding: 1rem 1.1rem; display: grid; align-content: center; gap: .15rem; }
@@ -122,6 +123,7 @@
         <section class="summary">
             <div class="sum-head">
                 <h1>متابعة الأسبوع {{ week }}</h1>
+                {% if auto_visible %}<p class="auto-note">هذا هو الأسبوع الحالي، ويظهر لأولياء الأمور تلقائياً ويتحدّث عندهم مباشرة (من الإعدادات).</p>{% endif %}
                 <p>الحصة مكتملة عندما يُكتب موضوع الدرس والواجب معاً. الفصل لا يُعد مكتملاً إلا عند اكتمال جميع حصصه هذا الأسبوع{% if locked_days %} (الأيام المغلقة لا تُحتسب){% endif %}.</p>
                 <div class="sum-bar" aria-label="نسبة الإنجاز {{ summary.percent }}%"><span style="width: {{ summary.percent }}%"></span></div>
             </div>
@@ -178,7 +180,7 @@
                             <td class="pub">
                                 <label style="display:inline-flex;align-items:center;gap:.4rem;cursor:pointer;">
                                     <input type="checkbox" name="class_ids" value="{{ c.id }}" {% if c.published %}checked{% endif %} data-complete="{{ 1 if c.complete else 0 }}">
-                                    <span class="badge {{ 'badge-pub' if c.published else 'badge-draft' }}">{{ 'معتمد' if c.published else 'مسودة' }}</span>
+                                    <span class="badge {{ 'badge-pub' if (c.published or auto_visible) else 'badge-draft' }}">{% if auto_visible %}ظاهر تلقائياً{% elif c.published %}معتمد{% else %}مسودة{% endif %}</span>
                                 </label>
                             </td>
                             <td class="no-print"><a class="btn btn-text" href="{{ c.edit_url }}" style="min-height:36px;padding-block:.2rem;">فتح الجدول</a></td>

@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import joinedload, deferred
 import mimetypes
+import hashlib
 import tempfile
 import uuid
 from sqlalchemy import func, insert, update
@@ -410,6 +411,35 @@ def compute_week_completion(week_int, periods_per_day=None, class_ids=None):
                                  'no_topic': not topic, 'no_hw': not hw})
     return result
 
+def auto_publish_current(settings):
+    """When on (default), the current week is always visible to parents without manual approval."""
+    return str(settings.get('auto_publish_current', '1')) != '0'
+
+def visible_weeks(class_id, settings):
+    """Weeks parents can see for a class, newest first: approved weeks + the current week (if automatic)."""
+    weeks = {wp.week_number for wp in WeekPublication.query.filter_by(class_id=class_id).all()}
+    if auto_publish_current(settings):
+        weeks.add(safe_week(settings.get('current_week', '1')))
+    return sorted(weeks, reverse=True)
+
+def student_page_stamp(class_id, week_int, visible, default_week):
+    """Fingerprint of everything shown on the parents' page; it changes whenever the plan changes."""
+    h = hashlib.md5()
+    h.update(f'{default_week}|{week_int}|{visible}'.encode())
+    if week_int:
+        for row in db.session.query(Subject.day, Subject.period, Subject.name) \
+                .filter_by(class_id=class_id).order_by(Subject.day, Subject.period).all():
+            h.update(repr(tuple(row)).encode())
+        for row in db.session.query(WeeklyData.day, WeeklyData.period, WeeklyData.subject_name,
+                                    WeeklyData.topic, WeeklyData.homework) \
+                .filter_by(class_id=class_id, week_number=week_int).order_by(WeeklyData.day, WeeklyData.period).all():
+            h.update(repr(tuple(row)).encode())
+        for row in db.session.query(PeriodAttachment.id, PeriodAttachment.day, PeriodAttachment.period,
+                                    PeriodAttachment.original_name) \
+                .filter_by(class_id=class_id, week_number=week_int).order_by(PeriodAttachment.id).all():
+            h.update(repr(tuple(row)).encode())
+    return h.hexdigest()[:16]
+
 def get_or_create_class(grade_name, class_name):
     grade = Grade.query.filter_by(name=grade_name).first()
     if not grade:
@@ -717,9 +747,15 @@ def admin():
                             val = str(max(1, min(12, int(val))))
                         except (ValueError, TypeError):
                             val = '8'
+                    if key == 'current_week':
+                        val = str(safe_week(val))
                     s = db.session.get(Setting, key)
                     if s: s.value = val
                     else: db.session.add(Setting(key=key, value=val))
+                auto_val = '1' if request.form.get('auto_publish_current') else '0'
+                s = db.session.get(Setting, 'auto_publish_current')
+                if s: s.value = auto_val
+                else: db.session.add(Setting(key='auto_publish_current', value=auto_val))
                 db.session.commit()
                 flash('تم الحفظ')
             elif action == 'update_locked_days':
@@ -1653,14 +1689,35 @@ def student(g_id, c_id):
     periods_per_day = get_periods_per_day(settings)
     grade = db.session.get(Grade, g_id)
     cls = db.session.get(Class, c_id)
-    published_weeks = [wp.week_number for wp in WeekPublication.query.filter_by(class_id=c_id)
-                        .order_by(WeekPublication.week_number.desc()).all()]
+    published_weeks = visible_weeks(c_id, settings)
+    current_week = safe_week(settings.get('current_week', '1'))
+    default_week = current_week if current_week in published_weeks else (published_weeks[0] if published_weeks else None)
 
+    # Parents only see approved weeks. Staff (admin / supervisor / teacher) can preview any week.
+    is_staff = session.get('user_role') in ('admin', 'supervisor', 'teacher')
     requested = request.args.get('week')
-    week_int = safe_week(requested) if requested and safe_week(requested) in published_weeks else (published_weeks[0] if published_weeks else None)
+    req_week = safe_week(requested, None) if requested else None
+    preview = False
+    if req_week and req_week in published_weeks:
+        week_int = req_week
+    elif req_week and is_staff:
+        week_int, preview = req_week, True
+    elif req_week:
+        week_int = None                      # asked for a week that is not approved yet
+    elif default_week:
+        week_int = default_week            # parents open on the CURRENT week
+    elif is_staff:
+        week_int, preview = safe_week(settings.get('current_week', '1')), True
+    else:
+        week_int = None
+    week_options = ([{'week': w, 'published': w in published_weeks} for w in range(1, 20)] if is_staff
+                    else [{'week': w, 'published': True} for w in published_weeks])
 
     if week_int is None:
-        return render_template('student.html', not_published=True, published_weeks=[],
+        return render_template('student.html', not_published=True, published_weeks=published_weeks,
+                                missing_week=req_week, week_options=week_options, week=str(req_week or ''),
+                                days_ar=DAYS_AR, days_order=DAYS_ORDER, current_week=current_week,
+                                stamp=student_page_stamp(c_id, None, published_weeks, default_week),
                                 settings=settings, grade_name=grade.name if grade else '',
                                 class_name=cls.name if cls else '', g_id=g_id, c_id=c_id,
                                 periods_per_day=periods_per_day)
@@ -1684,6 +1741,8 @@ def student(g_id, c_id):
     add_attachments_to_schedule(schedule, c_id, week_int)
     return render_template('student.html', schedule=schedule, days_ar=DAYS_AR, days_order=DAYS_ORDER,
                             settings=settings, week=week, published_weeks=published_weeks, not_published=False,
+                            preview=preview, week_options=week_options, current_week=current_week,
+                            stamp=student_page_stamp(c_id, week_int, published_weeks, default_week),
                             grade_name=grade.name if grade else '', class_name=cls.name if cls else '',
                              g_id=g_id, c_id=c_id, periods_per_day=periods_per_day)
 
@@ -1802,7 +1861,8 @@ def download_attachment(att_id):
         abort(404)
     # Students/parents can only download files of weeks the school has published
     if session.get('user_role') not in ('admin', 'teacher', 'supervisor'):
-        if not WeekPublication.query.filter_by(class_id=att.class_id, week_number=att.week_number).first():
+        settings = {x.key: x.value for x in Setting.query.all()}
+        if att.week_number not in visible_weeks(att.class_id, settings):
             abort(404)
     mimetype = att.mimetype or 'application/octet-stream'
     if att.storage_key:
@@ -1831,6 +1891,20 @@ def too_large(_e):
     if request.path.startswith('/teacher/attachment'):
         return jsonify({'status': 'error', 'message': f'حجم الملف أكبر من {attachment_limit_mb()} ميجابايت'}), 413
     return 'الملف أكبر من الحد المسموح', 413
+
+@app.route('/student/<int:g_id>/<int:c_id>/stamp')
+def student_stamp(g_id, c_id):
+    """Polled by the parents' page (about once a minute) to know when to refresh itself."""
+    settings = {x.key: x.value for x in Setting.query.all()}
+    visible = visible_weeks(c_id, settings)
+    current = safe_week(settings.get('current_week', '1'))
+    default_week = current if current in visible else (visible[0] if visible else None)
+    requested = safe_week(request.args.get('week'), None) if request.args.get('week') else None
+    is_staff = session.get('user_role') in ('admin', 'supervisor', 'teacher')
+    week = requested if requested and (requested in visible or is_staff) else (None if requested else default_week)
+    resp = jsonify({'stamp': student_page_stamp(c_id, week, visible, default_week), 'current_week': default_week})
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
 
 @app.route('/admin/audit_report')
 @review_access_required
@@ -1865,7 +1939,9 @@ def audit_report():
         'percent': round(done * 100 / total) if total else 0,
         'missing_by_day': {d: sum(x['by_day'][d] for x in class_status) for d in DAYS_ORDER},
     }
+    auto_visible = auto_publish_current(settings) and week_int == safe_week(settings.get('current_week', '1'))
     return render_template('audit_report.html', week=str(week_int), class_status=class_status, summary=summary,
+                           auto_visible=auto_visible,
                            settings=settings, days_order=DAYS_ORDER, days_ar=DAYS_AR, locked_days=locked,
                            user_role=session.get('user_role'), display_name=session.get('supervisor_name'))
 

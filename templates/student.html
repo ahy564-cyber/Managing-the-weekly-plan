@@ -97,6 +97,10 @@
         .empty-state { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-panel); padding: 3.5rem 1.5rem; text-align: center; margin-top: 1.5rem; }
         .empty-state h2 { margin: 0 0 .5rem; font-weight: 900; font-size: 1.6rem; }
         .empty-state p { margin: 0 auto; color: var(--muted); max-width: 46ch; }
+        .week-links { display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem; margin-top: 1.4rem; }
+        .preview-note { margin: 1rem 0 0; padding: .75rem 1rem; border-radius: var(--r-cell); background: var(--mark-soft); border: 1px solid #f1d85a; font-size: .9rem; line-height: 1.7; }
+        body.is-exporting .preview-note { display: none; }
+        @media print { .preview-note { display: none !important; } }
 
         .view-switch { display: none; }
         .print-school { display: none; }
@@ -207,12 +211,14 @@
             <span class="brand-name">{{ settings.school_name or 'مدارس ثقافة الجيل' }}</span>
         </a>
         <div class="topbar-actions">
-            {% if not not_published and published_weeks|length > 1 %}
+            {% if week_options %}
             <form method="get" id="weekForm">
                 <label class="sr-only" for="weekSelect">اختيار الأسبوع</label>
                 <select class="select-pill" id="weekSelect" name="week" onchange="this.form.submit()">
-                    {% for w in published_weeks %}
-                    <option value="{{ w }}" {% if w|string == week %}selected{% endif %}>الأسبوع {{ w }}{% if loop.first %} (الأحدث){% endif %}</option>
+                    {% if not week %}<option value="" selected disabled>اختر الأسبوع</option>
+                    {% elif not (week_options|selectattr('week', 'equalto', week|int)|list) %}<option value="{{ week }}" selected disabled>الأسبوع {{ week }} (غير معتمد)</option>{% endif %}
+                    {% for o in week_options %}
+                    <option value="{{ o.week }}" {% if o.week|string == week %}selected{% endif %}>الأسبوع {{ o.week }}{% if not o.published %} (غير معتمد){% elif o.week == current_week %} (الحالي){% endif %}</option>
                     {% endfor %}
                 </select>
             </form>
@@ -229,10 +235,23 @@
 
         {% if not_published %}
         <section class="empty-state">
+            {% if missing_week %}
+            <h2>خطة الأسبوع {{ missing_week }} لم تُعتمد بعد</h2>
+            <p>ستظهر خطة {{ grade_name }} - {{ class_name }} لهذا الأسبوع هنا فور اعتمادها من إدارة المدرسة.</p>
+            {% else %}
             <h2>لم يتم اعتماد الجدول بعد</h2>
             <p>جاري تحضير خطة {{ grade_name }} - {{ class_name }}، وسيتم نشرها هنا فور اعتمادها من إدارة المدرسة.</p>
+            {% endif %}
+            {% if published_weeks %}
+            <div class="week-links">
+                {% for w in published_weeks %}<a class="btn btn-outline" href="?week={{ w }}">الأسبوع {{ w }}</a>{% endfor %}
+            </div>
+            {% endif %}
         </section>
         {% else %}
+        {% if preview %}
+        <p class="preview-note" role="status"><b>معاينة للإدارة:</b> الأسبوع {{ week }} غير معتمد بعد، ولا يظهر لأولياء الأمور حتى يُعتمد من صفحة "متابعة الأسبوع".</p>
+        {% endif %}
         <div id="capture">
             <section class="hero">
                 <div>
@@ -355,6 +374,42 @@
     </main>
 
     <footer class="site-footer">أنشئ هذا الموقع بواسطة أحمد الفيفي</footer>
+    <div class="toast" id="liveToast" role="status" aria-live="polite"></div>
+
+    <script>
+    /* ===== Live updates: the page refreshes itself when the plan or the current week changes ===== */
+    (function () {
+        const explicitWeek = new URLSearchParams(location.search).get('week');
+        const url = '{{ url_for("student_stamp", g_id=g_id, c_id=c_id) }}' + (explicitWeek ? '?week=' + encodeURIComponent(explicitWeek) : '');
+        const stamp = '{{ stamp }}';
+        let busy = false;
+        function check() {
+            if (busy || document.hidden || document.body.classList.contains('is-exporting')) return;
+            busy = true;
+            fetch(url, { cache: 'no-store', credentials: 'same-origin' })
+                .then(r => (r.ok ? r.json() : null))
+                .then(d => {
+                    if (d && d.stamp && d.stamp !== stamp) {
+                        try { sessionStorage.setItem('plan-updated', '1'); } catch (e) {}
+                        location.reload();
+                    }
+                })
+                .catch(() => {})
+                .finally(() => { busy = false; });
+        }
+        setInterval(check, 60000);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+
+        let updated = null;
+        try { updated = sessionStorage.getItem('plan-updated'); sessionStorage.removeItem('plan-updated'); } catch (e) {}
+        if (updated) {
+            const t = document.getElementById('liveToast');
+            t.textContent = document.documentElement.lang === 'en' ? 'The plan was updated ✓' : 'تم تحديث الخطة ✓';
+            requestAnimationFrame(() => t.classList.add('show'));
+            setTimeout(() => t.classList.remove('show'), 3500);
+        }
+    })();
+    </script>
 
     <script>
     /* ===== Today (school timezone), countdowns, sizes ===== */
@@ -591,7 +646,7 @@
         const key = todayKey();
         return DAY_ORDER.includes(key) ? key : 'Sunday';   // weekend -> the coming Sunday
     }
-    const DAY_ORDER = {{ days_order|tojson }};
+    const DAY_ORDER = {{ (days_order or ['Sunday','Monday','Tuesday','Wednesday','Thursday'])|tojson }};
     if (agenda) {
         selectDay(defaultDay(), false);
         agenda.querySelector('.day-tabs').addEventListener('click', e => {
@@ -646,6 +701,7 @@
             const translations = {
                 'أعزاءنا أولياء الأمور والطلاب الكرام.. نرحب بكم في منصة (الجدول الذكي)؛ وجهتكم المعتمدة للاطلاع على الخطة الأسبوعية، والتي نوافيكم بها بدقة وموعد ثابت كل يوم خميس بنهاية دوامنا الدراسي، لنعينكم على التخطيط المبكر لأسبوعكم القادم.': 'Dear parents and students, welcome to the Smart Schedule platform—your trusted place to view the weekly plan, published every Thursday at the end of the school day to help you plan the coming week.',
                 'لم يتم اعتماد الجدول بعد': 'The schedule has not been published yet',
+                'اختر الأسبوع': 'Choose a week',
                 'الأسبوع': 'Week',
                 'اختبارات الفترة الأولى': 'First assessment',
                 'اختبارات الفترة الثانية': 'Second assessment',
@@ -675,8 +731,10 @@
                 const value = source.trim();
                 if (language === 'ar') return value;
                 if (translations[value]) return translations[value];
-                let match = value.match(/^الأسبوع\s+(\d+)(\s+\(الأحدث\))?$/);
-                if (match) return `Week ${match[1]}${match[2] ? ' (latest)' : ''}`;
+                let match = value.match(/^الأسبوع\s+(\d+)(\s+\((الأحدث|الحالي|غير معتمد)\))?$/);
+                if (match) return `Week ${match[1]}${match[3] === 'الأحدث' ? ' (latest)' : match[3] === 'الحالي' ? ' (current)' : match[3] ? ' (not approved)' : ''}`;
+                match = value.match(/^خطة الأسبوع\s+(\d+)\s+لم تُعتمد بعد$/);
+                if (match) return `The plan for week ${match[1]} has not been approved yet`;
                 match = value.match(/^ح\s*(\d+)$/);
                 if (match) return `P${match[1]}`;
                 match = value.match(/^جاري تحضير خطة\s+(.+)، وسيتم نشرها هنا فور اعتمادها من إدارة المدرسة\.$/);

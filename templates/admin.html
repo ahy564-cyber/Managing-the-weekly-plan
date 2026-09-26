@@ -767,7 +767,13 @@
                     </div>
                     <div class="form-group">
                         <label><i class="fas fa-calendar-week" style="margin-left:4px;"></i>الأسبوع الدراسي الحالي:</label>
-                        <input type="number" name="current_week" value="{{ settings.get('current_week', '1') }}">
+                        <input type="number" name="current_week" min="1" max="19" value="{{ settings.get('current_week', '1') }}">
+                        <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-weight:600;cursor:pointer;">
+                            <input type="checkbox" name="auto_publish_current" value="1" style="width:18px;height:18px;"
+                                   {% if settings.get('auto_publish_current', '1') != '0' %}checked{% endif %}>
+                            إظهار الأسبوع الحالي لأولياء الأمور تلقائياً
+                        </label>
+                        <small style="color:var(--muted);">صفحات أولياء الأمور تفتح على هذا الأسبوع وتتحدّث وحدها عند تغييره أو تعديل الخطة.</small>
                     </div>
                     <div class="form-group">
                         <label><i class="fas fa-list-ol" style="margin-left:4px;"></i>عدد الحصص اليومية:</label>

@@ -1,0 +1,1 @@
+- [App Storage provisioning](app-storage-provisioning.md) — a Python SDK client can initialize even when no default bucket exists; verify provisioning separately.
